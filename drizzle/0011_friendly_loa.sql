@@ -1,0 +1,1 @@
+ALTER TABLE `pvLoggers` MODIFY COLUMN `position` varchar(32) NOT NULL DEFAULT 'unset';

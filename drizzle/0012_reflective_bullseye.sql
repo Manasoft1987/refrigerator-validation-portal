@@ -1,0 +1,1 @@
+ALTER TABLE `excursionStudySessions` ADD `t3TestEndAt` bigint;

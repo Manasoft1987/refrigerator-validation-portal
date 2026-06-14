@@ -1,0 +1,1 @@
+ALTER TABLE `warehouseEquipment` ADD `kind` enum('conditioner','ventilation','heat_curtain','chiller','fan_coil','other') DEFAULT 'other' NOT NULL;

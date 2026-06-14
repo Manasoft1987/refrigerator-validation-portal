@@ -1,0 +1,1 @@
+ALTER TABLE `warehouseProtocolSections` ADD `fillStatus` enum('empty','loaded');

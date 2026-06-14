@@ -1,0 +1,1 @@
+ALTER TABLE `protocols` ADD `equipmentType` enum('refrigerator','auto-refrigerator') DEFAULT 'refrigerator' NOT NULL;

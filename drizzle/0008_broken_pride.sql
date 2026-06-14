@@ -1,0 +1,1 @@
+ALTER TABLE `pvLoggers` ADD `firstTs` bigint;

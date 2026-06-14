@@ -1,0 +1,1 @@
+ALTER TABLE `checklistAnswers` ADD `warehouseEquipmentId` int;

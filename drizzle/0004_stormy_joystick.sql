@@ -1,0 +1,51 @@
+CREATE TABLE `excursionLoggers` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`excursionSessionId` int NOT NULL,
+	`protocolId` int NOT NULL,
+	`fileKey` varchar(512) NOT NULL,
+	`fileUrl` varchar(512) NOT NULL,
+	`fileName` varchar(255) NOT NULL,
+	`label` varchar(64) NOT NULL,
+	`customName` varchar(128),
+	`role` enum('internal','external') NOT NULL DEFAULT 'internal',
+	`pointCount` int NOT NULL DEFAULT 0,
+	`series` json,
+	`createdAt` timestamp NOT NULL DEFAULT (now()),
+	CONSTRAINT `excursionLoggers_id` PRIMARY KEY(`id`)
+);
+--> statement-breakpoint
+CREATE TABLE `excursionStudySessions` (
+	`id` int AUTO_INCREMENT NOT NULL,
+	`protocolId` int NOT NULL,
+	`enabled` int NOT NULL DEFAULT 0,
+	`timingVsPv` enum('before_pv','after_pv','independent') DEFAULT 'after_pv',
+	`test1Enabled` int NOT NULL DEFAULT 0,
+	`test2Enabled` int NOT NULL DEFAULT 0,
+	`test3Enabled` int NOT NULL DEFAULT 0,
+	`recordStartAt` bigint,
+	`recordEndAt` bigint,
+	`t1PowerOnAt` bigint,
+	`t1StabilizationThresholdMinutes` int DEFAULT 15,
+	`t1TStableAt` bigint,
+	`t1DurationSec` int,
+	`t1CriticalSensor` varchar(128),
+	`t1SensorEntries` json,
+	`t2DoorOpenAt` bigint,
+	`t2DoorCloseAt` bigint,
+	`t2TBreakAt` bigint,
+	`t2DurationSec` int,
+	`t2CriticalSensor` varchar(128),
+	`t2NoBreak` int DEFAULT 0,
+	`t3PowerOffAt` bigint,
+	`t3TBreakAt` bigint,
+	`t3DurationSec` int,
+	`t3CriticalSensor` varchar(128),
+	`t3NoBreak` int DEFAULT 0,
+	`stabilizationBetweenT2T3Ok` int,
+	`warnings` json,
+	`updatedAt` timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+	CONSTRAINT `excursionStudySessions_id` PRIMARY KEY(`id`),
+	CONSTRAINT `excursionStudySessions_protocolId_unique` UNIQUE(`protocolId`)
+);
+--> statement-breakpoint
+ALTER TABLE `generalInfo` ADD `reportDate` varchar(32);

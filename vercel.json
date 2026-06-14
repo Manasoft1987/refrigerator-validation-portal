@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "buildCommand": "npm run build:vercel",
+  "outputDirectory": "dist/public",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/index?__path=/api/:path*"
+    },
+    {
+      "source": "/storage/:path*",
+      "destination": "/api/index?__path=/storage/:path*"
+    },
+    {
+      "source": "/manus-storage/:path*",
+      "destination": "/api/index?__path=/manus-storage/:path*"
+    },
+    {
+      "source": "/:path*",
+      "destination": "/index.html"
+    }
+  ],
+  "functions": {
+    "api/index.ts": {
+      "maxDuration": 60,
+      "memory": 1024,
+      "includeFiles": "server/{fonts,assets}/**"
+    }
+  }
+}

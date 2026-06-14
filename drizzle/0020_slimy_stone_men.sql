@@ -1,0 +1,1 @@
+ALTER TABLE `questionTemplates` ADD `equipmentKind` enum('conditioner','ventilation','heat_curtain','chiller','fan_coil','other');

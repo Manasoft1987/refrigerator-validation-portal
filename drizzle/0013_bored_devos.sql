@@ -1,0 +1,1 @@
+ALTER TABLE `generalInfo` ADD `documentValidityPeriod` text;
