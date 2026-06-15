@@ -310,7 +310,43 @@ function normalizeValue(row, column, jsonColumns = []) {
   if (jsonColumns.includes(column) && typeof value !== "string") {
     return JSON.stringify(value);
   }
+  if (isTimestampColumn(column)) return toMysqlTimestamp(value);
   return value;
+}
+
+function isTimestampColumn(column) {
+  return [
+    "createdAt",
+    "updatedAt",
+    "lastSignedIn",
+    "invitedAt",
+    "approvedAt",
+    "rejectedAt",
+    "calibrationDate",
+    "nextCalibrationDate",
+  ].includes(column);
+}
+
+function toMysqlTimestamp(value) {
+  if (value instanceof Date) return formatMysqlDate(value);
+  if (typeof value !== "string") return value;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return formatMysqlDate(parsed);
+}
+
+function formatMysqlDate(date) {
+  if (date.getTime() <= 0) return "1970-01-01 00:00:01";
+  const pad = (value) => String(value).padStart(2, "0");
+  return [
+    date.getUTCFullYear(),
+    pad(date.getUTCMonth() + 1),
+    pad(date.getUTCDate()),
+  ].join("-") + " " + [
+    pad(date.getUTCHours()),
+    pad(date.getUTCMinutes()),
+    pad(date.getUTCSeconds()),
+  ].join(":");
 }
 
 function chunks(items, size) {
@@ -361,7 +397,7 @@ async function insertRows(connection, plan, rows) {
 
   const maxId = rows.reduce((max, row) => Math.max(max, Number(row.id) || 0), 0);
   if (maxId > 0) {
-    await connection.query(`alter table ${quoteIdent(plan.table)} auto_increment = ?`, [maxId + 1]);
+    await connection.query(`alter table ${quoteIdent(plan.table)} auto_increment = ${maxId + 1}`);
   }
 }
 

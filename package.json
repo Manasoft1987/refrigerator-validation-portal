@@ -11,6 +11,8 @@
     "check": "tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest run",
+    "db:ensure": "node scripts/ensure-mysql-database.mjs",
+    "db:setup-tidb": "node scripts/setup-tidb-schema.mjs",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
     "db:import-local": "node scripts/import-local-dev-db-to-mysql.mjs",
     "storage:upload-local": "node scripts/upload-local-storage-to-s3.mjs"
