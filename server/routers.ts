@@ -1,4 +1,5 @@
 import { COOKIE_NAME } from "@shared/const";
+import { createHash, timingSafeEqual } from "node:crypto";
 import {
   DEFAULT_IQ_QUESTIONS,
   DEFAULT_OQ_QUESTIONS,
@@ -15,6 +16,8 @@ import {
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
+import { ENV } from "./_core/env";
+import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
@@ -87,6 +90,7 @@ import {
   createWarehouseEquipment,
   updateWarehouseEquipment,
   deleteWarehouseEquipment,
+  upsertUser,
 } from "./db";
 import {
   calcTest1,
@@ -106,6 +110,59 @@ import { storagePut, storageReadBuffer } from "./storage";
 import { buildWarehouseQuestions } from "./warehouseQuestions";
 
 const TEMP_MODE_SCHEMA = z.enum(["2-8", "8-15", "15-25"]);
+const PORTAL_ADMIN_OPEN_ID = "local-dev-admin";
+const PORTAL_ADMIN_NAME = "Local Dev Admin";
+const PORTAL_ADMIN_EMAIL = "dev@local.test";
+const PORTAL_ADMIN_APP_ID = "portal-admin";
+const PASSWORD_LOGIN_MAX_ATTEMPTS = 8;
+const PASSWORD_LOGIN_WINDOW_MS = 10 * 60 * 1000;
+const passwordLoginAttempts = new Map<string, { count: number; resetAt: number }>();
+
+function sha256(value: string) {
+  return createHash("sha256").update(value).digest();
+}
+
+function secureStringEquals(a: string, b: string) {
+  const left = sha256(a);
+  const right = sha256(b);
+  return timingSafeEqual(left, right);
+}
+
+function passwordLoginKey(req: unknown) {
+  const request = req as { ip?: string; headers?: Record<string, unknown> };
+  const forwarded = request.headers?.["x-forwarded-for"];
+  const firstForwarded = Array.isArray(forwarded) ? forwarded[0] : forwarded;
+  return String(firstForwarded || request.ip || "unknown").split(",")[0].trim();
+}
+
+function assertPasswordLoginAllowed(key: string) {
+  const now = Date.now();
+  const attempts = passwordLoginAttempts.get(key);
+  if (!attempts || attempts.resetAt <= now) {
+    passwordLoginAttempts.set(key, { count: 0, resetAt: now + PASSWORD_LOGIN_WINDOW_MS });
+    return;
+  }
+  if (attempts.count >= PASSWORD_LOGIN_MAX_ATTEMPTS) {
+    throw new TRPCError({
+      code: "TOO_MANY_REQUESTS",
+      message: "Слишком много попыток входа. Повторите позже.",
+    });
+  }
+}
+
+function recordPasswordLoginFailure(key: string) {
+  const now = Date.now();
+  const attempts = passwordLoginAttempts.get(key);
+  if (!attempts || attempts.resetAt <= now) {
+    passwordLoginAttempts.set(key, { count: 1, resetAt: now + PASSWORD_LOGIN_WINDOW_MS });
+    return;
+  }
+  attempts.count += 1;
+}
+
+function clearPasswordLoginFailures(key: string) {
+  passwordLoginAttempts.delete(key);
+}
 
 function rangeFor(tempMode: string, customMin?: number | null, customMax?: number | null) {
   const mode = TEMP_MODES.find(m => m.id === tempMode);
@@ -177,6 +234,47 @@ export const appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
+    passwordLogin: publicProcedure
+      .input(z.object({ password: z.string().min(1).max(256) }))
+      .mutation(async ({ ctx, input }) => {
+        if (!ENV.portalAdminPassword) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "Парольный вход не настроен.",
+          });
+        }
+
+        const key = passwordLoginKey(ctx.req);
+        assertPasswordLoginAllowed(key);
+
+        if (!secureStringEquals(input.password, ENV.portalAdminPassword)) {
+          recordPasswordLoginFailure(key);
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Неверный пароль." });
+        }
+
+        await upsertUser({
+          openId: PORTAL_ADMIN_OPEN_ID,
+          name: PORTAL_ADMIN_NAME,
+          email: PORTAL_ADMIN_EMAIL,
+          loginMethod: "portal-password",
+          role: "admin",
+          lastSignedIn: new Date().toISOString(),
+        });
+
+        const sessionToken = await sdk.signSession({
+          openId: PORTAL_ADMIN_OPEN_ID,
+          appId: ENV.appId || PORTAL_ADMIN_APP_ID,
+          name: PORTAL_ADMIN_NAME,
+        });
+
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        (ctx.res as any).cookie(COOKIE_NAME, sessionToken, {
+          ...cookieOptions,
+          maxAge: 365 * 24 * 60 * 60 * 1000,
+        });
+        clearPasswordLoginFailures(key);
+        return { success: true } as const;
+      }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       (ctx.res as any).clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });

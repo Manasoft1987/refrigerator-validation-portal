@@ -4,6 +4,7 @@ export const ENV = {
   databaseUrl: process.env.DATABASE_URL ?? "",
   oAuthServerUrl: process.env.OAUTH_SERVER_URL ?? "",
   ownerOpenId: process.env.OWNER_OPEN_ID ?? "",
+  portalAdminPassword: process.env.PORTAL_ADMIN_PASSWORD ?? "",
   isProduction: process.env.NODE_ENV === "production",
   devAuthEnabled: process.env.DEV_AUTH_ENABLED === "1",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",

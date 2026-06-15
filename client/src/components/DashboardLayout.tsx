@@ -27,6 +27,9 @@ import { useLocation } from "wouter";
 import { PendingApprovalBanner } from "./PendingApprovalBanner";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { trpc } from "@/lib/trpc";
+import { toast } from "sonner";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Обзор", path: "/" },
@@ -51,9 +54,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const saved = localStorage.getItem(SIDEBAR_WIDTH_KEY);
     return saved ? parseInt(saved, 10) : DEFAULT_WIDTH;
   });
-  const { loading, user } = useAuth();
+  const { loading, user, refresh } = useAuth();
   const authConfigured = isOAuthConfigured();
   const devAuthConfigured = isDevAuthConfigured();
+  const [adminPassword, setAdminPassword] = useState("");
+  const passwordLogin = trpc.auth.passwordLogin.useMutation({
+    onSuccess: async () => {
+      toast.success("Вход выполнен");
+      await refresh();
+      window.location.href = "/";
+    },
+    onError: error => toast.error(error.message || "Не удалось войти"),
+  });
 
   useEffect(() => {
     localStorage.setItem(SIDEBAR_WIDTH_KEY, sidebarWidth.toString());
@@ -115,6 +127,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             >
               {authConfigured ? "Войти через Google" : "OAuth не настроен"}
             </Button>
+            <form
+              className="space-y-3"
+              onSubmit={event => {
+                event.preventDefault();
+                passwordLogin.mutate({ password: adminPassword });
+              }}
+            >
+              <Input
+                type="password"
+                value={adminPassword}
+                onChange={event => setAdminPassword(event.target.value)}
+                placeholder="Пароль администратора"
+                autoComplete="current-password"
+                className="h-11"
+              />
+              <Button
+                type="submit"
+                variant={authConfigured ? "outline" : "default"}
+                size="lg"
+                className="w-full h-11"
+                disabled={!adminPassword.trim() || passwordLogin.isPending}
+              >
+                <LogIn className="mr-2 h-4 w-4" />
+                {passwordLogin.isPending ? "Входим..." : "Войти как администратор"}
+              </Button>
+            </form>
             {devAuthConfigured && (
               <Button
                 onClick={() => (window.location.href = getDevLoginUrl())}
