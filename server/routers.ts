@@ -174,6 +174,12 @@ function setSessionCookie(ctx: { req: unknown; res: unknown }, token: string) {
   });
 }
 
+function toPublicUser<T extends { passwordHash?: unknown } | null | undefined>(user: T) {
+  if (!user) return user;
+  const { passwordHash: _passwordHash, ...publicUser } = user;
+  return publicUser;
+}
+
 function rangeFor(tempMode: string, customMin?: number | null, customMax?: number | null) {
   const mode = TEMP_MODES.find(m => m.id === tempMode);
   const rawMin = customMin ?? mode?.min ?? 2;
@@ -243,7 +249,7 @@ async function ownProtocol(userId: number, protocolId: number) {
 export const appRouter = router({
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    me: publicProcedure.query(opts => toPublicUser(opts.ctx.user)),
     passwordLogin: publicProcedure
       .input(z.object({
         email: z.string().max(320).optional().nullable(),
@@ -1910,7 +1916,11 @@ export const appRouter = router({
       .input(z.object({ companyId: z.number() }))
       .query(async ({ ctx, input }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
-        return listCompanyMembers(input.companyId);
+        const members = await listCompanyMembers(input.companyId);
+        return members.map(member => ({
+          ...member,
+          user: toPublicUser(member.user),
+        }));
       }),
 
     // Admin: invite a user by openId to a company
