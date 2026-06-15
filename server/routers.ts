@@ -17,6 +17,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { ENV } from "./_core/env";
+import { verifyPasswordHash } from "./_core/passwords";
 import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -90,6 +91,7 @@ import {
   createWarehouseEquipment,
   updateWarehouseEquipment,
   deleteWarehouseEquipment,
+  getUserByEmail,
   upsertUser,
 } from "./db";
 import {
@@ -164,6 +166,14 @@ function clearPasswordLoginFailures(key: string) {
   passwordLoginAttempts.delete(key);
 }
 
+function setSessionCookie(ctx: { req: unknown; res: unknown }, token: string) {
+  const cookieOptions = getSessionCookieOptions(ctx.req);
+  (ctx.res as any).cookie(COOKIE_NAME, token, {
+    ...cookieOptions,
+    maxAge: 365 * 24 * 60 * 60 * 1000,
+  });
+}
+
 function rangeFor(tempMode: string, customMin?: number | null, customMax?: number | null) {
   const mode = TEMP_MODES.find(m => m.id === tempMode);
   const rawMin = customMin ?? mode?.min ?? 2;
@@ -235,17 +245,50 @@ export const appRouter = router({
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     passwordLogin: publicProcedure
-      .input(z.object({ password: z.string().min(1).max(256) }))
+      .input(z.object({
+        email: z.string().max(320).optional().nullable(),
+        password: z.string().min(1).max(256),
+      }))
       .mutation(async ({ ctx, input }) => {
+        const key = passwordLoginKey(ctx.req);
+        assertPasswordLoginAllowed(key);
+        const email = input.email?.trim().toLowerCase();
+
+        if (email) {
+          const parsedEmail = z.string().email().safeParse(email);
+          if (!parsedEmail.success) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: "Укажите корректный email." });
+          }
+
+          const user = await getUserByEmail(email);
+          if (!user || !verifyPasswordHash(input.password, user.passwordHash)) {
+            recordPasswordLoginFailure(key);
+            throw new TRPCError({ code: "UNAUTHORIZED", message: "Неверный email или пароль." });
+          }
+
+          await upsertUser({
+            openId: user.openId,
+            loginMethod: "password",
+            lastSignedIn: new Date().toISOString(),
+          });
+
+          const sessionToken = await sdk.signSession({
+            openId: user.openId,
+            appId: ENV.appId || PORTAL_ADMIN_APP_ID,
+            name: user.name || user.email || "Portal User",
+          });
+
+          setSessionCookie(ctx, sessionToken);
+          clearPasswordLoginFailures(key);
+          return { success: true } as const;
+        }
+
         if (!ENV.portalAdminPassword) {
           throw new TRPCError({
             code: "PRECONDITION_FAILED",
             message: "Парольный вход не настроен.",
           });
         }
-
-        const key = passwordLoginKey(ctx.req);
-        assertPasswordLoginAllowed(key);
 
         if (!secureStringEquals(input.password, ENV.portalAdminPassword)) {
           recordPasswordLoginFailure(key);
@@ -267,11 +310,7 @@ export const appRouter = router({
           name: PORTAL_ADMIN_NAME,
         });
 
-        const cookieOptions = getSessionCookieOptions(ctx.req);
-        (ctx.res as any).cookie(COOKIE_NAME, sessionToken, {
-          ...cookieOptions,
-          maxAge: 365 * 24 * 60 * 60 * 1000,
-        });
+        setSessionCookie(ctx, sessionToken);
         clearPasswordLoginFailures(key);
         return { success: true } as const;
       }),
@@ -2212,3 +2251,5 @@ export const appRouter = router({
       }),
   }),
 });
+
+export type AppRouter = typeof appRouter;

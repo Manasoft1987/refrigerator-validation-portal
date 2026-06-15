@@ -308,7 +308,7 @@ function readProviders(): StorageProvider[] {
     providers.push("manus");
   }
 
-  return [...new Set(providers)];
+  return Array.from(new Set(providers));
 }
 
 export function contentTypeForKey(relKey: string): string {

@@ -57,6 +57,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { loading, user, refresh } = useAuth();
   const authConfigured = isOAuthConfigured();
   const devAuthConfigured = isDevAuthConfigured();
+  const [loginEmail, setLoginEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
   const passwordLogin = trpc.auth.passwordLogin.useMutation({
     onSuccess: async () => {
@@ -131,14 +132,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               className="space-y-3"
               onSubmit={event => {
                 event.preventDefault();
-                passwordLogin.mutate({ password: adminPassword });
+                passwordLogin.mutate({
+                  email: loginEmail.trim() || undefined,
+                  password: adminPassword,
+                });
               }}
             >
+              <Input
+                type="email"
+                value={loginEmail}
+                onChange={event => setLoginEmail(event.target.value)}
+                placeholder="Email пользователя"
+                autoComplete="username"
+                className="h-11"
+              />
               <Input
                 type="password"
                 value={adminPassword}
                 onChange={event => setAdminPassword(event.target.value)}
-                placeholder="Пароль администратора"
+                placeholder="Пароль"
                 autoComplete="current-password"
                 className="h-11"
               />
@@ -150,7 +162,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 disabled={!adminPassword.trim() || passwordLogin.isPending}
               >
                 <LogIn className="mr-2 h-4 w-4" />
-                {passwordLogin.isPending ? "Входим..." : "Войти как администратор"}
+                {passwordLogin.isPending ? "Входим..." : "Войти"}
               </Button>
             </form>
             {devAuthConfigured && (

@@ -67,6 +67,20 @@ $env:DATABASE_URL="mysql://user:password@host:3306/database"
 npm run db:push
 ```
 
+For password-based portal users, apply the password-auth column migration once:
+
+```powershell
+$env:DATABASE_URL="mysql://user:password@host:3306/database"
+npm run auth:migrate-passwords
+```
+
+Create or reset a user's password:
+
+```powershell
+$env:DATABASE_URL="mysql://user:password@host:3306/database"
+npm run auth:set-password -- --email "validator@example.com" --name "User Name" --company-id 1
+```
+
 To copy the current local development data into a new empty MySQL database:
 
 ```powershell

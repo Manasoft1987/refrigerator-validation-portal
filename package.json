@@ -16,7 +16,9 @@
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
     "db:import-local": "node scripts/import-local-dev-db-to-mysql.mjs",
     "storage:check": "node scripts/check-s3-storage.mjs",
-    "storage:upload-local": "node scripts/upload-local-storage-to-s3.mjs"
+    "storage:upload-local": "node scripts/upload-local-storage-to-s3.mjs",
+    "auth:migrate-passwords": "node scripts/apply-password-auth-migration.mjs",
+    "auth:set-password": "node scripts/set-user-password.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.693.0",

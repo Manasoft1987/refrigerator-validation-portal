@@ -33,6 +33,7 @@ const schemaSql = [
     name text,
     email varchar(320),
     loginMethod varchar(64),
+    passwordHash varchar(255),
     role enum('user','admin') NOT NULL DEFAULT 'user',
     createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

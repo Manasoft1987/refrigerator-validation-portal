@@ -46,6 +46,7 @@ export function getLocalDevUser(): User {
     name: DEV_AUTH_NAME,
     email: "dev@local.test",
     loginMethod: "local-dev",
+    passwordHash: null,
     role: "admin",
     createdAt: now,
     updatedAt: now,
