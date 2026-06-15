@@ -15,6 +15,7 @@
     "db:setup-tidb": "node scripts/setup-tidb-schema.mjs",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
     "db:import-local": "node scripts/import-local-dev-db-to-mysql.mjs",
+    "storage:check": "node scripts/check-s3-storage.mjs",
     "storage:upload-local": "node scripts/upload-local-storage-to-s3.mjs"
   },
   "dependencies": {

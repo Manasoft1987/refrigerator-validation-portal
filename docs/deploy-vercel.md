@@ -107,6 +107,12 @@ node scripts/upload-local-storage-to-s3.mjs
 
 S3 access keys are server-side secrets and must not be exposed in the browser.
 
+Before uploading existing files or deploying, verify credentials with:
+
+```powershell
+node scripts/check-s3-storage.mjs
+```
+
 ## Runtime routing
 
 `vercel.json` rewrites these paths to the serverless Express handler:
