@@ -7,6 +7,7 @@ await build({
   platform: "node",
   format: "esm",
   target: "node20",
+  external: ["pdfkit"],
   banner: {
     js: "import { createRequire } from 'module';\nconst require = createRequire(import.meta.url);",
   },
