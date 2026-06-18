@@ -1777,9 +1777,14 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
   
   // Override with excursion test data if available
   if (input.excursion?.enabled) {
-    const warmupMinutes = input.excursion.t1DurationSec ? Math.round(input.excursion.t1DurationSec / 60) : null;
-    const doorOpeningMinutes = input.excursion.t2DurationSec ? Math.round(input.excursion.t2DurationSec / 60) : null;
-    const thermalRetentionMinutes = input.excursion.t3DurationSec ? Math.round(input.excursion.t3DurationSec / 60) : null;
+    const durationMinutes = (sec: number | null | undefined) =>
+      sec === null || sec === undefined ? null : Math.floor(sec / 60);
+    const warmupMinutes = durationMinutes(input.excursion.t1DurationSec);
+    const doorOpeningMinutes = durationMinutes(input.excursion.t2DurationSec);
+    const thermalRetentionMinutes = durationMinutes(input.excursion.t3DurationSec);
+    const warmupText = formatDurationSec(input.excursion.t1DurationSec);
+    const doorOpeningText = formatDurationSec(input.excursion.t2DurationSec);
+    const thermalRetentionText = formatDurationSec(input.excursion.t3DurationSec);
     
     metrics = {
       warmupTimeMinutes: warmupMinutes,
@@ -1787,15 +1792,15 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
       thermalRetentionMinutes: thermalRetentionMinutes,
       warmupDescription:
         warmupMinutes !== null
-          ? `${input?.protocol?.equipmentType === "warehouse" ? "Помещение хранения" : "Авторефрижератор"} входит в требуемый температурный режим за ${warmupMinutes} минут.`
+          ? `${input?.protocol?.equipmentType === "warehouse" ? "Помещение хранения" : "Авторефрижератор"} входит в требуемый температурный режим за ${warmupText}.`
           : "Время входа в режим не определено.",
       doorOpeningDescription:
         doorOpeningMinutes !== null
-          ? `Дверь можно открывать на время до ${doorOpeningMinutes} минут без нарушения температурного режима.`
+          ? `Дверь можно открывать на время до ${doorOpeningText} без нарушения температурного режима.`
           : "Время открытия двери не определено.",
       thermalRetentionDescription:
         thermalRetentionMinutes !== null
-          ? `При выключении холодильного агрегата ${input?.protocol?.equipmentType === "warehouse" ? "объект" : "кузов"} способен сохранять требуемый режим в течение ${thermalRetentionMinutes} минут.`
+          ? `При выключении холодильного агрегата ${input?.protocol?.equipmentType === "warehouse" ? "объект" : "кузов"} способен сохранять требуемый режим в течение ${thermalRetentionText}.`
           : "Время сохранения режима не определено.",
     };
   }
