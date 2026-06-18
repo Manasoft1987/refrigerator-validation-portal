@@ -772,18 +772,29 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
   const cardX = left + 40;
   const cardW = right - left - 80;
   const cardY = y;
+  const gi = input.generalInfo;
+  const objectLabel = eqType === "warehouse"
+    ? getEquipmentName(input)
+    : EQUIPMENT_LABEL[gi?.equipmentType || ""] || "—";
+  const refrigerationUnit = `${gi?.manufacturer || ""} ${gi?.model || ""}`.trim() || "—";
   const baseRows: Array<[string, string]> = [
     ["Номер протокола", input.protocol.number],
     ["Редакция", input.dataIntegrity?.revision || "01"],
     ["Организация", input.org.name],
     ["БИН / ИНН", input.org.bin || "—"],
-    ["Объект квалификации", eqType === "warehouse"
-      ? getEquipmentName(input)
-      : `${EQUIPMENT_LABEL[input.generalInfo?.equipmentType || ""] || "—"} · ${input.generalInfo?.manufacturer || ""} ${input.generalInfo?.model || ""}`.trim()],
-    ["Адрес объекта", input.generalInfo?.location || "—"],
-    ["Температурный режим", TEMP_MODE_LABEL[input.generalInfo?.tempMode || ""] || "—"],
-    ["Сезон", input.generalInfo?.season ? { warm: "Теплый период", cold: "Холодный период", interseasonal: "Межсезонье", none: "Не применимо" }[input.generalInfo.season] || "—" : "—"],
-    ["Тип квалификации", input.generalInfo?.qualificationType ? { primary: "Первичная", periodic: "Периодическая", repeat: "Повторная" }[input.generalInfo.qualificationType] || "—" : "—"],
+    ["Объект квалификации", objectLabel],
+    ...(eqType === "auto-refrigerator"
+      ? [
+          ["Транспортное средство / гос. номер", gi?.location || "—"],
+          ["Холодильная установка", refrigerationUnit],
+          ["Серийный номер установки", gi?.serial || "—"],
+        ] as Array<[string, string]>
+      : [
+          ["Адрес объекта", gi?.location || "—"],
+        ] as Array<[string, string]>),
+    ["Температурный режим", TEMP_MODE_LABEL[gi?.tempMode || ""] || "—"],
+    ["Сезон", gi?.season ? { warm: "Теплый период", cold: "Холодный период", interseasonal: "Межсезонье", none: "Не применимо" }[gi.season] || "—" : "—"],
+    ["Тип квалификации", gi?.qualificationType ? { primary: "Первичная", periodic: "Периодическая", repeat: "Повторная" }[gi.qualificationType] || "—" : "—"],
   ];
   const rows: Array<[string, string | undefined]> = part === "part1"
     ? [
