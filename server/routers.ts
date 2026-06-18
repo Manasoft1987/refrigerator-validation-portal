@@ -585,28 +585,6 @@ export const appRouter = router({
       )
        .mutation(async ({ ctx, input }) => {
         await ownProtocol(ctx.user.id, input.protocolId);
-        // Validate: validationDate must not be later than the earliest sensor recording start
-        if (input.validationDate) {
-          const loggers = await listLoggers(input.protocolId);
-          const earliestSensorTs = loggers.reduce<number | null>((min, l) => {
-            const ts = (l as any).firstTs as number | null;
-            if (!ts) return min;
-            return min === null ? ts : Math.min(min, ts);
-          }, null);
-          if (earliestSensorTs !== null) {
-            // validationDate is YYYY-MM-DD, treat as start of that day (00:00 local)
-            const validationMs = new Date(input.validationDate + "T00:00:00").getTime();
-            if (validationMs > earliestSensorTs) {
-              const earliestDate = new Date(earliestSensorTs).toLocaleDateString("ru-RU", {
-                day: "2-digit", month: "2-digit", year: "numeric",
-              });
-              throw new TRPCError({
-                code: "BAD_REQUEST",
-                message: `Дата валидации не может быть позже даты начала записи датчиков (${earliestDate}). Пожалуйста, укажите дату не позднее ${earliestDate}.`,
-              });
-            }
-          }
-        }
         const { protocolId, ...patch } = input;
         // Drizzle decimal columns expect strings (or null). Coerce numeric inputs.
         const decimalKeys = [

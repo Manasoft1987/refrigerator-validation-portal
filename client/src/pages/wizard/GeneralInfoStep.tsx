@@ -132,6 +132,26 @@ export default function GeneralInfoStep({
     ? Number(liveL) > 0 && Number(liveW) > 0 && Number(liveH) > 0
     : true;
 
+  const renderSensorDateNotice = () => {
+    const earliestTs = pvQ.data?.earliestSensorTs;
+    if (!earliestTs || !form.validationDate) return null;
+    const validationMs = new Date(form.validationDate + "T00:00:00").getTime();
+    if (validationMs <= earliestTs) return null;
+
+    const earliest = new Date(earliestTs).toLocaleDateString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+
+    return (
+      <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+        Внимание: запись датчиков началась раньше даты протокола ({earliest}). Сохранение не
+        блокируется: при необходимости оставьте выбранную дату или внесите свою.
+      </p>
+    );
+  };
+
   const handleSave = async (goNext: boolean) => {
     // Whitelist only the fields the save mutation accepts — prevents
     // accidentally sending DB metadata (id, createdAt, updatedAt) from giQ.data
@@ -289,22 +309,7 @@ export default function GeneralInfoStep({
                   value={form.validationDate || ""}
                   onChange={e => setForm({ ...form, validationDate: e.target.value })}
                 />
-                {(() => {
-                  const earliestTs = pvQ.data?.earliestSensorTs;
-                  if (!earliestTs || !form.validationDate) return null;
-                  const validationMs = new Date(form.validationDate + "T00:00:00").getTime();
-                  if (validationMs > earliestTs) {
-                    const earliest = new Date(earliestTs).toLocaleDateString("ru-RU", {
-                      day: "2-digit", month: "2-digit", year: "numeric",
-                    });
-                    return (
-                      <p className="text-sm text-destructive mt-1">
-                        ⚠ Дата валидации не может быть позже даты начала записи датчиков ({earliest})
-                      </p>
-                    );
-                  }
-                  return null;
-                })()}
+                {renderSensorDateNotice()}
               </Field>
 
               {/* Purpose */}
@@ -494,22 +499,7 @@ export default function GeneralInfoStep({
                 value={form.validationDate || ""}
                 onChange={e => setForm({ ...form, validationDate: e.target.value })}
               />
-              {(() => {
-                const earliestTs = pvQ.data?.earliestSensorTs;
-                if (!earliestTs || !form.validationDate) return null;
-                const validationMs = new Date(form.validationDate + "T00:00:00").getTime();
-                if (validationMs > earliestTs) {
-                  const earliest = new Date(earliestTs).toLocaleDateString("ru-RU", {
-                    day: "2-digit", month: "2-digit", year: "numeric",
-                  });
-                  return (
-                    <p className="text-sm text-destructive mt-1">
-                      ⚠ Дата валидации не может быть позже даты начала записи датчиков ({earliest})
-                    </p>
-                  );
-                }
-                return null;
-              })()}
+              {renderSensorDateNotice()}
             </Field>
             <Field label="Место установки / эксплуатации" className="md:col-span-2">
               <Input
