@@ -97,6 +97,55 @@ describe("generateProtocolPdf", () => {
   );
 
   it(
+    "handles long auto-refrigerator cover metadata without crashing",
+    async () => {
+      const now = Date.UTC(2026, 5, 5, 9, 0, 0);
+      const series = mkSeries(now, 72.5, 5);
+      const sensor = {
+        id: 1, label: "230610STS0013763", customName: null, role: "internal" as const,
+        pointCount: series.temp.length, min: 3.5, max: 7.4, avg: 5.1, std: 0.4, mkt: 5.2,
+        series, deviations: [],
+      };
+      const buf = await generateProtocolPdf({
+        org: { ...BASE_ORG, name: "TOO \"Rayza-ADE\"" },
+        protocol: { number: "VAL-2026-0002", createdAt: new Date(now) },
+        generalInfo: {
+          ...BASE_GI,
+          equipmentType: "auto-refrigerator",
+          manufacturer: "THERMO KING SLXe 400",
+          model: "VOLVO FH 429BBX002 with SCHMITZ SKO 24 trailer, long vehicle description",
+          location: "Vehicle depot, long dispatch area name",
+          validationDate: "2026-06-05",
+          season: "warm",
+          qualificationType: "periodic",
+        },
+        iq: {
+          purpose: "IQ", description: "IQ", criteria: "IQ",
+          items: [{ questionIndex: 1, questionText: "Q1", answer: "yes", comment: null }],
+          verdict: "pass",
+        },
+        oq: {
+          purpose: "OQ", description: "OQ", criteria: "OQ",
+          items: [{ questionIndex: 1, questionText: "Q1", answer: "yes", comment: null }],
+          verdict: "pass",
+        },
+        pv: {
+          purpose: "PV", description: "PV", criteria: "PV",
+          tempMode: "2-8", rangeMin: 2, rangeMax: 8,
+          startAt: now, endAt: now + 72.5 * 3600_000,
+          minDurationHours: 72, minSensorCount: 2,
+          loggers: [sensor], verdict: "pass", failureReasons: [],
+          hotIdx: 0, coldIdx: 0, extIndices: [],
+        },
+      });
+      expect(Buffer.isBuffer(buf)).toBe(true);
+      expect(buf.length).toBeGreaterThan(2000);
+      expect(buf.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+    },
+    60_000,
+  );
+
+  it(
     "includes excursion section when excursion is enabled",
     async () => {
       const now = Date.UTC(2024, 6, 15, 9, 0, 0);

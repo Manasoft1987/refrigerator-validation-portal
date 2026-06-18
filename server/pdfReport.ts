@@ -772,7 +772,6 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
   const cardX = left + 40;
   const cardW = right - left - 80;
   const cardY = y;
-  const rowH = 28;
   const baseRows: Array<[string, string]> = [
     ["Номер протокола", input.protocol.number],
     ["Редакция", input.dataIntegrity?.revision || "01"],
@@ -798,21 +797,43 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
         ["Дата составления отчёта", input.reportDate && input.reportDate.trim() ? input.reportDate.trim() : fmtDateOnly(input.generalInfo?.validationDate ? new Date(input.generalInfo.validationDate) : typeof input.protocol.createdAt === 'string' ? new Date(input.protocol.createdAt) : input.protocol.createdAt)]
       ];
 
-  const cardH = 28 + rows.length * rowH;
+  const rowMinH = 28;
+  const rowPaddingY = 7;
+  const labelX = cardX + 18;
+  const valueX = cardX + 200;
+  const labelW = 170;
+  const valueW = cardW - 220;
+  const cardPaddingTop = 14;
+  const cardPaddingBottom = 14;
+  const measuredRows = rows.map(([k, v]) => {
+    doc.font("body").fontSize(9);
+    const labelH = doc.heightOfString(k.toUpperCase(), { width: labelW });
+    doc.font("bold").fontSize(11);
+    const valueH = doc.heightOfString(v || "—", { width: valueW, lineGap: 1 });
+    return {
+      k,
+      v,
+      rowH: Math.max(rowMinH, Math.ceil(Math.max(labelH, valueH) + rowPaddingY * 2)),
+    };
+  });
+
+  const cardH = cardPaddingTop + measuredRows.reduce((sum, row) => sum + row.rowH, 0) + cardPaddingBottom;
   doc.save();
   doc.lineWidth(0.7).strokeColor(BORDER).roundedRect(cardX, cardY, cardW, cardH, 8).stroke();
   doc.restore();
 
-  rows.forEach(([k, v], idx) => {
-    const ry = cardY + 14 + idx * rowH;
-    doc.fillColor(MUTED).font("body").fontSize(9).text(k.toUpperCase(), cardX + 18, ry, {
-      width: 170,
+  let rowY = cardY + cardPaddingTop;
+  measuredRows.forEach(({ k, v, rowH }) => {
+    const textY = rowY + rowPaddingY;
+    doc.fillColor(MUTED).font("body").fontSize(9).text(k.toUpperCase(), labelX, textY, {
+      width: labelW,
     });
     doc
       .fillColor(ACCENT)
       .font("bold")
       .fontSize(11)
-      .text(v || "—", cardX + 200, ry - 1, { width: cardW - 220 });
+      .text(v || "—", valueX, textY - 1, { width: valueW, lineGap: 1 });
+    rowY += rowH;
   });
 
   // Footer note
