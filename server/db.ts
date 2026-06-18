@@ -2164,6 +2164,15 @@ export async function addSensorToProtocol(protocolId: number, sensorId: number):
       return link;
     });
   }
+
+  const [existing] = await db.select().from(protocolSensors).where(
+    and(
+      eq(protocolSensors.protocolId, protocolId),
+      eq(protocolSensors.sensorId, sensorId)
+    )
+  ).limit(1);
+
+  if (existing) return existing;
   
   const result = await db.insert(protocolSensors).values({
     protocolId,
@@ -2182,17 +2191,27 @@ export async function addSensorToProtocol(protocolId: number, sensorId: number):
 
 export async function getProtocolSensors(protocolId: number): Promise<Array<Sensor & { protocolSensorId: number }>> {
   const db = await getDb();
+  const dedupeBySensorId = (items: Array<Sensor & { protocolSensorId: number }>) => {
+    const unique = new Map<number, Sensor & { protocolSensorId: number }>();
+    for (const item of items) {
+      const existing = unique.get(item.id);
+      if (!existing || item.protocolSensorId < existing.protocolSensorId) {
+        unique.set(item.id, item);
+      }
+    }
+    return Array.from(unique.values()).sort((a, b) => a.number.localeCompare(b.number));
+  };
+
   if (!db) {
     if (!shouldUseLocalDevDb()) throw new Error("DB unavailable");
     const data = await readLocalDevDb();
-    return data.protocolSensors
+    return dedupeBySensorId(data.protocolSensors
       .filter(link => link.protocolId === protocolId)
       .map(link => {
         const sensor = data.sensors.find(item => item.id === link.sensorId);
         return sensor ? ({ ...sensor, protocolSensorId: link.id } as Sensor & { protocolSensorId: number }) : null;
       })
-      .filter((item): item is Sensor & { protocolSensorId: number } => Boolean(item))
-      .sort((a, b) => a.number.localeCompare(b.number));
+      .filter((item): item is Sensor & { protocolSensorId: number } => Boolean(item)));
   }
   
   const result = await db
@@ -2210,7 +2229,7 @@ export async function getProtocolSensors(protocolId: number): Promise<Array<Sens
     .innerJoin(sensors, eq(protocolSensors.sensorId, sensors.id))
     .where(eq(protocolSensors.protocolId, protocolId));
   
-  return result;
+  return dedupeBySensorId(result);
 }
 
 export async function removeProtocolSensor(protocolId: number, sensorId: number): Promise<void> {

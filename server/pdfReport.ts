@@ -4171,6 +4171,15 @@ function drawSensorTable(
   const left = PAGE_MARGIN;
   const right = doc.page.width - PAGE_MARGIN;
   const totalWidth = right - left;
+  const uniqueSensors = Array.from(
+    sensors
+      .reduce((acc, sensor) => {
+        const key = sensor.number.trim().toLowerCase();
+        if (key && !acc.has(key)) acc.set(key, sensor);
+        return acc;
+      }, new Map<string, (typeof sensors)[number]>())
+      .values(),
+  );
   
   // Column widths
   const colWidths = {
@@ -4201,7 +4210,7 @@ function drawSensorTable(
   doc.font("body").fontSize(9).fillColor(ACCENT);
   const accuracyText = `±${sensorAccuracy.toFixed(2)}`;
   const now = Date.now();
-  sensors.forEach((sensor) => {
+  uniqueSensors.forEach((sensor) => {
     ensureSpace(doc, 28);
     const rowY = doc.y;
     
