@@ -722,25 +722,42 @@ export function drawRefrigeratorDiagram(
   pageMargin: number,
   coolingUnitPos?: { x: number; y: number } | null,
   doorPos?: { x: number; y: number } | null,
+  title?: string,
 ): void {
   const internals = sensors.filter(s => s.role === "internal");
   const externals = sensors.filter(s => s.role === "external");
 
-  const diagH = 220;
+  const diagH = 190;
   const cabW = 200;
   const cabH = diagH;
   // Outer wall thickness (represents insulation)
   const wallT = 10;
-  // Outer body is larger than inner chamber by wallT on each side
-  const outerX = pageMargin;
-  const outerY = doc.y;
   const outerW = cabW + wallT * 2;
   const outerH = cabH + wallT * 2;
+  const BADGE_W = 36;
+  const BADGE_H = 20;
+  const extBlockH = externals.length > 0 ? 30 + (externals.length - 1) * 45 + BADGE_H + 18 : 0;
+  const titleH = title ? 28 : 0;
+  const blockH = titleH + Math.max(outerH, extBlockH) + 18;
+
+  ensureSpace(doc, blockH);
+
+  if (title) {
+    doc.save();
+    doc.font("bold").fontSize(11).fillColor("#1f2937");
+    doc.text(title, pageMargin, doc.y, { width: doc.page.width - pageMargin * 2, lineBreak: false });
+    doc.restore();
+    doc.y = (doc.y as number) + 10;
+  }
+
+  // Outer body is larger than inner chamber by wallT on each side.
+  // Coordinates must be calculated after ensureSpace because it can add a page.
+  const totalW = outerW + (externals.length > 0 ? 80 : 0);
+  const outerX = pageMargin + Math.max(0, (doc.page.width - pageMargin * 2 - totalW) / 2);
+  const outerY = doc.y;
   // Inner chamber starts at offset
   const cabX = outerX + wallT;
   const cabY = outerY + wallT;
-
-  ensureSpace(doc, outerH + 20);
 
   // Door strip
   const doorW = 36;
@@ -792,8 +809,6 @@ export function drawRefrigeratorDiagram(
   doc.restore();
 
   // --- Internal sensor badges (rectangles) ---
-  const BADGE_W = 36;
-  const BADGE_H = 20;
   internals.forEach((s, idx) => {
     const color = sensorBadgeColor(idx);
     const name = (s.customName || s.label).slice(0, 8);
@@ -833,7 +848,7 @@ export function drawRefrigeratorDiagram(
   externals.forEach((s, idx) => {
     const color = sensorBadgeColor(internals.length + idx);
     const name = (s.customName || s.label).slice(0, 8);
-    const ey = cabY + 30 + idx * 55;
+    const ey = cabY + 28 + idx * 45;
 
     // Connector line
     doc.save();
@@ -860,7 +875,7 @@ export function drawRefrigeratorDiagram(
   });
 
   // Advance cursor (use outer dimensions so content below doesn't overlap)
-  doc.y = outerY + outerH + 12;
+  doc.y = outerY + Math.max(outerH, extBlockH) + 12;
   doc.fillColor("#000000");
 }
 
