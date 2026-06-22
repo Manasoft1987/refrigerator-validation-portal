@@ -716,6 +716,15 @@ function sensorBadgeColor(idx: number): string {
   return BADGE_PALETTE[idx % BADGE_PALETTE.length];
 }
 
+function refrigeratorBadgeLabel(sensor: DiagramSensor): string {
+  const serial = String(sensor.label ?? "").trim();
+  const digits = serial.replace(/\D/g, "");
+  if (digits.length >= 4) return digits.slice(-4);
+  if (serial.length > 0) return serial.length > 6 ? serial.slice(-6) : serial;
+  const fallback = String(sensor.customName ?? "").trim();
+  return fallback.length > 6 ? fallback.slice(0, 6) : fallback;
+}
+
 export function drawRefrigeratorDiagram(
   doc: any,
   sensors: DiagramSensor[],
@@ -811,7 +820,7 @@ export function drawRefrigeratorDiagram(
   // --- Internal sensor badges (rectangles) ---
   internals.forEach((s, idx) => {
     const color = sensorBadgeColor(idx);
-    const name = (s.customName || s.label).slice(0, 8);
+    const name = refrigeratorBadgeLabel(s);
 
     let pctX = 40;
     let pctY = 50;
@@ -847,7 +856,7 @@ export function drawRefrigeratorDiagram(
   const extStartX = cabX + cabW + 20;
   externals.forEach((s, idx) => {
     const color = sensorBadgeColor(internals.length + idx);
-    const name = (s.customName || s.label).slice(0, 8);
+    const name = refrigeratorBadgeLabel(s);
     const ey = cabY + 28 + idx * 45;
 
     // Connector line

@@ -50,6 +50,15 @@ function badgeColor(idx: number) {
   return BADGE_COLORS[idx % BADGE_COLORS.length];
 }
 
+function badgeLabel(logger: Logger): string {
+  const serial = String(logger.label ?? "").trim();
+  const digits = serial.replace(/\D/g, "");
+  if (digits.length >= 4) return digits.slice(-4);
+  if (serial.length > 0) return serial.length > 6 ? serial.slice(-6) : serial;
+  const fallback = String(logger.customName ?? "").trim();
+  return fallback.length > 6 ? fallback.slice(0, 6) : fallback;
+}
+
 export default function RefrigeratorDiagram({ loggers, protocolId, readOnly = false }: Props) {
   const utils = trpc.useUtils();
   const updateLogger = trpc.pv.updateLogger.useMutation({
@@ -192,7 +201,7 @@ export default function RefrigeratorDiagram({ loggers, protocolId, readOnly = fa
           const pos = getDisplayPos(l, idx);
           const { sx, sy } = toSvgXY(pos.x, pos.y);
           const color = badgeColor(idx);
-          const name = l.customName || l.label;
+          const name = badgeLabel(l);
           const isDragging = dragging?.id === l.id;
           return (
             <g
@@ -221,7 +230,7 @@ export default function RefrigeratorDiagram({ loggers, protocolId, readOnly = fa
         {/* External sensor badges — outside the cabinet on the right */}
         {externals.map((l, idx) => {
           const color = badgeColor(internals.length + idx);
-          const name = l.customName || l.label;
+          const name = badgeLabel(l);
           const ey = CAB_Y + 40 + idx * 55;
           return (
             <g key={l.id}>
