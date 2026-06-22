@@ -6,9 +6,8 @@
  * Warehouse: Single unified diagram showing both floor plan objects AND sensor
  *   positions on the same canvas. Tier selector tabs appear above the canvas.
  *
- * Refrigerator/Reefer:
- *   Tab 1 - "Схема позиций": Read-only isometric truck showing ISPE position labels
- *   Tab 2 - "Расстановка датчиков": Full interactive ReeferTruckDiagram3D
+ * Refrigerator: Cabinet diagram with direct sensor placement.
+ * Reefer: ISPE position reference plus full interactive ReeferTruckDiagram3D.
  */
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,6 +21,7 @@ import { toast } from "sonner";
 import { useParams, useLocation } from "wouter";
 import { toPng } from "html-to-image";
 import ReeferTruckDiagram3D from "@/components/ReeferTruckDiagram3D";
+import RefrigeratorDiagram from "@/components/RefrigeratorDiagram";
 import FloorPlanEditor, { FloorPlanObject, SensorPosition, SensorLogger } from "@/components/FloorPlanEditor";
 import { buildWarehousePositions } from "@/components/WarehouseLayoutDiagram";
 import { computeWarehouseSensorCount } from "@shared/validation";
@@ -176,6 +176,7 @@ export default function SensorPlacementPage() {
   const giQ = trpc.generalInfo.get.useQuery({ protocolId });
   const equipmentType = (protocolQ.data?.equipmentType ?? "refrigerator") as string;
   const isWarehouse = equipmentType === "warehouse";
+  const isAutoRefrigerator = equipmentType === "auto-refrigerator";
 
   const updateLogger = trpc.pv.updateLogger.useMutation({
     onSuccess: () => pvQ.refetch(),
@@ -291,7 +292,7 @@ export default function SensorPlacementPage() {
             Схема расстановки датчиков
           </h1>
           <p className="text-sm text-muted-foreground">
-            Протокол #{protocolId} — {isWarehouse ? "помещение / зона хранения" : equipmentType === "auto-refrigerator" ? "авторефрижератор" : "объект валидации"}
+            Протокол #{protocolId} — {isWarehouse ? "помещение / зона хранения" : isAutoRefrigerator ? "авторефрижератор" : "холодильник"}
           </p>
         </div>
       </div>
@@ -440,8 +441,26 @@ export default function SensorPlacementPage() {
         );
       })()}
 
-      {/* ── REFRIGERATOR / REEFER: ISPE diagram + 3D assignment ── */}
-      {!isWarehouse && (
+      {/* ── REFRIGERATOR: cabinet diagram ── */}
+      {!isWarehouse && !isAutoRefrigerator && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-primary" />
+              Схема расстановки датчиков холодильника
+            </CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Расстановка датчиков внутри холодильной камеры.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <RefrigeratorDiagram loggers={loggers as any} protocolId={protocolId} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── AUTO-REFRIGERATOR: ISPE diagram + 3D assignment ── */}
+      {!isWarehouse && isAutoRefrigerator && (
       <Tabs defaultValue="positions" className="w-full">
         <TabsList className="grid w-full grid-cols-2 max-w-md">
           <TabsTrigger value="positions">Схема позиций ISPE</TabsTrigger>
