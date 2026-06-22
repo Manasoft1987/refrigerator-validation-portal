@@ -628,7 +628,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
       if (eqType === "auto-refrigerator") {
         drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, true, "Схема 1. Эталонные позиции ISPE (C1–C8, W1–W4, V1–V3)");
       } else {
-        drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, "Схема 1. Эталонные позиции ISPE (C1–C8, W1–W4, V1–V3)");
+        drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, "Схема 1. Эталонные позиции ISPE (C1–C8, W1–W4, V1–V3)", "position");
       }
       // Schema 2: with serial numbers
       doc.addPage();
@@ -638,7 +638,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
         const coldLabel = input.pv.coldIdx !== null && input.pv.loggers[input.pv.coldIdx] ? input.pv.loggers[input.pv.coldIdx].label : null;
         drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, false, "Схема 2. Расстановка датчиков (с серийными номерами)", hotLabel, coldLabel);
       } else {
-        drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, "Схема 2. Расстановка датчиков (с серийными номерами)");
+        drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, "Схема 2. Расстановка датчиков (с серийными номерами)", "serial");
       }
     }
     drawSensorPlacementAnalysis(doc, input.pvLoggers as DiagramSensor[], input);

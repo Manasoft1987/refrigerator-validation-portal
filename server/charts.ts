@@ -725,6 +725,22 @@ function refrigeratorBadgeLabel(sensor: DiagramSensor): string {
   return fallback.length > 6 ? fallback.slice(0, 6) : fallback;
 }
 
+function refrigeratorPositionLabel(sensor: DiagramSensor, idx: number): string {
+  if (sensor.role === "external") return "внеш";
+  switch (sensor.position) {
+    case "top":
+      return "верх";
+    case "middle":
+      return "сред";
+    case "bottom":
+      return "низ";
+    case "door":
+      return "дверь";
+    default:
+      return String(idx + 1);
+  }
+}
+
 export function drawRefrigeratorDiagram(
   doc: any,
   sensors: DiagramSensor[],
@@ -732,6 +748,7 @@ export function drawRefrigeratorDiagram(
   coolingUnitPos?: { x: number; y: number } | null,
   doorPos?: { x: number; y: number } | null,
   title?: string,
+  badgeMode: "serial" | "position" = "serial",
 ): void {
   const internals = sensors.filter(s => s.role === "internal");
   const externals = sensors.filter(s => s.role === "external");
@@ -820,7 +837,7 @@ export function drawRefrigeratorDiagram(
   // --- Internal sensor badges (rectangles) ---
   internals.forEach((s, idx) => {
     const color = sensorBadgeColor(idx);
-    const name = refrigeratorBadgeLabel(s);
+    const name = badgeMode === "position" ? refrigeratorPositionLabel(s, idx) : refrigeratorBadgeLabel(s);
 
     let pctX = 40;
     let pctY = 50;
@@ -856,7 +873,7 @@ export function drawRefrigeratorDiagram(
   const extStartX = cabX + cabW + 20;
   externals.forEach((s, idx) => {
     const color = sensorBadgeColor(internals.length + idx);
-    const name = refrigeratorBadgeLabel(s);
+    const name = badgeMode === "position" ? refrigeratorPositionLabel(s, idx) : refrigeratorBadgeLabel(s);
     const ey = cabY + 28 + idx * 45;
 
     // Connector line
