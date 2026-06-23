@@ -18,7 +18,7 @@ import {
   Users,
   ClipboardCopy,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 type Signatory = { name: string; role: string; company?: string | null };
@@ -53,6 +53,7 @@ export default function FinalReportStep({
   const giQ = trpc.generalInfo.get.useQuery({ protocolId });
   const pvQ = trpc.pv.get.useQuery({ protocolId });
   const [lastReportUrl, setLastReportUrl] = useState<string | null>(null);
+  const pendingReportWindowRef = useRef<Window | null>(null);
 
   const [sig1, setSig1] = useState<Signatory[]>(DEFAULT_PART1);
   const [sig2, setSig2] = useState<Signatory[]>(DEFAULT_PART2);
@@ -100,9 +101,13 @@ export default function FinalReportStep({
   const gen = trpc.report.generate.useMutation({
     onSuccess: ({ url, size }) => {
       setLastReportUrl(url);
+      openGeneratedReport(url);
       toast.success(`PDF сформирован (${(size / 1024).toFixed(0)} КБ)`);
     },
-    onError: (e) => toast.error(e.message),
+    onError: (e) => {
+      closePendingReportWindow();
+      toast.error(e.message);
+    },
   });
 
   const p = protoQ.data;
@@ -118,7 +123,35 @@ export default function FinalReportStep({
   const overall = iqPass && oqPass && pvPass;
   const hasFailures = p?.iqVerdict === "fail" || p?.oqVerdict === "fail" || pvFail;
 
+  function reportUrl(url: string) {
+    return new URL(url, window.location.origin).href;
+  }
+
+  function prepareReportWindow() {
+    pendingReportWindowRef.current = window.open("about:blank", "_blank");
+  }
+
+  function openGeneratedReport(url: string) {
+    const target = reportUrl(url);
+    const pendingWindow = pendingReportWindowRef.current;
+    pendingReportWindowRef.current = null;
+    if (pendingWindow && !pendingWindow.closed) {
+      pendingWindow.location.href = target;
+      return;
+    }
+    window.open(target, "_blank", "noopener,noreferrer");
+  }
+
+  function closePendingReportWindow() {
+    const pendingWindow = pendingReportWindowRef.current;
+    pendingReportWindowRef.current = null;
+    if (pendingWindow && !pendingWindow.closed) {
+      pendingWindow.close();
+    }
+  }
+
   function handleSaveAndGenerate() {
+    prepareReportWindow();
     saveGI.mutate(
       {
         protocolId,
@@ -131,6 +164,7 @@ export default function FinalReportStep({
       },
       {
         onSuccess: () => gen.mutate({ protocolId }),
+        onError: () => closePendingReportWindow(),
       },
     );
   }
@@ -423,9 +457,9 @@ export default function FinalReportStep({
             {lastReportUrl ? "Перегенерировать PDF" : "Сформировать PDF"}
           </Button>
           {lastReportUrl && (
-            <a href={lastReportUrl} target="_blank" rel="noopener noreferrer" download>
+            <a href={reportUrl(lastReportUrl)} target="_blank" rel="noopener noreferrer">
               <Button variant="outline" className="bg-background">
-                <Download className="h-4 w-4" /> Скачать
+                <Download className="h-4 w-4" /> Открыть PDF
               </Button>
             </a>
           )}

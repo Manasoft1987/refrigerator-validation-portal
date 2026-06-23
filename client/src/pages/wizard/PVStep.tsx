@@ -752,7 +752,14 @@ function SensorPlacementCard({
             variant="outline"
             size="sm"
             className="flex-shrink-0 ml-4 bg-background"
-            onClick={() => setLocation(`/protocols/${protocolId}/sensor-placement`)}
+            onClick={() => {
+              try {
+                window.sessionStorage.setItem(`protocolWizardStep:${protocolId}`, "pv");
+              } catch {
+                // Session storage is optional; the query param below is the main return path.
+              }
+              setLocation(`/protocols/${protocolId}/sensor-placement?from=pv`);
+            }}
           >
             <MapPin className="h-4 w-4 mr-1" />
             Открыть схему

@@ -160,6 +160,14 @@ export default function SensorPlacementPage() {
   const params = useParams<{ id: string }>();
   const protocolId = parseInt(params.id ?? "0", 10);
   const [, navigate] = useLocation();
+  const returnToProtocol = useCallback(() => {
+    try {
+      window.sessionStorage.setItem(`protocolWizardStep:${protocolId}`, "pv");
+    } catch {
+      // Session storage is optional; the query param below is enough for normal navigation.
+    }
+    navigate(`/protocols/${protocolId}?step=pv`);
+  }, [navigate, protocolId]);
 
   const pvQ = trpc.pv.get.useQuery({ protocolId });
   const saveSession = trpc.pv.saveSession.useMutation({
@@ -281,7 +289,7 @@ export default function SensorPlacementPage() {
           variant="outline"
           size="sm"
           className="bg-background"
-          onClick={() => navigate(`/protocols/${protocolId}`)}
+          onClick={returnToProtocol}
         >
           <ArrowLeft className="h-4 w-4 mr-1" />
           Назад к протоколу

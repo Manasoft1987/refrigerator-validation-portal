@@ -76,6 +76,21 @@ const SENSOR_COLORS = [
   "#06b6d4", "#ec4899", "#14b8a6", "#f97316", "#6366f1",
 ];
 
+type ExcursionFormState = {
+  enabled: boolean;
+  test1Enabled: boolean;
+  test2Enabled: boolean;
+  test3Enabled: boolean;
+  recordStartAt: string;
+  recordEndAt: string;
+  t1PowerOnAt: string;
+  t1StabilizationThresholdMinutes: string;
+  t2DoorOpenAt: string;
+  t2DoorCloseAt: string;
+  t3PowerOffAt: string;
+  t3TestEndAt: string;
+};
+
 /* ------------------------------------------------------------------ */
 /* Combined chart for all excursion loggers                           */
 /* ------------------------------------------------------------------ */
@@ -189,6 +204,10 @@ export default function ExcursionStudyStep({
   const loggersQ = trpc.excursion.listLoggers.useQuery({ protocolId });
   const giQ = trpc.generalInfo.get.useQuery({ protocolId });
   const fileRef = useRef<HTMLInputElement>(null);
+  const autosaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedPayloadRef = useRef<string | null>(null);
+  const latestFormRef = useRef<ExcursionFormState | null>(null);
+  const saveSessionRef = useRef<any>(null);
   const [uploading, setUploading] = useState(false);
   const [calculating, setCalculating] = useState(false);
   const [expandedTest, setExpandedTest] = useState<1 | 2 | 3 | null>(1);
@@ -205,24 +224,34 @@ export default function ExcursionStudyStep({
   const rangeMin = guardedRange.min;
   const rangeMax = guardedRange.max;
 
-  const [form, setForm] = useState<{
-    enabled: boolean;
-    test1Enabled: boolean;
-    test2Enabled: boolean;
-    test3Enabled: boolean;
-    recordStartAt: string;
-    recordEndAt: string;
-    t1PowerOnAt: string;
-    t1StabilizationThresholdMinutes: string;
-    t2DoorOpenAt: string;
-    t2DoorCloseAt: string;
-    t3PowerOffAt: string;
-    t3TestEndAt: string;
-  } | null>(null);
+  const [form, setForm] = useState<ExcursionFormState | null>(null);
+
+  function buildSessionPayload(formState: ExcursionFormState) {
+    return {
+      protocolId,
+      enabled: formState.enabled,
+      test1Enabled: formState.test1Enabled,
+      test2Enabled: formState.test2Enabled,
+      test3Enabled: formState.test3Enabled,
+      recordStartAt: utcMsFromLocalInput(formState.recordStartAt),
+      recordEndAt: utcMsFromLocalInput(formState.recordEndAt),
+      t1PowerOnAt: utcMsFromLocalInput(formState.t1PowerOnAt),
+      t1StabilizationThresholdMinutes: Number(formState.t1StabilizationThresholdMinutes) || 15,
+      t2DoorOpenAt: utcMsFromLocalInput(formState.t2DoorOpenAt),
+      t2DoorCloseAt: utcMsFromLocalInput(formState.t2DoorCloseAt),
+      t3PowerOffAt: utcMsFromLocalInput(formState.t3PowerOffAt),
+      t3TestEndAt: utcMsFromLocalInput(formState.t3TestEndAt),
+    };
+  }
+
+  function rememberSaved(formState: ExcursionFormState) {
+    lastSavedPayloadRef.current = JSON.stringify(buildSessionPayload(formState));
+  }
 
   useEffect(() => {
-    if (session && !form) {
-      setForm({
+    if (!sessionQ.isSuccess || form) return;
+    if (session) {
+      const nextForm: ExcursionFormState = {
         enabled: !!session.enabled,
         test1Enabled: !!session.test1Enabled,
         test2Enabled: !!session.test2Enabled,
@@ -235,9 +264,11 @@ export default function ExcursionStudyStep({
         t2DoorCloseAt: localInputFromUtcMs(session.t2DoorCloseAt as any),
         t3PowerOffAt: localInputFromUtcMs(session.t3PowerOffAt as any),
         t3TestEndAt: localInputFromUtcMs((session as any).t3TestEndAt as any),
-      });
-    } else if (!session && !form) {
-      setForm({
+      };
+      setForm(nextForm);
+      rememberSaved(nextForm);
+    } else {
+      const nextForm: ExcursionFormState = {
         enabled: false,
         test1Enabled: true,
         test2Enabled: true,
@@ -250,9 +281,11 @@ export default function ExcursionStudyStep({
         t2DoorCloseAt: "",
         t3PowerOffAt: "",
         t3TestEndAt: "",
-      });
+      };
+      setForm(nextForm);
+      rememberSaved(nextForm);
     }
-  }, [session]);
+  }, [sessionQ.isSuccess, session, form]);
 
   const updateLoggerRole = trpc.excursion.updateLogger.useMutation({
     onMutate: async ({ id, role }) => {
@@ -271,6 +304,40 @@ export default function ExcursionStudyStep({
   const saveSession = trpc.excursion.saveSession.useMutation({
     onSuccess: () => utils.excursion.getSession.invalidate({ protocolId }),
   });
+  saveSessionRef.current = saveSession;
+
+  useEffect(() => {
+    if (!form) return;
+    latestFormRef.current = form;
+    const payload = buildSessionPayload(form);
+    const serialized = JSON.stringify(payload);
+    if (serialized === lastSavedPayloadRef.current) return;
+
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = setTimeout(() => {
+      lastSavedPayloadRef.current = serialized;
+      saveSession.mutate(payload);
+    }, 700);
+
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    };
+  }, [form, saveSession]);
+
+  useEffect(() => {
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+      const latestForm = latestFormRef.current;
+      if (!latestForm) return;
+      const payload = buildSessionPayload(latestForm);
+      const serialized = JSON.stringify(payload);
+      if (serialized !== lastSavedPayloadRef.current) {
+        lastSavedPayloadRef.current = serialized;
+        saveSessionRef.current?.mutate(payload);
+      }
+    };
+  }, []);
+
   const uploadLogger = trpc.excursion.uploadLogger.useMutation({
     onSuccess: () => utils.excursion.listLoggers.invalidate({ protocolId }),
   });
@@ -287,21 +354,10 @@ export default function ExcursionStudyStep({
 
   async function handleSave() {
     if (!form) return;
-    await saveSession.mutateAsync({
-      protocolId,
-      enabled: form.enabled,
-      test1Enabled: form.test1Enabled,
-      test2Enabled: form.test2Enabled,
-      test3Enabled: form.test3Enabled,
-      recordStartAt: utcMsFromLocalInput(form.recordStartAt),
-      recordEndAt: utcMsFromLocalInput(form.recordEndAt),
-      t1PowerOnAt: utcMsFromLocalInput(form.t1PowerOnAt),
-      t1StabilizationThresholdMinutes: Number(form.t1StabilizationThresholdMinutes) || 15,
-      t2DoorOpenAt: utcMsFromLocalInput(form.t2DoorOpenAt),
-      t2DoorCloseAt: utcMsFromLocalInput(form.t2DoorCloseAt),
-      t3PowerOffAt: utcMsFromLocalInput(form.t3PowerOffAt),
-      t3TestEndAt: utcMsFromLocalInput(form.t3TestEndAt),
-    });
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
+    const payload = buildSessionPayload(form);
+    await saveSession.mutateAsync(payload);
+    lastSavedPayloadRef.current = JSON.stringify(payload);
     toast.success("Параметры сохранены");
   }
 

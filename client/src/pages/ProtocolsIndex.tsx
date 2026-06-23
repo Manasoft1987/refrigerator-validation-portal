@@ -137,7 +137,7 @@ export default function ProtocolsIndex() {
     setDownloadingId(id);
     try {
       const res = await genReport.mutateAsync({ protocolId: id });
-      window.open(res.url, "_blank");
+      window.open(new URL(res.url, window.location.origin).href, "_blank", "noopener,noreferrer");
     } catch (e: any) {
       toast.error(e.message || "Не удалось сформировать PDF");
     } finally {

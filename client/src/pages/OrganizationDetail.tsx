@@ -119,7 +119,7 @@ export default function OrganizationDetail() {
     setDownloadingId(protocolId);
     try {
       const res = await generateReport.mutateAsync({ protocolId });
-      window.open(res.url, "_blank");
+      window.open(new URL(res.url, window.location.origin).href, "_blank", "noopener,noreferrer");
       toast.success("PDF-протокол сформирован");
     } catch (e: any) {
       toast.error(e.message || "Не удалось сформировать PDF");

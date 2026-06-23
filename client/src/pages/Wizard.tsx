@@ -54,7 +54,7 @@ type WStep = { id: number; key: string; label: string; icon: any; equipmentId?: 
 export default function Wizard() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
-  const [, setLocation] = useLocation();
+  const [location, setLocation] = useLocation();
   const [step, setStep] = useState(1);
 
   const protocolQ = trpc.protocols.get.useQuery({ id }, { enabled: !isNaN(id) });
@@ -92,11 +92,35 @@ export default function Wizard() {
 
   const activeSteps: WStep[] = isWarehouse ? warehouseSteps : (STANDARD_STEPS as unknown as WStep[]);
   const totalSteps = activeSteps.length;
+  const requestedStep = useMemo(() => {
+    if (typeof window === "undefined" || !Number.isFinite(id)) return null;
+    const fromQuery = new URLSearchParams(window.location.search).get("step");
+    let fromStorage: string | null = null;
+    try {
+      fromStorage = window.sessionStorage.getItem(`protocolWizardStep:${id}`);
+    } catch {
+      fromStorage = null;
+    }
+    return fromQuery || fromStorage;
+  }, [id, location]);
 
   // auto-jump to the first incomplete step when wizard first loads
   const [initialized, setInitialized] = useState(false);
   useEffect(() => {
     if (!p || initialized) return;
+    const requested = requestedStep
+      ? activeSteps.find(s => s.key === requestedStep || String(s.id) === requestedStep)
+      : null;
+    if (requested) {
+      setStep(requested.id);
+      try {
+        window.sessionStorage.removeItem(`protocolWizardStep:${id}`);
+      } catch {
+        // Session storage is optional.
+      }
+      setInitialized(true);
+      return;
+    }
     if (isWarehouse) {
       if (p.iqVerdict === "pass" && p.oqVerdict !== "pass") setStep(5);
       else if (p.iqVerdict !== "pass" && giQ.data) setStep(4);
@@ -107,7 +131,7 @@ export default function Wizard() {
       else setStep(1);
     }
     setInitialized(true);
-  }, [p, initialized, giQ.data, isWarehouse]);
+  }, [p, initialized, giQ.data, isWarehouse, requestedStep, activeSteps, id]);
 
   const unlockStep = (s: WStep): boolean => {
     if (!p) return false;
