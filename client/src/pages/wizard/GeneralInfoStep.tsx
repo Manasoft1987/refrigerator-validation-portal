@@ -48,7 +48,7 @@ export default function GeneralInfoStep({
     location: "",
     purpose: "",
     validationDate: new Date().toISOString().slice(0, 10),
-    basis: "primary",
+    basis: null,
     season: undefined,
     qualificationType: undefined,
     commissionMembers: [] as CM[],
@@ -166,7 +166,7 @@ export default function GeneralInfoStep({
       location: form.location ?? null,
       purpose: form.purpose ?? null,
       validationDate: form.validationDate || null,
-      basis: form.basis ?? null,
+      basis: null,
       qualificationType: form.qualificationType ?? null,
       season: form.season ?? null,
       commissionMembers: (form.commissionMembers || []).filter(

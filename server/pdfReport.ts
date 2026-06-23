@@ -337,13 +337,6 @@ function getEquipmentNameWithCase(input: ReportInput, gramCase: "nominative" | "
   return EQUIPMENT_LABEL[type || ""] || "Оборудование";
 }
 
-const BASIS_LABEL: Record<string, string> = {
-  primary: "Первичная",
-  periodic: "Периодическая",
-  repeat: "Повторная",
-  changes: "По изменениям",
-};
-
 const ANSWER_LABEL: Record<string, string> = {
   yes: "Да",
   no: "Нет",
@@ -927,7 +920,6 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
       ["Заполненность объекта", fillStatusLabel],
       ["Процент загруженности объекта", loadPercentLabel],
       ["Назначение / хранимая продукция", gi?.purpose || "—"],
-      ["Основание для валидации", BASIS_LABEL[gi?.basis || ""] || "—"],
       ["Организация", input.org.name],
       ["БИН / ИНН", input.org.bin || "—"],
       ["Адрес организации", input.org.addressFact || "—"],
@@ -947,7 +939,6 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
       ["Температурный режим", TEMP_MODE_LABEL[gi?.tempMode || ""] || "—"],
       ["Место установки", gi?.location || "—"],
       ["Назначение / хранимая продукция", gi?.purpose || "—"],
-      ["Основание для валидации", BASIS_LABEL[gi?.basis || ""] || "—"],
       ["Организация", input.org.name],
       ["БИН / ИНН", input.org.bin || "—"],
       ["Адрес", input.org.addressFact || "—"],
