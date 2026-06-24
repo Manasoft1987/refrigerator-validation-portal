@@ -256,6 +256,12 @@ export default function ReeferTruckDiagram3D({
   const t1 = iso(W, 0, H);
   const t2 = iso(W, D, H);
   const t3 = iso(0, D, H);
+  const bodyMinX = Math.min(b0[0], b1[0], b2[0], b3[0]);
+  const bodyMaxX = Math.max(b0[0], b1[0], b2[0], b3[0]);
+  const bodyMaxY = Math.max(b0[1], b1[1], b2[1], b3[1]);
+  const chassisY = bodyMaxY + 18;
+  const cabX = bodyMaxX + 14;
+  const cabY = chassisY - 78;
 
   // ─── Refrigeration unit on top-front ────────────────────────────────────────
   const ruH = 0.22; // height of the unit
@@ -293,6 +299,51 @@ export default function ReeferTruckDiagram3D({
           rx={200} ry={18}
           fill="rgba(0,0,0,0.08)"
         />
+
+        <g opacity={0.98}>
+          <line
+            x1={bodyMinX + 10}
+            y1={chassisY}
+            x2={cabX + 88}
+            y2={chassisY}
+            stroke="#475569"
+            strokeWidth={5}
+            strokeLinecap="round"
+          />
+          <rect
+            x={cabX}
+            y={cabY + 20}
+            width={82}
+            height={56}
+            rx={10}
+            fill="#e0f2fe"
+            stroke="#64748b"
+            strokeWidth={1.5}
+          />
+          <path
+            d={`M ${cabX + 8} ${cabY + 22} L ${cabX + 38} ${cabY} L ${cabX + 76} ${cabY + 20} Z`}
+            fill="#dbeafe"
+            stroke="#64748b"
+            strokeWidth={1.5}
+          />
+          <path
+            d={`M ${cabX + 37} ${cabY + 7} L ${cabX + 60} ${cabY + 19} L ${cabX + 33} ${cabY + 19} Z`}
+            fill="#93c5fd"
+            stroke="#64748b"
+            strokeWidth={1}
+          />
+          <rect x={cabX + 12} y={cabY + 37} width={34} height={18} rx={4} fill="#bfdbfe" stroke="#64748b" strokeWidth={1} />
+          {[bodyMinX + 72, bodyMaxX - 18, cabX + 50].map((wx, i) => (
+            <g key={i}>
+              <circle cx={wx} cy={chassisY + 6} r={21} fill="#0f172a" />
+              <circle cx={wx} cy={chassisY + 6} r={10} fill="#94a3b8" />
+              <circle cx={wx} cy={chassisY + 6} r={4} fill="#e2e8f0" />
+            </g>
+          ))}
+          <text x={cabX + 41} y={chassisY + 39} textAnchor="middle" fontSize={10} fontWeight="700" fill="#475569">
+            Кабина
+          </text>
+        </g>
 
         {/* ══ CARGO BODY ══════════════════════════════════════════════════════ */}
         {/* Painter's algorithm: back faces first, then sides, then top/front   */}

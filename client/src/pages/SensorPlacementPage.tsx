@@ -182,7 +182,7 @@ export default function SensorPlacementPage() {
   const loggers = pvQ.data?.loggers ?? [];
   const protocolQ = trpc.protocols.get.useQuery({ id: protocolId });
   const giQ = trpc.generalInfo.get.useQuery({ protocolId });
-  const equipmentType = (protocolQ.data?.equipmentType ?? "refrigerator") as string;
+  const equipmentType = (giQ.data?.equipmentType || protocolQ.data?.equipmentType || "refrigerator") as string;
   const isWarehouse = equipmentType === "warehouse";
   const isAutoRefrigerator = equipmentType === "auto-refrigerator";
 

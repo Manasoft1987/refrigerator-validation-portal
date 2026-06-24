@@ -1042,12 +1042,45 @@ export function drawReeferTruckDiagram3D(
   const t1 = pt(BW, 0,  BH);
   const t2 = pt(BW, BD, BH);
   const t3 = pt(0,  BD, BH);
+  const bodyMinX = Math.min(b0[0], b1[0], b2[0], b3[0]);
+  const bodyMaxX = Math.max(b0[0], b1[0], b2[0], b3[0]);
+  const bodyMaxY = Math.max(b0[1], b1[1], b2[1], b3[1]);
+  const chassisY = bodyMaxY + 12;
+  const cabX = bodyMaxX + 10;
+  const cabY = chassisY - 54;
 
   function ptsStr(arr: [number, number][]): string {
     return arr.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
   }
 
   // Ground shadow removed per user request
+
+  // Truck chassis, cab and wheels: drawn only in the reefer-truck diagram.
+  doc.save();
+  doc.lineWidth(3.5).strokeColor("#475569");
+  doc.moveTo(bodyMinX + 8, chassisY).lineTo(cabX + 64, chassisY).stroke();
+
+  doc.roundedRect(cabX, cabY + 14, 58, 40, 7).fill("#e0f2fe");
+  doc.roundedRect(cabX, cabY + 14, 58, 40, 7).lineWidth(0.9).strokeColor("#64748b").stroke();
+  doc.polygon([cabX + 6, cabY + 15], [cabX + 27, cabY], [cabX + 54, cabY + 14])
+    .fill("#dbeafe");
+  doc.polygon([cabX + 6, cabY + 15], [cabX + 27, cabY], [cabX + 54, cabY + 14])
+    .lineWidth(0.9).strokeColor("#64748b").stroke();
+  doc.polygon([cabX + 27, cabY + 6], [cabX + 43, cabY + 14], [cabX + 24, cabY + 14])
+    .fill("#93c5fd");
+  doc.polygon([cabX + 27, cabY + 6], [cabX + 43, cabY + 14], [cabX + 24, cabY + 14])
+    .lineWidth(0.6).strokeColor("#64748b").stroke();
+  doc.roundedRect(cabX + 8, cabY + 26, 24, 12, 3).fill("#bfdbfe");
+  doc.roundedRect(cabX + 8, cabY + 26, 24, 12, 3).lineWidth(0.6).strokeColor("#64748b").stroke();
+
+  [bodyMinX + 46, bodyMaxX - 12, cabX + 36].forEach(wx => {
+    doc.circle(wx, chassisY + 4, 13).fill("#0f172a");
+    doc.circle(wx, chassisY + 4, 6).fill("#94a3b8");
+    doc.circle(wx, chassisY + 4, 2.5).fill("#e2e8f0");
+  });
+  doc.font("bold").fontSize(6).fillColor("#475569");
+  doc.text("Кабина", cabX + 9, chassisY + 20, { width: 42, align: "center", lineBreak: false });
+  doc.restore();
 
   // ── Draw faces (painter's algorithm: back → sides → top → front) ──
   doc.save();
