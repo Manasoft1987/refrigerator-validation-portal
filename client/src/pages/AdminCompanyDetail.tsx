@@ -27,6 +27,7 @@ import {
   Building2,
   Check,
   ClipboardList,
+  Copy,
   Loader2,
   MailPlus,
   Trash2,
@@ -51,6 +52,9 @@ export default function AdminCompanyDetail() {
   const [, setLocation] = useLocation();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [createdCredentials, setCreatedCredentials] = useState<{ email: string; name: string | null; password: string } | null>(null);
   const [removeId, setRemoveId] = useState<number | null>(null);
   const utils = trpc.useUtils();
 
@@ -63,11 +67,14 @@ export default function AdminCompanyDetail() {
   const protocols = protocolsQ.data || [];
 
   const inviteMutation = trpc.companies.inviteByEmail.useMutation({
-    onSuccess: () => {
+    onSuccess: data => {
       utils.companies.listMembers.invalidate({ companyId });
-      toast.success("Пользователь приглашён");
-      setInviteOpen(false);
-      setEmail("");
+      utils.companies.allMembers.invalidate();
+      toast.success('Пользователь добавлен');
+      setCreatedCredentials({ email: data.email, name: data.name ?? null, password: data.password });
+      setEmail('');
+      setName('');
+      setPassword('');
     },
     onError: e => toast.error(e.message),
   });
@@ -320,33 +327,101 @@ export default function AdminCompanyDetail() {
       </Card>
 
       {/* Invite Dialog */}
-      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+      <Dialog
+        open={inviteOpen}
+        onOpenChange={open => {
+          setInviteOpen(open);
+          if (!open) {
+            setCreatedCredentials(null);
+            setEmail('');
+            setName('');
+            setPassword('');
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Пригласить пользователя</DialogTitle>
+            <DialogTitle>Добавить пользователя</DialogTitle>
             <DialogDescription>
-              Введите email пользователя. Он должен уже войти в систему хотя бы один раз.
+              Укажите ФИО и email. Пароль можно оставить пустым: портал создаст временный пароль и сразу добавит доступ к компании.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3 py-2">
-            <Label htmlFor="invite-email">Email пользователя</Label>
-            <Input
-              id="invite-email"
-              type="email"
-              placeholder="user@example.com"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && email.trim() && inviteMutation.mutate({ companyId, email: email.trim() })}
-            />
+          <div className='space-y-4 py-2'>
+            <div className='space-y-2'>
+              <Label htmlFor='invite-name'>ФИО</Label>
+              <Input
+                id='invite-name'
+                placeholder='Сафиуллин А.В.'
+                value={name}
+                onChange={e => setName(e.target.value)}
+              />
+            </div>
+            <div className='space-y-2'>
+              <Label htmlFor='invite-email'>Email пользователя</Label>
+              <Input
+                id='invite-email'
+                type='email'
+                placeholder='user@gxp.kz'
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && email.trim()) {
+                    inviteMutation.mutate({
+                      companyId,
+                      email: email.trim(),
+                      name: name.trim() || undefined,
+                      password: password.trim() || undefined,
+                    });
+                  }
+                }}
+              />
+            </div>
+            <div className='space-y-2'>
+              <Label htmlFor='invite-password'>Пароль</Label>
+              <Input
+                id='invite-password'
+                type='text'
+                placeholder='Оставьте пустым для временного пароля'
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+              />
+              <p className='text-xs text-muted-foreground'>Минимум 8 символов, если задаёте вручную.</p>
+            </div>
+            {createdCredentials && (
+              <div className='rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm'>
+                <p className='font-medium text-emerald-900'>Доступ создан</p>
+                <div className='mt-3 space-y-1 text-emerald-950'>
+                  <p>Email: <span className='font-mono'>{createdCredentials.email}</span></p>
+                  <p>Пароль: <span className='font-mono font-semibold'>{createdCredentials.password}</span></p>
+                </div>
+                <Button
+                  type='button'
+                  variant='outline'
+                  size='sm'
+                  className='mt-3 bg-white'
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(createdCredentials.email + ' / ' + createdCredentials.password);
+                    toast.success('Логин и пароль скопированы');
+                  }}
+                >
+                  <Copy className='h-3.5 w-3.5' /> Скопировать
+                </Button>
+              </div>
+            )}
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setInviteOpen(false)}>Отмена</Button>
+            <Button variant='outline' onClick={() => setInviteOpen(false)}>Закрыть</Button>
             <Button
               disabled={!email.trim() || inviteMutation.isPending}
-              onClick={() => inviteMutation.mutate({ companyId, email: email.trim() })}
+              onClick={() => inviteMutation.mutate({
+                companyId,
+                email: email.trim(),
+                name: name.trim() || undefined,
+                password: password.trim() || undefined,
+              })}
             >
-              {inviteMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              Пригласить
+              {inviteMutation.isPending && <Loader2 className='h-4 w-4 animate-spin' />}
+              Создать доступ
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,5 +1,5 @@
 import { COOKIE_NAME } from "@shared/const";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import {
   DEFAULT_IQ_QUESTIONS,
   DEFAULT_OQ_QUESTIONS,
@@ -17,7 +17,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { ENV } from "./_core/env";
-import { verifyPasswordHash } from "./_core/passwords";
+import { hashPassword, verifyPasswordHash } from './_core/passwords';
 import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
@@ -119,6 +119,18 @@ const PORTAL_ADMIN_APP_ID = "portal-admin";
 const PASSWORD_LOGIN_MAX_ATTEMPTS = 8;
 const PASSWORD_LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const passwordLoginAttempts = new Map<string, { count: number; resetAt: number }>();
+
+function normalizeUserEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
+function passwordUserOpenId(email: string) {
+  return 'password:' + createHash('sha256').update(email).digest('hex').slice(0, 48);
+}
+
+function generateTemporaryPassword() {
+  return randomBytes(9).toString('base64url');
+}
 
 function sha256(value: string) {
   return createHash("sha256").update(value).digest();
@@ -1901,6 +1913,23 @@ export const appRouter = router({
         }));
       }),
 
+    allMembers: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+      const companies = await listCompanies(ctx.user.id);
+      const rows: Array<Record<string, unknown>> = [];
+      for (const company of companies) {
+        const members = await listCompanyMembers(company.id);
+        for (const member of members) {
+          rows.push({
+            ...member,
+            companyName: company.name,
+            user: toPublicUser(member.user),
+          });
+        }
+      }
+      return rows.sort((a, b) => String(b.invitedAt).localeCompare(String(a.invitedAt)));
+    }),
+
     // Admin: invite a user by openId to a company
     inviteUser: protectedProcedure
       .input(z.object({ companyId: z.number(), openId: z.string() }))
@@ -1914,17 +1943,76 @@ export const appRouter = router({
         return inviteUserToCompany({ userId: targetUser.id, companyId: input.companyId });
       }),
 
-    // Admin: invite by email
+    // Admin: create/update password user by email and add access to a company
     inviteByEmail: protectedProcedure
-      .input(z.object({ companyId: z.number(), email: z.string().email() }))
+      .input(z.object({
+        companyId: z.number(),
+        email: z.string().email(),
+        name: z.string().min(1).max(255).optional().nullable(),
+        password: z.string().min(8).max(128).optional().nullable(),
+      }))
       .mutation(async ({ ctx, input }) => {
-        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
-        const db = await import("./db");
-        const targetUser = await db.getUserByEmail(input.email);
-        if (!targetUser) throw new TRPCError({ code: "NOT_FOUND", message: "Пользователь с таким email не найден. Попросите его сначала войти в систему." });
-        const existing = await getCompanyMember(targetUser.id, input.companyId);
-        if (existing) throw new TRPCError({ code: "CONFLICT", message: "Пользователь уже приглашён" });
-        return inviteUserToCompany({ userId: targetUser.id, companyId: input.companyId });
+        if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
+
+        const email = normalizeUserEmail(input.email);
+        const name = input.name?.trim() || email;
+        const password = input.password?.trim() || generateTemporaryPassword();
+        const passwordHash = hashPassword(password);
+        const now = new Date().toISOString();
+
+        let targetUser = await getUserByEmail(email);
+        let existingMember = targetUser ? await getCompanyMember(targetUser.id, input.companyId) : undefined;
+        if (existingMember?.status === 'approved') {
+          throw new TRPCError({ code: 'CONFLICT', message: 'Пользователь уже добавлен в эту компанию.' });
+        }
+
+        await upsertUser({
+          openId: targetUser?.openId ?? passwordUserOpenId(email),
+          name,
+          email,
+          loginMethod: 'password',
+          role: targetUser?.role ?? 'user',
+          passwordHash,
+          lastSignedIn: targetUser?.lastSignedIn ?? now,
+        });
+
+        targetUser = await getUserByEmail(email);
+        if (!targetUser) {
+          throw new TRPCError({ code: 'INTERNAL_SERVER_ERROR', message: 'Не удалось создать пользователя.' });
+        }
+
+        existingMember = await getCompanyMember(targetUser.id, input.companyId);
+        if (existingMember) {
+          await approveCompanyMember(existingMember.id, ctx.user.id);
+          return {
+            success: true,
+            memberId: existingMember.id,
+            email,
+            name: targetUser.name || name,
+            password,
+            status: 'approved' as const,
+            updatedExistingUser: true,
+          };
+        }
+
+        const member = await inviteUserToCompany({
+          userId: targetUser.id,
+          companyId: input.companyId,
+          role: 'user',
+          status: 'approved',
+          approvedAt: now,
+          approvedByAdminId: ctx.user.id,
+        });
+
+        return {
+          success: true,
+          memberId: member.id,
+          email,
+          name: targetUser.name || name,
+          password,
+          status: 'approved' as const,
+          updatedExistingUser: false,
+        };
       }),
 
     // Admin: approve a pending member

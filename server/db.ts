@@ -239,6 +239,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
         if (user.name !== undefined) existing.name = user.name ?? null;
         if (user.email !== undefined) existing.email = user.email ?? null;
         if (user.loginMethod !== undefined) existing.loginMethod = user.loginMethod ?? null;
+        if (user.passwordHash !== undefined) existing.passwordHash = user.passwordHash ?? null;
         if (user.role !== undefined) existing.role = user.role;
         existing.lastSignedIn = user.lastSignedIn ?? now;
         existing.updatedAt = now;
@@ -252,6 +253,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
         name: user.name ?? null,
         email: user.email ?? null,
         loginMethod: user.loginMethod ?? null,
+        passwordHash: user.passwordHash ?? null,
         role: user.role ?? (user.openId === ENV.ownerOpenId ? "admin" : "user"),
         createdAt: now,
         updatedAt: now,
@@ -1524,9 +1526,9 @@ export async function inviteUserToCompany(input: InsertCompanyMember): Promise<C
         role: input.role ?? "user",
         status: input.status ?? "pending",
         invitedAt: now,
-        approvedAt: null,
-        rejectedAt: null,
-        approvedByAdminId: null,
+        approvedAt: input.approvedAt ?? null,
+        rejectedAt: input.rejectedAt ?? null,
+        approvedByAdminId: input.approvedByAdminId ?? null,
         createdAt: now,
         updatedAt: now,
       } as CompanyMember;
