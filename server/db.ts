@@ -657,6 +657,43 @@ export async function nextProtocolNumber(orgId: number, year: number): Promise<s
   return `${prefix}${next}`;
 }
 
+export async function nextProtocolNumberForCompany(companyId: number, year: number): Promise<string> {
+  const db = await getDb();
+  const prefix = "VAL-" + year + "-";
+
+  if (!db) {
+    if (!shouldUseLocalDevDb()) throw new Error("DB unavailable");
+    const data = await readLocalDevDb();
+    let max = 0;
+    for (const protocol of data.protocols) {
+      if (protocol.companyId !== companyId || !protocol.number.startsWith(prefix)) continue;
+      const m = protocol.number.match(/-(\d+)$/);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (n > max) max = n;
+      }
+    }
+    const next = (max + 1).toString().padStart(4, "0");
+    return prefix + next;
+  }
+
+  const rows = await db
+    .select({ number: protocols.number })
+    .from(protocols)
+    .where(eq(protocols.companyId, companyId));
+  let max = 0;
+  for (const r of rows) {
+    if (!r.number.startsWith(prefix)) continue;
+    const m = r.number.match(/-(\d+)$/);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (n > max) max = n;
+    }
+  }
+  const next = (max + 1).toString().padStart(4, "0");
+  return prefix + next;
+}
+
 export async function insertProtocol(data: InsertProtocol) {
   const db = await getDb();
   if (!db) {
@@ -1767,10 +1804,11 @@ export async function cloneProtocol(userId: number, sourceProtocolId: number, or
     if (!targetOrg) throw new Error("Target organization not found or not accessible");
 
     const year = new Date().getFullYear();
-    const number = await nextProtocolNumber(organizationId, year);
+    const targetCompanyId = targetOrg.companyId ?? sourceProto.companyId;
+    const number = await nextProtocolNumberForCompany(targetCompanyId, year);
     const newProto = await insertProtocol({
       organizationId,
-      companyId: targetOrg.companyId ?? sourceProto.companyId,
+      companyId: targetCompanyId,
       userId,
       number,
       equipmentType: sourceProto.equipmentType,
@@ -1850,11 +1888,12 @@ export async function cloneProtocol(userId: number, sourceProtocolId: number, or
   
   // Create new protocol with same equipment type and organization
   const year = new Date().getFullYear();
-  const number = await nextProtocolNumber(organizationId, year);
+  const targetCompanyId = targetOrg.companyId ?? sourceProto.companyId;
+  const number = await nextProtocolNumberForCompany(targetCompanyId, year);
   
   const newProto = await insertProtocol({
     organizationId,
-    companyId: targetOrg.companyId ?? sourceProto.companyId,
+    companyId: targetCompanyId,
     userId,
     number,
     equipmentType: sourceProto.equipmentType,
