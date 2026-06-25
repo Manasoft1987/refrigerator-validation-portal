@@ -82,7 +82,9 @@ export default function ProtocolsIndex() {
         p.number.toLowerCase().includes(needle) ||
         (p.organizationName || "").toLowerCase().includes(needle) ||
         (p.equipmentModel || "").toLowerCase().includes(needle) ||
-        (p.serialNumber || "").toLowerCase().includes(needle)
+        (p.serialNumber || "").toLowerCase().includes(needle) ||
+        (p.userName || "").toLowerCase().includes(needle) ||
+        (p.userEmail || "").toLowerCase().includes(needle)
       );
     });
   }, [protocols, q, statusF, orgF]);
@@ -239,6 +241,7 @@ export default function ProtocolsIndex() {
                 <tr className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                   <th className="text-left px-6 py-3 font-medium">Номер</th>
                   <th className="text-left px-4 py-3 font-medium">Организация</th>
+                  <th className="text-left px-4 py-3 font-medium">Сделал</th>
                   <th className="text-left px-4 py-3 font-medium">Оборудование</th>
                   <th className="text-left px-4 py-3 font-medium">Статус</th>
                   <th className="text-left px-4 py-3 font-medium">Создан</th>
@@ -253,6 +256,9 @@ export default function ProtocolsIndex() {
                       <td className="px-6 py-3 num font-medium tracking-tight">{p.number}</td>
                       <td className="px-4 py-3 truncate max-w-[220px]">
                         {p.organizationName || "—"}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground truncate max-w-[180px]">
+                        {p.userName || p.userEmail || "—"}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground truncate max-w-[220px]">
                         {p.equipmentModel || "—"}

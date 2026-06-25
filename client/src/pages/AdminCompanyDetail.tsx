@@ -307,6 +307,7 @@ export default function AdminCompanyDetail() {
                 <tr className="border-b bg-muted/30">
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground">Номер</th>
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground">Статус</th>
+                  <th className="text-left px-4 py-3 font-medium text-muted-foreground">Сделал</th>
                   <th className="text-left px-4 py-3 font-medium text-muted-foreground">Создан</th>
                 </tr>
               </thead>
@@ -315,6 +316,9 @@ export default function AdminCompanyDetail() {
                   <tr key={p.id} className={i % 2 === 0 ? "" : "bg-muted/20"}>
                     <td className="px-4 py-3 font-medium">{p.number}</td>
                     <td className="px-4 py-3 text-muted-foreground capitalize">{p.status}</td>
+                    <td className="px-4 py-3 text-muted-foreground max-w-[180px] truncate">
+                      {p.userName || p.userEmail || "—"}
+                    </td>
                     <td className="px-4 py-3 text-muted-foreground text-xs">
                       {new Date(p.createdAt).toLocaleDateString("ru-RU")}
                     </td>

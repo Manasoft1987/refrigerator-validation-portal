@@ -29,6 +29,8 @@ type ProtocolRow = {
   number: string;
   status: string;
   organizationName: string | null;
+  userName?: string | null;
+  userEmail?: string | null;
   createdAt: string | Date;
   iqVerdict: string | null;
   oqVerdict: string | null;
@@ -216,6 +218,7 @@ function RecentProtocols({
                   <div className="font-medium text-sm num tracking-tight">{r.number}</div>
                   <div className="text-xs text-muted-foreground truncate">
                     {r.organizationName ?? "—"}
+                    {r.userName || r.userEmail ? " - " + (r.userName || r.userEmail) : ""}
                   </div>
                 </div>
                 <div className="flex items-center gap-3">

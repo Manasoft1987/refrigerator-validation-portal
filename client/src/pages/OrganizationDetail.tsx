@@ -336,6 +336,7 @@ export default function OrganizationDetail() {
                   <tr className="bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
                     <th className="text-left px-6 py-3 font-medium">№ протокола</th>
                     <th className="text-left px-4 py-3 font-medium">Статус</th>
+                    <th className="text-left px-4 py-3 font-medium">Сделал</th>
                     <th className="text-left px-4 py-3 font-medium">Создан</th>
                     <th className="text-right px-6 py-3 font-medium">Действия</th>
                   </tr>
@@ -352,6 +353,9 @@ export default function OrganizationDetail() {
                           >
                             {meta.label}
                           </span>
+                        </td>
+                        <td className="px-4 py-3 text-muted-foreground max-w-[180px] truncate">
+                          {p.userName || p.userEmail || "—"}
                         </td>
                         <td className="px-4 py-3 text-muted-foreground">
                           {new Date(p.createdAt).toLocaleDateString("ru-RU")}

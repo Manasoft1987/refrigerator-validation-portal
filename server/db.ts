@@ -208,17 +208,22 @@ type ProtocolSummary = Protocol & {
   organizationName: string | null;
   equipmentModel: string | null;
   serialNumber: string | null;
+  userName: string | null;
+  userEmail: string | null;
 };
 
 function protocolSummary(data: LocalDevDb, protocol: Protocol): ProtocolSummary {
   const org = data.organizations.find(item => item.id === protocol.organizationId);
   const gi = data.generalInfo.find(item => item.protocolId === protocol.id);
+  const user = data.users.find(item => item.id === protocol.userId);
 
   return {
     ...protocol,
     organizationName: org?.name ?? null,
     equipmentModel: gi?.model ?? null,
     serialNumber: gi?.serial ?? null,
+    userName: user?.name ?? null,
+    userEmail: user?.email ?? null,
   };
 }
 
@@ -479,14 +484,26 @@ export async function listProtocolsForOrg(userId: number, orgId: number) {
     if (!shouldUseLocalDevDb()) return [];
     const data = await readLocalDevDb();
     return sortByCreatedDesc(
-      data.protocols.filter(protocol => protocol.organizationId === orgId && protocol.userId === userId)
+      data.protocols
+        .filter(protocol => protocol.organizationId === orgId && protocol.userId === userId)
+        .map(protocol => protocolSummary(data, protocol))
     );
   }
   return db
-    .select()
+    .select({
+      protocol: protocols,
+      userName: users.name,
+      userEmail: users.email,
+    })
     .from(protocols)
+    .leftJoin(users, eq(protocols.userId, users.id))
     .where(and(eq(protocols.organizationId, orgId), eq(protocols.userId, userId)))
-    .orderBy(desc(protocols.createdAt));
+    .orderBy(desc(protocols.createdAt))
+    .then(rows => rows.map(r => ({
+      ...r.protocol,
+      userName: r.userName,
+      userEmail: r.userEmail,
+    })));
 }
 
 export async function listAllProtocols(userId: number) {
@@ -498,6 +515,8 @@ export async function listAllProtocols(userId: number) {
           organizationName: string | null;
           equipmentModel: string | null;
           serialNumber: string | null;
+          userName: string | null;
+          userEmail: string | null;
         }
       >;
     }
@@ -514,10 +533,13 @@ export async function listAllProtocols(userId: number) {
       organizationName: organizations.name,
       equipmentModel: generalInfo.model,
       serialNumber: generalInfo.serial,
+      userName: users.name,
+      userEmail: users.email,
     })
     .from(protocols)
     .leftJoin(organizations, eq(organizations.id, protocols.organizationId))
     .leftJoin(generalInfo, eq(generalInfo.protocolId, protocols.id))
+    .leftJoin(users, eq(protocols.userId, users.id))
     .where(eq(protocols.userId, userId))
     .orderBy(desc(protocols.createdAt))
     .then(rows => rows.map(r => ({
@@ -525,6 +547,8 @@ export async function listAllProtocols(userId: number) {
       organizationName: r.organizationName,
       equipmentModel: r.equipmentModel,
       serialNumber: r.serialNumber,
+      userName: r.userName,
+      userEmail: r.userEmail,
     })));
 }
 
@@ -540,6 +564,8 @@ export async function listAllProtocolsByCompany(companyId: number) {
           organizationName: string | null;
           equipmentModel: string | null;
           serialNumber: string | null;
+          userName: string | null;
+          userEmail: string | null;
         }
       >;
     }
@@ -556,10 +582,13 @@ export async function listAllProtocolsByCompany(companyId: number) {
       organizationName: organizations.name,
       equipmentModel: generalInfo.model,
       serialNumber: generalInfo.serial,
+      userName: users.name,
+      userEmail: users.email,
     })
     .from(protocols)
     .leftJoin(organizations, eq(organizations.id, protocols.organizationId))
     .leftJoin(generalInfo, eq(generalInfo.protocolId, protocols.id))
+    .leftJoin(users, eq(protocols.userId, users.id))
     .where(eq(protocols.companyId, companyId))
     .orderBy(desc(protocols.createdAt));
   return rows.map(r => ({
@@ -567,6 +596,8 @@ export async function listAllProtocolsByCompany(companyId: number) {
     organizationName: r.organizationName,
     equipmentModel: r.equipmentModel,
     serialNumber: r.serialNumber,
+    userName: r.userName,
+    userEmail: r.userEmail,
   }));
 }
 
