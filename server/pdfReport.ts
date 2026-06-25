@@ -846,7 +846,7 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
     .text(
       "Документ сформирован в соответствии с требованиями GMP / GDP / GPP.",
       left,
-      doc.page.height - 110,
+      doc.page.height - 65,
       { width: right - left, align: "center" },
     );
 }
