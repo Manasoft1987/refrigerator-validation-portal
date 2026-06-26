@@ -711,8 +711,8 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
   doc
     .fillColor(MUTED)
     .font("body")
-    .fontSize(9)
-    .text(fitTextToLines(doc, input.org.name.toUpperCase(), 320, 2), right - 320, y, { width: 320, align: "right", lineGap: 1 });
+    .fontSize(8)
+    .text(input.org.name.toUpperCase(), right - 360, y, { width: 360, align: "right", lineGap: 1 });
 
   y += 130;
 
