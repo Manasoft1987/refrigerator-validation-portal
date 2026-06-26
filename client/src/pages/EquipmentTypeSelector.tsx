@@ -6,7 +6,7 @@ import { Snowflake, Truck, Package, Warehouse } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
 
-type EquipmentType = "refrigerator" | "auto-refrigerator" | "warehouse" | "other";
+type EquipmentType = "refrigerator" | "auto-refrigerator" | "chamber" | "warehouse" | "other";
 
 export default function EquipmentTypeSelector() {
   const [, setLocation] = useLocation();
@@ -48,7 +48,7 @@ export default function EquipmentTypeSelector() {
         </div>
 
         {/* Equipment Type Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
           {/* Refrigerator Card */}
           <Card
             className={`relative overflow-hidden hover:shadow-lg transition-all cursor-pointer border-2 ${
@@ -93,6 +93,46 @@ export default function EquipmentTypeSelector() {
           </Card>
 
           {/* Auto-Refrigerator Card */}
+
+          {/* Cold Chamber Card */}
+          <Card
+            className={`relative overflow-hidden hover:shadow-lg transition-all cursor-pointer border-2 ${
+              selectedType === "chamber" ? "border-primary shadow-md" : "hover:border-primary/50"
+            }`}
+            onClick={() => handleSelectEquipment("chamber")}
+          >
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-cyan-100 to-transparent opacity-50 rounded-full -mr-12 -mt-12" />
+            <CardHeader>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-3 bg-cyan-100 rounded-lg">
+                  <Snowflake className="h-6 w-6 text-cyan-600" />
+                </div>
+                <CardTitle className="text-xl">{"\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430"}</CardTitle>
+              </div>
+              <CardDescription className="text-sm">
+                {"\u041e\u0442\u0434\u0435\u043b\u044c\u043d\u0430\u044f \u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430 \u0441 \u0440\u0430\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u043e\u0439 \u0434\u0430\u0442\u0447\u0438\u043a\u043e\u0432 \u043a\u0430\u043a \u0443 \u0430\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440\u0430"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li className="flex items-start gap-2">
+                  <span className="text-primary mt-1">{"\u2713"}</span>
+                  <span>{"\u0420\u0435\u0436\u0438\u043c +2...+8 \u00b0C"}</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-primary mt-1">{"\u2713"}</span>
+                  <span>{"\u0420\u0435\u0436\u0438\u043c +8...+15 \u00b0C"}</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-primary mt-1">{"\u2713"}</span>
+                  <span>{"\u0421\u0445\u0435\u043c\u0430 \u0434\u0430\u0442\u0447\u0438\u043a\u043e\u0432 \u043a\u0430\u043a \u0434\u043b\u044f \u0430\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440\u0430"}</span>
+                </li>
+              </ul>
+              <Button className="w-full mt-6" size="lg" variant="outline">
+                {"\u0412\u044b\u0431\u0440\u0430\u0442\u044c \u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0443\u044e \u043a\u0430\u043c\u0435\u0440\u0443"}
+              </Button>
+            </CardContent>
+          </Card>
           <Card
             className={`relative overflow-hidden hover:shadow-lg transition-all cursor-pointer border-2 ${
               selectedType === "auto-refrigerator" ? "border-primary shadow-md" : "hover:border-primary/50"

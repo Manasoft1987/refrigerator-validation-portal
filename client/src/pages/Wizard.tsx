@@ -67,7 +67,8 @@ export default function Wizard() {
   );
 
   const p = protocolQ.data;
-  const isWarehouse = p?.equipmentType === "warehouse";
+  const protocolEquipmentType = p?.customEquipmentName === "__equipmentType:chamber" ? "chamber" : p?.equipmentType;
+  const isWarehouse = protocolEquipmentType === "warehouse";
   const equipment = equipmentQ.data ?? [];
 
   // Build step list for warehouse
@@ -304,7 +305,7 @@ export default function Wizard() {
           <GeneralInfoStep
             protocolId={id}
             onDone={() => setStep(2)}
-            equipmentType={p?.equipmentType ?? undefined}
+            equipmentType={protocolEquipmentType ?? undefined}
           />
         )}
 
@@ -332,7 +333,7 @@ export default function Wizard() {
             stage="iq"
             onPass={() => setStep(step + 1)}
             onBack={() => setStep(step - 1)}
-            equipmentType={p?.equipmentType ?? undefined}
+            equipmentType={protocolEquipmentType ?? undefined}
             warehouseEquipmentList={equipment}
           />
         )}
@@ -344,7 +345,7 @@ export default function Wizard() {
             stage="oq"
             onPass={() => setStep(step + 1)}
             onBack={() => setStep(step - 1)}
-            equipmentType={p?.equipmentType ?? undefined}
+            equipmentType={protocolEquipmentType ?? undefined}
             warehouseEquipmentList={equipment}
           />
         )}
@@ -366,7 +367,7 @@ export default function Wizard() {
             stage="iq"
             onPass={() => setStep(3)}
             onBack={() => setStep(1)}
-            equipmentType={p?.equipmentType ?? undefined}
+            equipmentType={protocolEquipmentType ?? undefined}
           />
         )}
         {!isWarehouse && step === 3 && (
@@ -375,7 +376,7 @@ export default function Wizard() {
             stage="oq"
             onPass={() => setStep(4)}
             onBack={() => setStep(2)}
-            equipmentType={p?.equipmentType ?? undefined}
+            equipmentType={protocolEquipmentType ?? undefined}
           />
         )}
         {!isWarehouse && step === 4 && (

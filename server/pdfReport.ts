@@ -337,6 +337,43 @@ function getEquipmentNameWithCase(input: ReportInput, gramCase: "nominative" | "
   return EQUIPMENT_LABEL[type || ""] || "Оборудование";
 }
 
+function isReeferLike(type: string | null | undefined): boolean {
+  return type === "auto-refrigerator" || type === "chamber";
+}
+
+function reeferSubject(type: string | null | undefined): string {
+  return type === "chamber" ? "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430" : "\u0410\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440";
+}
+
+function reeferArea(type: string | null | undefined): string {
+  return type === "chamber" ? "\u043a\u0430\u043c\u0435\u0440\u0430" : "\u043a\u0443\u0437\u043e\u0432";
+}
+
+function reeferAreaGenitive(type: string | null | undefined): string {
+  return type === "chamber" ? "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0439 \u043a\u0430\u043c\u0435\u0440\u044b" : "\u043a\u0443\u0437\u043e\u0432\u0430 \u0430\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440\u0430";
+}
+
+function reeferInsideVolume(type: string | null | undefined): string {
+  return type === "chamber" ? "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0439 \u043a\u0430\u043c\u0435\u0440\u044b" : "\u043a\u0443\u0437\u043e\u0432\u0430 \u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440\u0430";
+}
+
+function reeferLocationLabel(type: string | null | undefined): string {
+  return type === "chamber" ? "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430 / \u043c\u0435\u0441\u0442\u043e \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0438" : "\u0422\u0440\u0430\u043d\u0441\u043f\u043e\u0440\u0442\u043d\u043e\u0435 \u0441\u0440\u0435\u0434\u0441\u0442\u0432\u043e / \u0433\u043e\u0441. \u043d\u043e\u043c\u0435\u0440";
+}
+
+function reeferUnitLabel(type: string | null | undefined): string {
+  return type === "chamber" ? "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430 / \u0430\u0433\u0440\u0435\u0433\u0430\u0442" : "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430";
+}
+
+function reeferConclusionObject(input: ReportInput): string {
+  const unit = ((input.generalInfo?.manufacturer || "") + " " + (input.generalInfo?.model || "")).trim();
+  const serial = input.generalInfo?.serial || "\u2014";
+  if (input.protocol?.equipmentType === "chamber") {
+    return "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0443\u044e \u043a\u0430\u043c\u0435\u0440\u0443 \u0441 \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435\u043c \u00ab" + unit + "\u00bb (\u0441\u0435\u0440. \u2116 " + serial + ")";
+  }
+  return "\u0430\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440 \u0441 \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435\u043c \u00ab" + unit + "\u00bb (\u0441\u0435\u0440. \u2116 " + serial + ")";
+}
+
 const ANSWER_LABEL: Record<string, string> = {
   yes: "Да",
   no: "Нет",
@@ -618,14 +655,14 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
       drawWarehousePlanDiagram(doc, input, false, "Схема. Расстановка датчиков на плане помещения");
     } else {
       // Non-warehouse: Schema 1 (reference positions)
-      if (eqType === "auto-refrigerator") {
+      if (isReeferLike(eqType)) {
         drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, true, "Схема 1. Эталонные позиции ISPE (C1–C8, W1–W4, V1–V3)");
       } else {
         drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, "Схема 1. Эталонные позиции ISPE (C1–C8, W1–W4, V1–V3)", "position");
       }
       // Schema 2: with serial numbers
       doc.addPage();
-      if (eqType === "auto-refrigerator") {
+      if (isReeferLike(eqType)) {
         // Get sensor labels for critical points
         const hotLabel = input.pv.hotIdx !== null && input.pv.loggers[input.pv.hotIdx] ? input.pv.loggers[input.pv.hotIdx].label : null;
         const coldLabel = input.pv.coldIdx !== null && input.pv.loggers[input.pv.coldIdx] ? input.pv.loggers[input.pv.coldIdx].label : null;
@@ -746,11 +783,13 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
 
   y += 24;
   const eqType = input.generalInfo?.equipmentType || input.protocol?.equipmentType || "";
-  const equipmentTypeLabel = eqType === "auto-refrigerator"
-    ? "Транспортное средство"
-    : eqType === "warehouse"
-      ? getEquipmentName(input)
-      : "Холодильное оборудование";
+  const equipmentTypeLabel = eqType === "chamber"
+    ? "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430"
+    : eqType === "auto-refrigerator"
+      ? "\u0422\u0440\u0430\u043d\u0441\u043f\u043e\u0440\u0442\u043d\u043e\u0435 \u0441\u0440\u0435\u0434\u0441\u0442\u0432\u043e"
+      : eqType === "warehouse"
+        ? getEquipmentName(input)
+        : "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0435 \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435";
   doc
     .fillColor(ACCENT)
     .font("bold")
@@ -774,11 +813,11 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
     ["Организация", input.org.name],
     ["БИН / ИНН", input.org.bin || "—"],
     ["Объект квалификации", objectLabel],
-    ...(eqType === "auto-refrigerator"
+    ...(isReeferLike(eqType)
       ? [
-          ["Транспортное средство / гос. номер", gi?.location || "—"],
-          ["Холодильная установка", refrigerationUnit],
-          ["Серийный номер установки", gi?.serial || "—"],
+          [reeferLocationLabel(eqType), gi?.location || "\u2014"],
+          [reeferUnitLabel(eqType), refrigerationUnit],
+          ["\u0421\u0435\u0440\u0438\u0439\u043d\u044b\u0439 \u043d\u043e\u043c\u0435\u0440 \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0438", gi?.serial || "\u2014"],
         ] as Array<[string, string]>
       : [
           ["Адрес объекта", gi?.location || "—"],
@@ -1417,14 +1456,10 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
       pv.rangeMax,
     );
     const externalChartText = input?.protocol?.equipmentType === "warehouse"
-      ? `График внешнего датчика отображает температуру окружающей среды вне помещения (зоны) хранения. ` +
-        "Этот датчик не входит в расчёт критериев приемлемости PV, но помогает оценить влияние условий окружающей среды " +
-        "на работу оборудования. Анализ этого графика позволяет отличить проблемы, вызванные неисправностью оборудования, " +
-        "от колебаний, обусловленных изменениями температуры в окружающей среде."
-      : `График внешнего датчика отображает температуру окружающей среды вне авторефрижератора. ` +
-        "Этот датчик не входит в расчёт критериев приемлемости PV, но помогает оценить влияние условий окружающей среды " +
-        "на работу оборудования. Анализ этого графика позволяет отличить проблемы, вызванные неисправностью авторефрижератора, " +
-        "от колебаний, обусловленных изменениями температуры в окружающей среде.";
+      ? "\u0413\u0440\u0430\u0444\u0438\u043a \u0432\u043d\u0435\u0448\u043d\u0435\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0430\u0435\u0442 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u0443 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u044b \u0432\u043d\u0435 \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f (\u0437\u043e\u043d\u044b) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f. " +
+        "\u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u043d\u0435 \u0432\u0445\u043e\u0434\u0438\u0442 \u0432 \u0440\u0430\u0441\u0447\u0451\u0442 \u043a\u0440\u0438\u0442\u0435\u0440\u0438\u0435\u0432 \u043f\u0440\u0438\u0435\u043c\u043b\u0435\u043c\u043e\u0441\u0442\u0438 PV, \u043d\u043e \u043f\u043e\u043c\u043e\u0433\u0430\u0435\u0442 \u043e\u0446\u0435\u043d\u0438\u0442\u044c \u0432\u043b\u0438\u044f\u043d\u0438\u0435 \u0441\u0440\u0435\u0434\u044b."
+      : "\u0413\u0440\u0430\u0444\u0438\u043a \u0432\u043d\u0435\u0448\u043d\u0435\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0430\u0435\u0442 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u0443 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u044b \u0432\u043d\u0435 " + reeferAreaGenitive(input?.protocol?.equipmentType) + ". " +
+        "\u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u043d\u0435 \u0432\u0445\u043e\u0434\u0438\u0442 \u0432 \u0440\u0430\u0441\u0447\u0451\u0442 \u043a\u0440\u0438\u0442\u0435\u0440\u0438\u0435\u0432 \u043f\u0440\u0438\u0435\u043c\u043b\u0435\u043c\u043e\u0441\u0442\u0438 PV, \u043d\u043e \u043f\u043e\u043c\u043e\u0433\u0430\u0435\u0442 \u043e\u0446\u0435\u043d\u0438\u0442\u044c \u0432\u043b\u0438\u044f\u043d\u0438\u0435 \u0441\u0440\u0435\u0434\u044b.";
     drawChartExplanation(doc, externalChartText);
   }
 
@@ -1443,13 +1478,8 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     drawChartExplanation(
       doc,
       input?.protocol?.equipmentType === "warehouse"
-        ? "График самого тёплого датчика (с наибольшим средним значением температуры). " +
-        "Этот датчик обычно располагается в зоне с наименее эффективным охлаждением и служит " +
-        "для оценки наихудших условий в помещении. Данные этого датчика " +
-        "используются для расчёта параметра MKT (средняя кинетическая температура)."
-        : "График самого тёплого датчика (с наибольшим средним значением температуры). " +
-        "Этот датчик обычно располагается в зоне с наименее эффективным охлаждением и служит для оценки наихудших условий в кузове. Данные этого датчика " +
-        "используются для расчёта параметра MKT (средняя кинетическая температура)."
+        ? "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0430\u043c\u043e\u0433\u043e \u0442\u0451\u043f\u043b\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 (\u0441 \u043d\u0430\u0438\u0431\u043e\u043b\u044c\u0448\u0438\u043c \u0441\u0440\u0435\u0434\u043d\u0438\u043c \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435\u043c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b). \u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u043e\u0431\u044b\u0447\u043d\u043e \u0440\u0430\u0441\u043f\u043e\u043b\u0430\u0433\u0430\u0435\u0442\u0441\u044f \u0432 \u0437\u043e\u043d\u0435 \u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u0435\u0435 \u044d\u0444\u0444\u0435\u043a\u0442\u0438\u0432\u043d\u044b\u043c \u043e\u0445\u043b\u0430\u0436\u0434\u0435\u043d\u0438\u0435\u043c \u0438 \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438 \u043d\u0430\u0438\u0445\u0443\u0434\u0448\u0438\u0445 \u0443\u0441\u043b\u043e\u0432\u0438\u0439 \u0432 \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0438."
+        : "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0430\u043c\u043e\u0433\u043e \u0442\u0451\u043f\u043b\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 (\u0441 \u043d\u0430\u0438\u0431\u043e\u043b\u044c\u0448\u0438\u043c \u0441\u0440\u0435\u0434\u043d\u0438\u043c \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435\u043c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b). \u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u043e\u0431\u044b\u0447\u043d\u043e \u0440\u0430\u0441\u043f\u043e\u043b\u0430\u0433\u0430\u0435\u0442\u0441\u044f \u0432 \u0437\u043e\u043d\u0435 \u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u0435\u0435 \u044d\u0444\u0444\u0435\u043a\u0442\u0438\u0432\u043d\u044b\u043c \u043e\u0445\u043b\u0430\u0436\u0434\u0435\u043d\u0438\u0435\u043c \u0438 \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438 \u043d\u0430\u0438\u0445\u0443\u0434\u0448\u0438\u0445 \u0443\u0441\u043b\u043e\u0432\u0438\u0439 \u0432 " + reeferAreaGenitive(input?.protocol?.equipmentType) + "."
     );
   }
 
@@ -1468,13 +1498,8 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     drawChartExplanation(
       doc,
       input?.protocol?.equipmentType === "warehouse"
-        ? "График самого холодного датчика (с наименьшим средним значением температуры). " +
-        "Этот датчик располагается в зоне с наиболее эффективным охлаждением и служит " +
-        "для оценки наилучших условий в помещении. Контроль этого датчика гарантирует, " +
-        "что оборудование не работает слишком холодно и не причиняет вред лекарствам."
-        : "График самого холодного датчика (с наименьшим средним значением температуры). " +
-        "Этот датчик располагается в зоне с наиболее эффективным охлаждением и служит для оценки наилучших условий в кузове. Контроль этого датчика гарантирует, " +
-        "что оборудование не работает слишком холодно и не причиняет вред лекарствам."
+        ? "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0430\u043c\u043e\u0433\u043e \u0445\u043e\u043b\u043e\u0434\u043d\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 (\u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u044c\u0448\u0438\u043c \u0441\u0440\u0435\u0434\u043d\u0438\u043c \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435\u043c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b). \u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438 \u043d\u0430\u0438\u0431\u043e\u043b\u0435\u0435 \u0445\u043e\u043b\u043e\u0434\u043d\u043e\u0439 \u0437\u043e\u043d\u044b \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f."
+        : "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0430\u043c\u043e\u0433\u043e \u0445\u043e\u043b\u043e\u0434\u043d\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 (\u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u044c\u0448\u0438\u043c \u0441\u0440\u0435\u0434\u043d\u0438\u043c \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435\u043c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b). \u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438 \u043d\u0430\u0438\u0431\u043e\u043b\u0435\u0435 \u0445\u043e\u043b\u043e\u0434\u043d\u043e\u0439 \u0437\u043e\u043d\u044b \u0432 " + reeferAreaGenitive(input?.protocol?.equipmentType) + "."
     );
   }
 
@@ -1491,10 +1516,8 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     drawChartExplanation(
       doc,
       input?.protocol?.equipmentType === "warehouse"
-        ? "Тепловая карта показывает распределение средних температур по всем датчикам. " +
-        "Коричневые столбцы указывают на датчики с более высокой температурой, голубые — на датчики с более низкой, а зеленые - между ними. Это позволяет визуально выявить температурные градиенты в помещении (зоне) хранения."
-        : "Тепловая карта показывает распределение средних температур по всем датчикам. " +
-        "Коричневые столбцы указывают на датчики с более высокой температурой, голубые — на датчики с более низкой, а зеленые - между ними. Это позволяет визуально выявить температурные градиенты в кузове авторефрижератора."
+        ? "\u0422\u0435\u043f\u043b\u043e\u0432\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u043f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442 \u0440\u0430\u0441\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u0438\u0435 \u0441\u0440\u0435\u0434\u043d\u0438\u0445 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440 \u043f\u043e \u0432\u0441\u0435\u043c \u0434\u0430\u0442\u0447\u0438\u043a\u0430\u043c \u0432 \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0438 (\u0437\u043e\u043d\u0435) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f."
+        : "\u0422\u0435\u043f\u043b\u043e\u0432\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u043f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442 \u0440\u0430\u0441\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u0438\u0435 \u0441\u0440\u0435\u0434\u043d\u0438\u0445 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440 \u043f\u043e \u0432\u0441\u0435\u043c \u0434\u0430\u0442\u0447\u0438\u043a\u0430\u043c \u0432 " + reeferAreaGenitive(input?.protocol?.equipmentType) + "."
     );
 
     drawStatsBarChart(
@@ -1509,16 +1532,10 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     );
     drawChartExplanation(
       doc,
-      "График статистики показывает ключевые параметры для каждого датчика: " +
-      "Мин. (минимальная температура за все время теста), " +
-      "Сред. (средняя температура), " +
-      "Макс. (максимальная температура). " +
-      "МКТ (средняя кинетическая температура) — это весовая средняя температура, " +
-      "которая учитывает скорость химических реакций деградации лекарственных препаратов. " +
-      "МКТ является критическим параметром для фармацевтического оборудования и " +
-      "должен находиться в указанном диапазоне для успешного прохождения этапа ПВ."
+      "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043a\u0438 \u043f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442 \u043a\u043b\u044e\u0447\u0435\u0432\u044b\u0435 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u044b \u0434\u043b\u044f \u043a\u0430\u0436\u0434\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430: \u043c\u0438\u043d\u0438\u043c\u0443\u043c, \u0441\u0440\u0435\u0434\u043d\u0435\u0435, \u043c\u0430\u043a\u0441\u0438\u043c\u0443\u043c \u0438 MKT. MKT \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u0442\u0441\u044f \u043a\u0430\u043a \u043e\u0431\u043e\u0431\u0449\u0451\u043d\u043d\u044b\u0439 \u043f\u043e\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u044c \u0442\u0435\u0440\u043c\u0438\u0447\u0435\u0441\u043a\u043e\u0433\u043e \u0432\u043e\u0437\u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f \u043d\u0430 \u043f\u0440\u043e\u0434\u0443\u043a\u0446\u0438\u044e."
     );
   }
+
 }
 
 function insertImage(doc: PDFKit.PDFDocument, buf: Buffer, height: number) {
@@ -1712,7 +1729,8 @@ function drawSensorPlacementAnalysis(
       }
     });
 
-    analysisText += `Внутренние датчики расположены в следующих позициях ${input?.protocol?.equipmentType === "warehouse" ? "помещения (зоны) хранения" : "кузова авторефрижератора"}: `;
+    analysisText += "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0434\u0430\u0442\u0447\u0438\u043a\u0438 \u0440\u0430\u0441\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u044b \u0432 \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u043f\u043e\u0437\u0438\u0446\u0438\u044f\u0445 " +
+      (input?.protocol?.equipmentType === "warehouse" ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f (\u0437\u043e\u043d\u044b) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : reeferAreaGenitive(input?.protocol?.equipmentType)) + ": ";
     const positions = [];
     if (hasTop) positions.push("верхняя полка");
     if (hasMiddle) positions.push("средняя часть");
@@ -1729,7 +1747,7 @@ function drawSensorPlacementAnalysis(
         "неисправностей системы кондиционирования или отопления на ранних этапах.\n\n";
     } else {
       analysisText +=
-        `Такая многоточечная расстановка позволяет выявить температурные градиенты внутри кузова рефрижератора и оценить ` +
+        "\u0422\u0430\u043a\u0430\u044f \u043c\u043d\u043e\u0433\u043e\u0442\u043e\u0447\u0435\u0447\u043d\u0430\u044f \u0440\u0430\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430 \u043f\u043e\u0437\u0432\u043e\u043b\u044f\u0435\u0442 \u0432\u044b\u044f\u0432\u0438\u0442\u044c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u043d\u044b\u0435 \u0433\u0440\u0430\u0434\u0438\u0435\u043d\u0442\u044b \u0432\u043d\u0443\u0442\u0440\u0438 " + reeferInsideVolume(input?.protocol?.equipmentType) + " \u0438 \u043e\u0446\u0435\u043d\u0438\u0442\u044c " +
         "равномерность распределения холода по всему объёму объекта. Датчики на верхней и нижней полках фиксируют " +
         "потенциальные зоны риска, где может возникнуть локальное отклонение температуры от установленного диапазона. " +
         "Это критически важно для обеспечения стабильности условий хранения лекарственных средств и выявления " +
@@ -1748,11 +1766,8 @@ function drawSensorPlacementAnalysis(
         "от колебаний, обусловленных изменениями температуры в окружающей среде.";
     } else {
       analysisText +=
-        "Внешний датчик (расположенный вне кузова авторефрижератора) служит для мониторинга параметров окружающей среды " +
-        "и не входит в расчёт основных критериев приемлемости этапа PV. Данные внешнего датчика используются для " +
-        "анализа влияния условий окружающей среды на работу оборудования и могут быть полезны при " +
-        "диагностике отклонений. Внешний датчик помогает отличить проблемы, вызванные неисправностью оборудования, " +
-        "от колебаний, обусловленных изменениями температуры в окружающей среде.";
+        "\u0412\u043d\u0435\u0448\u043d\u0438\u0439 \u0434\u0430\u0442\u0447\u0438\u043a (\u0440\u0430\u0441\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0439 \u0432\u043d\u0435 " + reeferAreaGenitive(input?.protocol?.equipmentType) + ") \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043c\u043e\u043d\u0438\u0442\u043e\u0440\u0438\u043d\u0433\u0430 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u044b " +
+        "\u0438 \u043d\u0435 \u0432\u0445\u043e\u0434\u0438\u0442 \u0432 \u0440\u0430\u0441\u0447\u0451\u0442 \u043e\u0441\u043d\u043e\u0432\u043d\u044b\u0445 \u043a\u0440\u0438\u0442\u0435\u0440\u0438\u0435\u0432 \u043f\u0440\u0438\u0435\u043c\u043b\u0435\u043c\u043e\u0441\u0442\u0438 \u044d\u0442\u0430\u043f\u0430 PV. \u0414\u0430\u043d\u043d\u044b\u0435 \u0432\u043d\u0435\u0448\u043d\u0435\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u044e\u0442\u0441\u044f \u0434\u043b\u044f \u0430\u043d\u0430\u043b\u0438\u0437\u0430 \u0432\u043b\u0438\u044f\u043d\u0438\u044f \u0443\u0441\u043b\u043e\u0432\u0438\u0439 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u044b \u043d\u0430 \u0440\u0430\u0431\u043e\u0442\u0443 \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u044f.";
     }
   }
 
@@ -1813,7 +1828,7 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
       thermalRetentionMinutes: thermalRetentionMinutes,
       warmupDescription:
         warmupMinutes !== null
-          ? `${input?.protocol?.equipmentType === "warehouse" ? "Помещение хранения" : "Авторефрижератор"} входит в требуемый температурный режим за ${warmupText}.`
+          ? (input?.protocol?.equipmentType === "warehouse" ? "\u041f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : reeferSubject(input?.protocol?.equipmentType)) + " \u0432\u0445\u043e\u0434\u0438\u0442 \u0432 \u0442\u0440\u0435\u0431\u0443\u0435\u043c\u044b\u0439 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u043d\u044b\u0439 \u0440\u0435\u0436\u0438\u043c \u0437\u0430 " + warmupText + "."
           : "Время входа в режим не определено.",
       doorOpeningDescription:
         doorOpeningMinutes !== null
@@ -1821,7 +1836,7 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
           : "Время открытия двери не определено.",
       thermalRetentionDescription:
         thermalRetentionMinutes !== null
-          ? `При выключении холодильного агрегата ${input?.protocol?.equipmentType === "warehouse" ? "объект" : "кузов"} способен сохранять требуемый режим в течение ${thermalRetentionText}.`
+          ? "\u041f\u0440\u0438 \u0432\u044b\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0438 \u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0433\u043e \u0430\u0433\u0440\u0435\u0433\u0430\u0442\u0430 " + (input?.protocol?.equipmentType === "warehouse" ? "\u043e\u0431\u044a\u0435\u043a\u0442" : reeferArea(input?.protocol?.equipmentType)) + " \u0441\u043f\u043e\u0441\u043e\u0431\u0435\u043d \u0441\u043e\u0445\u0440\u0430\u043d\u044f\u0442\u044c \u0442\u0440\u0435\u0431\u0443\u0435\u043c\u044b\u0439 \u0440\u0435\u0436\u0438\u043c \u0432 \u0442\u0435\u0447\u0435\u043d\u0438\u0435 " + thermalRetentionText + "."
           : "Время сохранения режима не определено.",
     };
   }
@@ -1869,7 +1884,7 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
       ? ` Испытания на температурное отклонение проведены и зафиксированы в разделе 10 настоящего отчёта.`
       : "";
     text =
-      `На основании результатов IQ, OQ и PV комиссия признаёт ${input.protocol?.equipmentType === "warehouse" ? "помещение (зону) хранения" : `авторефрижератор с оборудованием «${input.generalInfo?.manufacturer || ""} ${input.generalInfo?.model || ""}» (сер. № ${input.generalInfo?.serial || "—"})`} ` +
+      "\u041d\u0430 \u043e\u0441\u043d\u043e\u0432\u0430\u043d\u0438\u0438 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u043e\u0432 IQ, OQ \u0438 PV \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u043f\u0440\u0438\u0437\u043d\u0430\u0451\u0442 " + (input.protocol?.equipmentType === "warehouse" ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 (\u0437\u043e\u043d\u0443) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : reeferConclusionObject(input)) + " " +
       `пригодным для хранения лекарственных средств ` +
       `в температурном режиме ${TEMP_MODE_LABEL[input.pv.tempMode || ""] || "—"} в соответствии с требованиями GDP / GPP. ` +
       (input.protocol?.equipmentType === "warehouse" 
@@ -2059,7 +2074,7 @@ function drawPVPlan(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
       pv.sensorPlacement
         || (input?.protocol?.equipmentType === "warehouse"
           ? "Регистраторы данных следует располагать в форме сетки и таким образом, чтобы они покрывать зону хранения по всей ее длине и ширине, а также высоте. Регистраторы данных размещаются по возможности с равными интервалами. Внешний датчик — для контроля температуры вне помещения."
-          : "Датчики располагаются в характерных точках объёма кузова: по стенам и по центру объекта. Внешний датчик — для контроля температуры в окружающей среде."),
+          : "\u0414\u0430\u0442\u0447\u0438\u043a\u0438 \u0440\u0430\u0441\u043f\u043e\u043b\u0430\u0433\u0430\u044e\u0442\u0441\u044f \u0432 \u0445\u0430\u0440\u0430\u043a\u0442\u0435\u0440\u043d\u044b\u0445 \u0442\u043e\u0447\u043a\u0430\u0445 \u043e\u0431\u044a\u0451\u043c\u0430 " + reeferAreaGenitive(input?.protocol?.equipmentType) + ": \u043f\u043e \u0441\u0442\u0435\u043d\u0430\u043c \u0438 \u043f\u043e \u0446\u0435\u043d\u0442\u0440\u0443 \u043e\u0431\u044a\u0435\u043a\u0442\u0430. \u0412\u043d\u0435\u0448\u043d\u0438\u0439 \u0434\u0430\u0442\u0447\u0438\u043a \u2014 \u0434\u043b\u044f \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044f \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b \u0432 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u0435."),
     ],
   ];
   drawKVTable(doc, rows);

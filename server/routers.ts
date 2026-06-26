@@ -118,6 +118,7 @@ const PORTAL_ADMIN_EMAIL = "dev@local.test";
 const PORTAL_ADMIN_APP_ID = "portal-admin";
 const PASSWORD_LOGIN_MAX_ATTEMPTS = 8;
 const PASSWORD_LOGIN_WINDOW_MS = 10 * 60 * 1000;
+const CHAMBER_PROTOCOL_MARKER = "__equipmentType:chamber";
 const passwordLoginAttempts = new Map<string, { count: number; resetAt: number }>();
 
 function normalizeUserEmail(email: string) {
@@ -203,7 +204,7 @@ function defaultQuestionsFor(stage: "iq" | "oq", equipmentType?: string | null):
   if (equipmentType === "warehouse") {
     return stage === "iq" ? DEFAULT_IQ_QUESTIONS_WAREHOUSE : DEFAULT_OQ_QUESTIONS_WAREHOUSE;
   }
-  if (equipmentType === "auto-refrigerator") {
+  if (equipmentType === "auto-refrigerator" || equipmentType === "chamber") {
     return stage === "iq"
       ? DEFAULT_IQ_QUESTIONS_AUTO_REFRIGERATOR
       : DEFAULT_OQ_QUESTIONS_AUTO_REFRIGERATOR;
@@ -477,7 +478,7 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .query(({ ctx, input }) => ownProtocol(ctx.user.id, input.id)),
     create: protectedProcedure
-      .input(z.object({ organizationId: z.number(), companyId: z.number().optional(), equipmentType: z.enum(["refrigerator", "auto-refrigerator", "warehouse", "other"]).optional(), customEquipmentName: z.string().optional() }))
+      .input(z.object({ organizationId: z.number(), companyId: z.number().optional(), equipmentType: z.enum(["refrigerator", "auto-refrigerator", "chamber", "warehouse", "other"]).optional(), customEquipmentName: z.string().optional() }))
       .mutation(async ({ ctx, input }) => {
         // Admins can always create; regular users must belong to an approved company
         if (ctx.user.role !== "admin") {
@@ -509,13 +510,14 @@ export const appRouter = router({
         const number = await nextProtocolNumber(input.organizationId, year);
         // Use org.companyId if not provided (org already linked to company)
         const companyId = input.companyId ?? org.companyId ?? 0;
+        const requestedEquipmentType = input.equipmentType ?? "refrigerator";
         return insertProtocol({
           organizationId: input.organizationId,
           companyId,
           userId: ctx.user.id,
           number,
-          equipmentType: input.equipmentType ?? "refrigerator",
-          customEquipmentName: input.customEquipmentName ?? null,
+          equipmentType: requestedEquipmentType === "chamber" ? "auto-refrigerator" : requestedEquipmentType,
+          customEquipmentName: requestedEquipmentType === "chamber" ? CHAMBER_PROTOCOL_MARKER : input.customEquipmentName ?? null,
         });
       }),
     delete: protectedProcedure
@@ -638,11 +640,12 @@ export const appRouter = router({
       .query(async ({ input }) => {
         // Try to get DB templates for this equipment type first
         if (input.equipmentType) {
-          const dbTemplates = await listQuestionTemplates(input.stage, input.equipmentType);
+          const templateEquipmentType = input.equipmentType === "chamber" ? "auto-refrigerator" : input.equipmentType;
+          const dbTemplates = await listQuestionTemplates(input.stage, templateEquipmentType);
           if (dbTemplates.length > 0) {
             return dbTemplates.map(t => t.text);
           }
-          if (input.equipmentType === "warehouse" || input.equipmentType === "auto-refrigerator") {
+          if (input.equipmentType === "warehouse" || input.equipmentType === "auto-refrigerator" || input.equipmentType === "chamber") {
             return defaultQuestionsFor(input.stage, input.equipmentType);
           }
           // If no equipment-specific templates, fall back to generic DB templates
@@ -1391,8 +1394,8 @@ export const appRouter = router({
           protocol: {
             number: protocol.number,
             createdAt: protocol.createdAt,
-            equipmentType: protocol.equipmentType ?? null,
-            customEquipmentName: protocol.customEquipmentName ?? null,
+            equipmentType: protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER ? "chamber" : protocol.equipmentType ?? null,
+            customEquipmentName: protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER ? null : protocol.customEquipmentName ?? null,
           },
           generalInfo: gi
             ? {

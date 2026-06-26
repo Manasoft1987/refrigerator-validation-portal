@@ -112,6 +112,15 @@ export default function GeneralInfoStep({
   });
 
   const isWarehouse = form.equipmentType === "warehouse";
+  const tempModesForEquipment = form.equipmentType === "chamber"
+    ? TEMP_MODES.filter(m => m.id !== "15-25")
+    : TEMP_MODES;
+
+  useEffect(() => {
+    if (form.equipmentType === "chamber" && form.tempMode === "15-25") {
+      setForm((prev: any) => ({ ...prev, tempMode: "2-8" }));
+    }
+  }, [form.equipmentType, form.tempMode]);
 
 
   const canContinueBase = isWarehouse
@@ -257,7 +266,7 @@ export default function GeneralInfoStep({
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {TEMP_MODES.map(m => (
+                    {(isWarehouse ? TEMP_MODES : tempModesForEquipment).map(m => (
                       <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -458,7 +467,7 @@ export default function GeneralInfoStep({
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {TEMP_MODES.map(m => (
+                  {(isWarehouse ? TEMP_MODES : tempModesForEquipment).map(m => (
                     <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
                   ))}
                 </SelectContent>

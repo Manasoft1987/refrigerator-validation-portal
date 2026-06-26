@@ -58,7 +58,7 @@ export default function ProtocolsIndex() {
   const [orgF, setOrgF] = useState<string>("all");
   const [createOpen, setCreateOpen] = useState(false);
   const [createStep, setCreateStep] = useState<1 | 2>(1);
-  const [createEquipmentType, setCreateEquipmentType] = useState<"refrigerator" | "auto-refrigerator" | "warehouse" | "other" | null>(null);
+  const [createEquipmentType, setCreateEquipmentType] = useState<"refrigerator" | "auto-refrigerator" | "chamber" | "warehouse" | "other" | null>(null);
   const [createCustomName, setCreateCustomName] = useState("");
   const [createOrg, setCreateOrg] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
@@ -344,6 +344,7 @@ export default function ProtocolsIndex() {
               <div className="grid grid-cols-1 gap-3">
                 {([
                   { id: "refrigerator", label: "Холодильник", icon: "🧊", desc: "Фармацевтический холодильник / камера хранения" },
+                  { id: "chamber", label: "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430", icon: "\u2744\uFE0F", desc: "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430 \u0441 \u0440\u0430\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u043e\u0439 \u0434\u0430\u0442\u0447\u0438\u043a\u043e\u0432 \u043a\u0430\u043a \u0443 \u0430\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440\u0430" },
                   { id: "auto-refrigerator", label: "Авторефрижератор", icon: "🚛", desc: "Транспортный рефрижератор / термоконтейнер" },
                   { id: "warehouse", label: "Помещение / зона хранения", icon: "🏢", desc: "Склад, холодильная камера, зона приёмки/экспедиции (ЕАЭК №8)" },
                   { id: "other", label: "Другое", icon: "📦", desc: "Иное оборудование" },
