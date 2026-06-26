@@ -712,7 +712,7 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
     .fillColor(MUTED)
     .font("body")
     .fontSize(10)
-    .text(input.org.name.toUpperCase(), right - 280, y, { width: 280, align: "right" });
+    .text(fitTextToWidth(doc, input.org.name.toUpperCase(), 280), right - 280, y, { width: 280, align: "right" });
 
   y += 130;
 
@@ -2992,6 +2992,31 @@ function drawCalibrationPage(doc: PDFKit.PDFDocument) {
 }
 
 
+function fitTextToWidth(doc: PDFKit.PDFDocument, text: string, maxWidth: number): string {
+  if (!text || maxWidth <= 0) return "";
+  if (doc.widthOfString(text) <= maxWidth) return text;
+
+  const suffix = "...";
+  const suffixWidth = doc.widthOfString(suffix);
+  if (suffixWidth >= maxWidth) return suffix;
+
+  let low = 0;
+  let high = text.length;
+  let best = 0;
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const candidate = text.slice(0, mid).trimEnd();
+    if (doc.widthOfString(candidate) + suffixWidth <= maxWidth) {
+      best = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return text.slice(0, best).trimEnd() + suffix;
+}
+
 function addHeadersAndFooters(doc: PDFKit.PDFDocument, input: ReportInput) {
   const range = doc.bufferedPageRange();
   const total = range.count;
@@ -3061,9 +3086,12 @@ function addHeadersAndFooters(doc: PDFKit.PDFDocument, input: ReportInput) {
       page.write(right.toFixed(2) + " " + headerLineY.toFixed(2) + " l");
       page.write("S");
       page.write("Q");
-      // Header text at 24pt from TOP → writeText y = 24
-      writeText(input.org.name, left, 24);
+      // Header text at 24pt from TOP -> writeText y = 24.
+      // Keep a fixed gap between the long organization name and the protocol number.
       const protoW = doc.widthOfString(protocolLabel);
+      const headerGap = 18;
+      const orgHeaderW = Math.max(120, right - left - protoW - headerGap);
+      writeText(fitTextToWidth(doc, input.org.name, orgHeaderW), left, 24);
       writeText(protocolLabel, right - protoW, 24);
     }
 
