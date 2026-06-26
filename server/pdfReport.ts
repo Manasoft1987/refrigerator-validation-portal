@@ -711,8 +711,8 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
   doc
     .fillColor(MUTED)
     .font("body")
-    .fontSize(10)
-    .text(fitTextToWidth(doc, input.org.name.toUpperCase(), 280), right - 280, y, { width: 280, align: "right" });
+    .fontSize(9)
+    .text(fitTextToLines(doc, input.org.name.toUpperCase(), 320, 2), right - 320, y, { width: 320, align: "right", lineGap: 1 });
 
   y += 130;
 
@@ -760,8 +760,8 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
   y += 50;
 
   // Card with key metadata
-  const cardX = left + 40;
-  const cardW = right - left - 80;
+  const cardX = left + 24;
+  const cardW = right - left - 48;
   const cardY = y;
   const gi = input.generalInfo;
   const objectLabel = eqType === "warehouse"
@@ -799,19 +799,37 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
         ["Дата составления отчёта", input.reportDate && input.reportDate.trim() ? input.reportDate.trim() : fmtDateOnly(input.generalInfo?.validationDate ? new Date(input.generalInfo.validationDate) : typeof input.protocol.createdAt === 'string' ? new Date(input.protocol.createdAt) : input.protocol.createdAt)]
       ];
 
-  const rowMinH = 28;
-  const rowPaddingY = 7;
-  const labelX = cardX + 18;
-  const valueX = cardX + 200;
-  const labelW = 170;
-  const valueW = cardW - 220;
-  const cardPaddingTop = 14;
-  const cardPaddingBottom = 14;
-  const measuredRows = rows.map(([k, v]) => {
-    doc.font("body").fontSize(9);
+  const rowMinH = 24;
+  const rowPaddingY = 5;
+  const labelX = cardX + 14;
+  const valueX = cardX + 164;
+  const labelW = 136;
+  const valueW = cardW - 184;
+  const valueFontSize = 10;
+  const cardPaddingTop = 12;
+  const cardPaddingBottom = 12;
+  const compactCoverValue = (key: string, value: string | undefined): string => {
+    const text = value || "\u2014";
+    const threeLineKeys = new Set([
+      "\u041e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u044f",
+      "\u0410\u0434\u0440\u0435\u0441 \u043e\u0431\u044a\u0435\u043a\u0442\u0430",
+      "\u0422\u0440\u0430\u043d\u0441\u043f\u043e\u0440\u0442\u043d\u043e\u0435 \u0441\u0440\u0435\u0434\u0441\u0442\u0432\u043e / \u0433\u043e\u0441. \u043d\u043e\u043c\u0435\u0440",
+    ]);
+    const twoLineKeys = new Set([
+      "\u041e\u0431\u044a\u0435\u043a\u0442 \u043a\u0432\u0430\u043b\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438",
+      "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430",
+    ]);
+    doc.font("bold").fontSize(valueFontSize);
+    if (threeLineKeys.has(key)) return fitTextToLines(doc, text, valueW, 3);
+    if (twoLineKeys.has(key)) return fitTextToLines(doc, text, valueW, 2);
+    return text;
+  };
+  const measuredRows = rows.map(([k, rawValue]) => {
+    const v = compactCoverValue(k, rawValue);
+    doc.font("body").fontSize(8);
     const labelH = doc.heightOfString(k.toUpperCase(), { width: labelW });
-    doc.font("bold").fontSize(11);
-    const valueH = doc.heightOfString(v || "—", { width: valueW, lineGap: 1 });
+    doc.font("bold").fontSize(valueFontSize);
+    const valueH = doc.heightOfString(v || "\u2014", { width: valueW, lineGap: 1 });
     return {
       k,
       v,
@@ -827,28 +845,31 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
   let rowY = cardY + cardPaddingTop;
   measuredRows.forEach(({ k, v, rowH }) => {
     const textY = rowY + rowPaddingY;
-    doc.fillColor(MUTED).font("body").fontSize(9).text(k.toUpperCase(), labelX, textY, {
+    doc.fillColor(MUTED).font("body").fontSize(8).text(k.toUpperCase(), labelX, textY, {
       width: labelW,
     });
     doc
       .fillColor(ACCENT)
       .font("bold")
-      .fontSize(11)
-      .text(v || "—", valueX, textY - 1, { width: valueW, lineGap: 1 });
+      .fontSize(valueFontSize)
+      .text(v || "\u2014", valueX, textY - 1, { width: valueW, lineGap: 1 });
     rowY += rowH;
   });
 
-  // Footer note
-  doc
-    .fillColor(MUTED)
-    .font("body")
-    .fontSize(9)
-    .text(
-      "Документ сформирован в соответствии с требованиями GMP / GDP / GPP.",
-      left,
-      doc.page.height - 93,
-      { width: right - left, align: "center" },
-    );
+  // Footer note: draw only when it can fit without touching the metadata card.
+  const footerNoteY = Math.max(cardY + cardH + 10, doc.page.height - 93);
+  if (footerNoteY <= doc.page.height - 62) {
+    doc
+      .fillColor(MUTED)
+      .font("body")
+      .fontSize(8)
+      .text(
+        "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442 \u0441\u0444\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u043d \u0432 \u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u0438 \u0441 \u0442\u0440\u0435\u0431\u043e\u0432\u0430\u043d\u0438\u044f\u043c\u0438 GMP / GDP / GPP.",
+        left,
+        footerNoteY,
+        { width: right - left, align: "center" },
+      );
+  }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -3015,6 +3036,36 @@ function fitTextToWidth(doc: PDFKit.PDFDocument, text: string, maxWidth: number)
   }
 
   return text.slice(0, best).trimEnd() + suffix;
+}
+
+function fitTextToLines(doc: PDFKit.PDFDocument, text: string, maxWidth: number, maxLines: number): string {
+  const normalized = (text || "").replace(/\s+/g, " ").trim();
+  if (!normalized || maxWidth <= 0 || maxLines <= 0) return "";
+
+  const lineGap = 1;
+  const lineHeight = typeof (doc as any).currentLineHeight === "function"
+    ? (doc as any).currentLineHeight(true)
+    : doc.heightOfString("Ag", { width: maxWidth });
+  const maxHeight = lineHeight * maxLines + lineGap * Math.max(0, maxLines - 1) + 0.5;
+  const fits = (candidate: string) => doc.heightOfString(candidate, { width: maxWidth, lineGap }) <= maxHeight;
+  if (fits(normalized)) return normalized;
+
+  const suffix = "...";
+  let low = 0;
+  let high = normalized.length;
+  let best = 0;
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const candidate = normalized.slice(0, mid).trimEnd() + suffix;
+    if (fits(candidate)) {
+      best = mid;
+      low = mid + 1;
+    } else {
+      high = mid - 1;
+    }
+  }
+
+  return normalized.slice(0, best).trimEnd() + suffix;
 }
 
 function addHeadersAndFooters(doc: PDFKit.PDFDocument, input: ReportInput) {
