@@ -209,6 +209,7 @@ export default function ExcursionStudyStep({
   const latestFormRef = useRef<ExcursionFormState | null>(null);
   const saveSessionRef = useRef<any>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [calculating, setCalculating] = useState(false);
   const [expandedTest, setExpandedTest] = useState<1 | 2 | 3 | null>(1);
 
@@ -338,9 +339,7 @@ export default function ExcursionStudyStep({
     };
   }, []);
 
-  const uploadLogger = trpc.excursion.uploadLogger.useMutation({
-    onSuccess: () => utils.excursion.listLoggers.invalidate({ protocolId }),
-  });
+  const uploadLogger = trpc.excursion.uploadLogger.useMutation();
   const deleteLogger = trpc.excursion.deleteLogger.useMutation({
     onSuccess: () => utils.excursion.listLoggers.invalidate({ protocolId }),
   });
@@ -362,28 +361,55 @@ export default function ExcursionStudyStep({
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = "";
+    if (!files.length) return;
+
     setUploading(true);
+    setUploadProgress({ current: 0, total: files.length });
+    let uploaded = 0;
+    let failed = 0;
+
     try {
-      const base64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve((reader.result as string).split(",")[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      await uploadLogger.mutateAsync({
-        protocolId,
-        fileName: file.name,
-        contentType: file.type || "application/octet-stream",
-        base64,
-      });
-      toast.success(`Файл «${file.name}» загружен`);
-    } catch (err: any) {
-      toast.error(err?.message ?? "Ошибка загрузки");
+      for (const [index, file] of files.entries()) {
+        setUploadProgress({ current: index + 1, total: files.length });
+
+        if (file.size > 20 * 1024 * 1024) {
+          failed += 1;
+          toast.error(`${file.name}: файл больше 20 МБ`);
+          continue;
+        }
+
+        try {
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve((reader.result as string).split(",")[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+          });
+          await uploadLogger.mutateAsync({
+            protocolId,
+            fileName: file.name,
+            contentType: file.type || "application/octet-stream",
+            base64,
+          });
+          uploaded += 1;
+        } catch (err: any) {
+          failed += 1;
+          toast.error(`${file.name}: ${err?.message ?? "ошибка загрузки"}`);
+        }
+      }
+
+      await utils.excursion.listLoggers.invalidate({ protocolId });
+      if (uploaded > 0) {
+        toast.success(`Загружено датчиков: ${uploaded} из ${files.length}`);
+      }
+      if (failed > 0 && uploaded === 0) {
+        toast.error("Не удалось загрузить выбранные файлы");
+      }
     } finally {
       setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
+      setUploadProgress({ current: 0, total: 0 });
     }
   }
 
@@ -527,7 +553,8 @@ export default function ExcursionStudyStep({
               <input
                 ref={fileRef}
                 type="file"
-                accept=".xlsx,.xls,.csv"
+                multiple
+                accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 className="hidden"
                 onChange={handleFileUpload}
               />
@@ -538,7 +565,9 @@ export default function ExcursionStudyStep({
                 disabled={uploading}
               >
                 {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
-                Загрузить файл логгера
+                {uploading
+                  ? `Загрузка ${uploadProgress.current} из ${uploadProgress.total}`
+                  : "Загрузить файлы датчиков"}
               </Button>
             </CardContent>
           </Card>
