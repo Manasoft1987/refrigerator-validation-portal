@@ -1179,6 +1179,55 @@ export async function deleteLogger(loggerId: number) {
 /* Question Templates                                                  */
 /* ------------------------------------------------------------------ */
 
+let chamberQuestionTemplateSchemaPromise: Promise<void> | null = null;
+
+export async function ensureChamberQuestionTemplateStorage(
+  iqQuestions: string[],
+  oqQuestions: string[],
+) {
+  const db = await getDb();
+  if (!db) return;
+  if (chamberQuestionTemplateSchemaPromise) return chamberQuestionTemplateSchemaPromise;
+
+  chamberQuestionTemplateSchemaPromise = (async () => {
+    const result = await db.execute(sql.raw(
+      "SHOW COLUMNS FROM questionTemplates LIKE 'equipmentType'",
+    ));
+    const rows = (result as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
+    const columnType = String(rows?.[0]?.Type ?? rows?.[0]?.type ?? "");
+    if (columnType.includes("'chamber'")) return;
+
+    await db.execute(sql.raw(
+      "ALTER TABLE questionTemplates MODIFY COLUMN equipmentType " +
+      "enum('refrigerator','auto-refrigerator','chamber','warehouse','other') " +
+      "NOT NULL DEFAULT 'refrigerator'",
+    ));
+
+    for (const [stage, questions] of [
+      ["iq", iqQuestions],
+      ["oq", oqQuestions],
+    ] as const) {
+      for (const [index, text] of questions.entries()) {
+        await db.execute(sql`
+          INSERT INTO questionTemplates
+            (stage, ord, text, isDefault, companyId, equipmentType, equipmentKind)
+          SELECT
+            ${stage}, ${(index + 1) * 10}, ${text}, 1, NULL, 'chamber', NULL
+          WHERE NOT EXISTS (
+            SELECT 1 FROM questionTemplates
+            WHERE stage = ${stage} AND equipmentType = 'chamber' AND text = ${text}
+          )
+        `);
+      }
+    }
+  })().catch(error => {
+    chamberQuestionTemplateSchemaPromise = null;
+    throw error;
+  });
+
+  return chamberQuestionTemplateSchemaPromise;
+}
+
 export async function listQuestionTemplates(stage: "iq" | "oq", equipmentType?: string) {
   const db = await getDb();
   if (!db) {

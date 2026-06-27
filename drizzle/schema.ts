@@ -223,7 +223,7 @@ export const questionTemplates = mysqlTable("questionTemplates", {
 	text: text().notNull(),
 	isDefault: int().default(1).notNull(),
 	companyId: int(),
-	equipmentType: mysqlEnum(['refrigerator','auto-refrigerator','warehouse','other']).default('refrigerator').notNull(),
+	equipmentType: mysqlEnum(['refrigerator','auto-refrigerator','chamber','warehouse','other']).default('refrigerator').notNull(),
 	equipmentKind: mysqlEnum(['conditioner','ventilation','heat_curtain','chiller','fan_coil','other']),
 });
 

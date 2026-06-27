@@ -5,6 +5,8 @@ import {
   DEFAULT_OQ_QUESTIONS,
   DEFAULT_IQ_QUESTIONS_AUTO_REFRIGERATOR,
   DEFAULT_OQ_QUESTIONS_AUTO_REFRIGERATOR,
+  DEFAULT_IQ_QUESTIONS_CHAMBER,
+  DEFAULT_OQ_QUESTIONS_CHAMBER,
   DEFAULT_IQ_QUESTIONS_WAREHOUSE,
   DEFAULT_OQ_QUESTIONS_WAREHOUSE,
   STAGE_TEMPLATES,
@@ -78,6 +80,7 @@ import {
   insertQuestionTemplate,
   updateQuestionTemplate,
   deleteQuestionTemplate,
+  ensureChamberQuestionTemplateStorage,
   getExcursionSession,
   upsertExcursionSession,
   listExcursionLoggers,
@@ -204,12 +207,22 @@ function defaultQuestionsFor(stage: "iq" | "oq", equipmentType?: string | null):
   if (equipmentType === "warehouse") {
     return stage === "iq" ? DEFAULT_IQ_QUESTIONS_WAREHOUSE : DEFAULT_OQ_QUESTIONS_WAREHOUSE;
   }
-  if (equipmentType === "auto-refrigerator" || equipmentType === "chamber") {
+  if (equipmentType === "auto-refrigerator") {
     return stage === "iq"
       ? DEFAULT_IQ_QUESTIONS_AUTO_REFRIGERATOR
       : DEFAULT_OQ_QUESTIONS_AUTO_REFRIGERATOR;
   }
+  if (equipmentType === "chamber") {
+    return stage === "iq" ? DEFAULT_IQ_QUESTIONS_CHAMBER : DEFAULT_OQ_QUESTIONS_CHAMBER;
+  }
   return stage === "iq" ? DEFAULT_IQ_QUESTIONS : DEFAULT_OQ_QUESTIONS;
+}
+
+async function ensureChamberQuestionsReady() {
+  await ensureChamberQuestionTemplateStorage(
+    DEFAULT_IQ_QUESTIONS_CHAMBER,
+    DEFAULT_OQ_QUESTIONS_CHAMBER,
+  );
 }
 
 function normalizeReportActorName(name: unknown): string | null {
@@ -638,10 +651,10 @@ export const appRouter = router({
     questions: publicProcedure
       .input(z.object({ stage: z.enum(["iq", "oq"]), equipmentType: z.string().optional() }))
       .query(async ({ input }) => {
+        if (input.equipmentType === "chamber") await ensureChamberQuestionsReady();
         // Try to get DB templates for this equipment type first
         if (input.equipmentType) {
-          const templateEquipmentType = input.equipmentType === "chamber" ? "auto-refrigerator" : input.equipmentType;
-          const dbTemplates = await listQuestionTemplates(input.stage, templateEquipmentType);
+          const dbTemplates = await listQuestionTemplates(input.stage, input.equipmentType);
           if (dbTemplates.length > 0) {
             return dbTemplates.map(t => t.text);
           }
@@ -1584,19 +1597,23 @@ export const appRouter = router({
         /** For warehouse: filter by equipment kind. Pass null for general warehouse questions, a kind string for kind-specific. */
         equipmentKind: z.string().nullable().optional(),
       }).optional())
-      .query(({ input }) => listAllQuestionTemplates(input?.equipmentType, input?.equipmentKind)),
+      .query(async ({ input }) => {
+        if (input?.equipmentType === "chamber") await ensureChamberQuestionsReady();
+        return listAllQuestionTemplates(input?.equipmentType, input?.equipmentKind);
+      }),
     create: protectedProcedure
       .input(
         z.object({
           stage: z.enum(["iq", "oq"]),
           text: z.string().min(1),
-          equipmentType: z.enum(["refrigerator", "auto-refrigerator", "warehouse", "other"]).optional(),
+          equipmentType: z.enum(["refrigerator", "auto-refrigerator", "chamber", "warehouse", "other"]).optional(),
           /** For warehouse: which equipment kind these questions apply to */
           equipmentKind: z.enum(["conditioner", "ventilation", "heat_curtain", "chiller", "fan_coil", "other"]).nullable().optional(),
         }),
       )
       .mutation(async ({ input }) => {
         const eqType = input.equipmentType || "refrigerator";
+        if (eqType === "chamber") await ensureChamberQuestionsReady();
         const eqKind = input.equipmentKind ?? null;
         // Place new question at the end of its stage+equipmentType+equipmentKind
         const all = await listAllQuestionTemplates(eqType, eqKind);
@@ -1637,10 +1654,11 @@ export const appRouter = router({
       }),
     seedDefaults: protectedProcedure
       .input(z.object({
-        equipmentType: z.enum(["refrigerator", "auto-refrigerator", "warehouse", "other"]),
+        equipmentType: z.enum(["refrigerator", "auto-refrigerator", "chamber", "warehouse", "other"]),
         overwrite: z.boolean().optional(),
       }))
       .mutation(async ({ input }) => {
+        if (input.equipmentType === "chamber") await ensureChamberQuestionsReady();
         const existing = await listAllQuestionTemplates(input.equipmentType);
         if (existing.length > 0 && !input.overwrite) {
           return { inserted: 0, skipped: existing.length };

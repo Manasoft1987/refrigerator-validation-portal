@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_IQ_QUESTIONS,
   DEFAULT_IQ_QUESTIONS_AUTO_REFRIGERATOR,
+  DEFAULT_IQ_QUESTIONS_CHAMBER,
   DEFAULT_IQ_QUESTIONS_WAREHOUSE,
   DEFAULT_OQ_QUESTIONS,
   DEFAULT_OQ_QUESTIONS_AUTO_REFRIGERATOR,
+  DEFAULT_OQ_QUESTIONS_CHAMBER,
   DEFAULT_OQ_QUESTIONS_WAREHOUSE,
 } from "../shared/validation";
 import { buildWarehouseQuestions } from "./warehouseQuestions";
@@ -26,6 +28,20 @@ describe("auto-refrigerator question defaults", () => {
     expect(DEFAULT_OQ_QUESTIONS_AUTO_REFRIGERATOR[4]).toBe(
       "Корректно ли работает индикация на дисплее (температура, режимы)?",
     );
+  });
+});
+
+describe("cold chamber question defaults", () => {
+  it("provides chamber-specific IQ questions without vehicle checks", () => {
+    expect(DEFAULT_IQ_QUESTIONS_CHAMBER).toHaveLength(9);
+    expect(DEFAULT_IQ_QUESTIONS_CHAMBER[0]).toContain("холодильная камера");
+    expect(DEFAULT_IQ_QUESTIONS_CHAMBER.join(" ")).not.toMatch(/VIN|государственный номер|водительское удостоверение|страховой полис/i);
+  });
+
+  it("provides chamber-specific OQ questions", () => {
+    expect(DEFAULT_OQ_QUESTIONS_CHAMBER).toHaveLength(8);
+    expect(DEFAULT_OQ_QUESTIONS_CHAMBER[4]).toContain("циркуляция воздуха");
+    expect(DEFAULT_OQ_QUESTIONS_CHAMBER[6]).toContain("открытой двери");
   });
 });
 
