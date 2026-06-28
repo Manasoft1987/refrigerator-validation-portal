@@ -61,7 +61,7 @@ export default function ChecklistStep({
   );
 
   const existingQ = trpc.checklist.get.useQuery({ protocolId, stage, warehouseEquipmentId: effectiveEquipmentId });
-  const blocksQ = trpc.templates.stageBlocks.useQuery({ stage });
+  const blocksQ = trpc.templates.stageBlocks.useQuery({ stage, equipmentType });
 
   const [items, setItems] = useState<Item[]>([]);
 

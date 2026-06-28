@@ -202,6 +202,7 @@ export function calculateAllOperationalMetrics(
   hotSensorId: string | number | null,
   coldSensorId: string | number | null,
   sensorPositions?: Record<string, string>,
+  equipmentType?: string,
 ): OperationalMetrics {
   // Use average or primary logger for calculations
   const primaryLogger = loggers.length > 0 ? loggers[0] : (null as any);
@@ -222,13 +223,16 @@ export function calculateAllOperationalMetrics(
     sensorPositions,
   );
 
+  const subject = equipmentType === "chamber" ? "Холодильная камера" : "Авторефрижератор";
+  const retentionSubject = equipmentType === "chamber" ? "камера способна" : "кузов способен";
+
   return {
     warmupTimeMinutes,
     doorOpeningTimeMinutes,
     thermalRetentionMinutes,
     warmupDescription:
       warmupTimeMinutes !== null
-        ? `Авторефрижератор входит в требуемый температурный режим за ${warmupTimeMinutes} минут.`
+        ? `${subject} входит в требуемый температурный режим за ${warmupTimeMinutes} минут.`
         : "Время входа в режим не определено.",
     doorOpeningDescription:
       doorOpeningTimeMinutes !== null
@@ -236,7 +240,7 @@ export function calculateAllOperationalMetrics(
         : "Время открытия двери не определено.",
     thermalRetentionDescription:
       thermalRetentionMinutes !== null
-        ? `При выключении холодильного агрегата кузов способен сохранять требуемый режим в течение ${thermalRetentionMinutes} минут.`
+        ? `При выключении холодильного агрегата ${retentionSubject} сохранять требуемый режим в течение ${thermalRetentionMinutes} минут.`
         : "Время сохранения режима не определено.",
   };
 }

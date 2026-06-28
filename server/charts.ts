@@ -977,6 +977,7 @@ export function drawReeferTruckDiagram3D(
   title?: string,
   hotLabel?: string | null,
   coldLabel?: string | null,
+  objectType: "truck" | "chamber" = "truck",
 ): void {
   // Box world dimensions (arbitrary units, scaled to SVG-like coords via scale)
   const BW = 1.6; // width  (X)
@@ -1055,7 +1056,8 @@ export function drawReeferTruckDiagram3D(
 
   // Ground shadow removed per user request
 
-  // Truck chassis, cab and wheels: drawn only in the reefer-truck diagram.
+  // Truck chassis, cab and wheels are omitted for stationary cold chambers.
+  if (objectType === "truck") {
   doc.save();
   doc.lineWidth(3.5).strokeColor("#475569");
   doc.moveTo(bodyMinX + 8, chassisY).lineTo(cabX + 64, chassisY).stroke();
@@ -1081,6 +1083,7 @@ export function drawReeferTruckDiagram3D(
   doc.font("bold").fontSize(6).fillColor("#475569");
   doc.text("Кабина", cabX + 9, chassisY + 20, { width: 42, align: "center", lineBreak: false });
   doc.restore();
+  }
 
   // ── Draw faces (painter's algorithm: back → sides → top → front) ──
   doc.save();

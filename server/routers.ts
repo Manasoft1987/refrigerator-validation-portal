@@ -10,6 +10,7 @@ import {
   DEFAULT_IQ_QUESTIONS_WAREHOUSE,
   DEFAULT_OQ_QUESTIONS_WAREHOUSE,
   STAGE_TEMPLATES,
+  CHAMBER_STAGE_TEMPLATES,
   WAREHOUSE_STAGE_TEMPLATES,
   TEMP_MODES,
   DEFAULT_SENSOR_ACCURACY_C,
@@ -676,8 +677,10 @@ export const appRouter = router({
         return defaultQuestionsFor(input.stage, input.equipmentType);
       }),
     stageBlocks: publicProcedure
-      .input(z.object({ stage: z.enum(["iq", "oq", "pv"]) }))
-      .query(({ input }) => STAGE_TEMPLATES[input.stage]),
+      .input(z.object({ stage: z.enum(["iq", "oq", "pv"]), equipmentType: z.string().optional() }))
+      .query(({ input }) => input.equipmentType === "chamber"
+        ? CHAMBER_STAGE_TEMPLATES[input.stage]
+        : STAGE_TEMPLATES[input.stage]),
   }),
 
   /* -------------------------------------------------------------- */
@@ -1308,6 +1311,13 @@ export const appRouter = router({
         const reportInternalLoggers = preparedLoggers.filter(l => l.logger.role === "internal");
         const hasPVData = preparedLoggers.some(l => l.series.temp.length > 0);
         const isWarehouseProtocol = protocol.equipmentType === "warehouse";
+        const isChamberProtocol =
+          protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || gi?.equipmentType === "chamber";
+        const reportStageTemplates = isWarehouseProtocol
+          ? WAREHOUSE_STAGE_TEMPLATES
+          : isChamberProtocol
+            ? CHAMBER_STAGE_TEMPLATES
+            : STAGE_TEMPLATES;
         if (hasPVData) {
           for (const item of reportInternalLoggers) {
             const l = item.logger;
@@ -1438,7 +1448,7 @@ export const appRouter = router({
             ],
           },
           iq: {
-            ...(isWarehouseProtocol ? WAREHOUSE_STAGE_TEMPLATES.iq : STAGE_TEMPLATES.iq),
+            ...reportStageTemplates.iq,
             items: iqItems.map(i => ({
               questionIndex: i.questionIndex,
               questionText: i.questionText,
@@ -1449,7 +1459,7 @@ export const appRouter = router({
             verdict: protocol.iqVerdict,
           },
           oq: {
-            ...(isWarehouseProtocol ? WAREHOUSE_STAGE_TEMPLATES.oq : STAGE_TEMPLATES.oq),
+            ...reportStageTemplates.oq,
             items: oqItems.map(i => ({
               questionIndex: i.questionIndex,
               questionText: i.questionText,
@@ -1460,7 +1470,7 @@ export const appRouter = router({
             verdict: protocol.oqVerdict,
           },
           pv: {
-            ...(isWarehouseProtocol ? WAREHOUSE_STAGE_TEMPLATES.pv : STAGE_TEMPLATES.pv),
+            ...reportStageTemplates.pv,
             tempMode,
             rawRangeMin: guardedRange.rawMin,
             rawRangeMax: guardedRange.rawMax,

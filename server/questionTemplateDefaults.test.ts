@@ -3,6 +3,7 @@ import {
   DEFAULT_IQ_QUESTIONS,
   DEFAULT_IQ_QUESTIONS_AUTO_REFRIGERATOR,
   DEFAULT_IQ_QUESTIONS_CHAMBER,
+  CHAMBER_STAGE_TEMPLATES,
   DEFAULT_IQ_QUESTIONS_WAREHOUSE,
   DEFAULT_OQ_QUESTIONS,
   DEFAULT_OQ_QUESTIONS_AUTO_REFRIGERATOR,
@@ -42,6 +43,16 @@ describe("cold chamber question defaults", () => {
     expect(DEFAULT_OQ_QUESTIONS_CHAMBER).toHaveLength(8);
     expect(DEFAULT_OQ_QUESTIONS_CHAMBER[4]).toContain("циркуляция воздуха");
     expect(DEFAULT_OQ_QUESTIONS_CHAMBER[6]).toContain("открытой двери");
+  });
+});
+
+describe("cold chamber stage text", () => {
+  it("does not contain transport-specific wording", () => {
+    const text = Object.values(CHAMBER_STAGE_TEMPLATES)
+      .flatMap(stage => [stage.purpose, stage.description, stage.criteria])
+      .join(" ");
+    expect(text).not.toMatch(/авторефрижератор|кузов|кабина|транспортное средство|VIN/i);
+    expect(text).toContain("холодильная камера");
   });
 });
 

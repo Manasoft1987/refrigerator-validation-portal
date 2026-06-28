@@ -37,6 +37,7 @@ type Props = {
   doorPos?: DragPos | null;
   onCoolingUnitPosChange?: (pos: DragPos) => void;
   onDoorPosChange?: (pos: DragPos) => void;
+  objectType?: "truck" | "chamber";
 };
 
 // ─── Isometric projection ─────────────────────────────────────────────────────
@@ -137,6 +138,7 @@ export default function ReeferTruckDiagram3D({
   doorPos,
   onCoolingUnitPosChange,
   onDoorPosChange,
+  objectType = "truck",
 }: Props) {
   const utils = trpc.useUtils();
   const updateLogger = trpc.pv.updateLogger.useMutation({
@@ -300,6 +302,7 @@ export default function ReeferTruckDiagram3D({
           fill="rgba(0,0,0,0.08)"
         />
 
+        {objectType === "truck" && (
         <g opacity={0.98}>
           <line
             x1={bodyMinX + 10}
@@ -344,6 +347,7 @@ export default function ReeferTruckDiagram3D({
             Кабина
           </text>
         </g>
+        )}
 
         {/* ══ CARGO BODY ══════════════════════════════════════════════════════ */}
         {/* Painter's algorithm: back faces first, then sides, then top/front   */}
