@@ -11,6 +11,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { WAREHOUSE_MAPPING_METHOD_NOTE } from "@shared/validation";
 import {
   Accordion,
   AccordionContent,
@@ -32,7 +34,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { Trash2, Plus, ChevronRight, ChevronLeft, Save, Pencil, ClipboardCopy } from "lucide-react";
+import { Trash2, Plus, ChevronRight, ChevronLeft, Save, Pencil, ClipboardCopy, Info } from "lucide-react";
 import { toast } from "sonner";
 
 /* ─── Default section texts ─────────────────────────────────────────────── */
@@ -573,6 +575,14 @@ export default function WarehouseProtocolStep({ protocolId, onDone, onBack }: Pr
           <Badge variant="secondary" className="shrink-0 mt-1">Есть несохранённые изменения</Badge>
         )}
       </div>
+
+      <Alert className="border-sky-200 bg-sky-50/60 text-sky-950">
+        <Info />
+        <AlertTitle>Методологическое основание</AlertTitle>
+        <AlertDescription className="text-sky-900/80">
+          <p>{WAREHOUSE_MAPPING_METHOD_NOTE}</p>
+        </AlertDescription>
+      </Alert>
 
       {/* Sections accordion */}
       <Accordion type="multiple" className="space-y-1">

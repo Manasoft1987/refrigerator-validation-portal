@@ -207,7 +207,7 @@ export default function PVStep({
   const normalizedDurationHours = (value: unknown) => {
     const parsed = Number(value);
     const fallback = Number.isFinite(parsed) && parsed > 0 ? parsed : 72;
-    return isWarehouse ? Math.min(168, Math.max(72, fallback)) : fallback;
+    return isWarehouse ? Math.max(72, fallback) : fallback;
   };
 
   if (pvQ.isLoading || !form) {
@@ -280,13 +280,12 @@ export default function PVStep({
               />
             </Field>
             <Field
-              label={isWarehouse ? "Длительность, ч" : "Мин. длит., ч"}
-              hint={isWarehouse ? "Для помещения хранения: от 72 до 168 ч (от 3 до 7 суток)." : undefined}
+              label={isWarehouse ? "Минимальная длительность, ч" : "Мин. длит., ч"}
+              hint={isWarehouse ? "Для помещения хранения: от 72 ч (от 3 суток и далее)." : undefined}
             >
               <Input
                 type="number"
                 min={isWarehouse ? 72 : 1}
-                max={isWarehouse ? 168 : undefined}
                 value={form.minDurationHours}
                 onChange={e => setForm({ ...form, minDurationHours: e.target.value })}
                 onBlur={e => {

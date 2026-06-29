@@ -811,7 +811,7 @@ export const appRouter = router({
         const { protocolId, customMin, customMax, samplingStepMinutes, coolingUnitPos, doorPos, floorPlanObjects, roomLengthM, roomWidthM, roomHeightM, planImageKey, planImageUrl, ...rest } = input;
         const patch: any = { ...rest };
         if (protocol.equipmentType === "warehouse" && patch.minDurationHours !== undefined) {
-          patch.minDurationHours = Math.min(168, Math.max(72, patch.minDurationHours));
+          patch.minDurationHours = Math.max(72, patch.minDurationHours);
         }
         if (customMin !== undefined) patch.customMin = customMin === null ? null : String(customMin);
         if (customMax !== undefined) patch.customMax = customMax === null ? null : String(customMax);

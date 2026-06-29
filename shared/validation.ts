@@ -198,12 +198,19 @@ export function computeWarehouseSensorCount(opts: {
 }
 
 export const WAREHOUSE_STUDY_TYPES = [
-  { id: "warehouse", label: "Склад", duration: "от 3 до 7 суток" },
-  { id: "controlled_env", label: "Помещение с контролируемой средой", duration: "от 3 до 7 суток" },
-  { id: "reception", label: "Зона приёмки", duration: "от 3 до 7 суток" },
-  { id: "expedition", label: "Зона экспедиции", duration: "от 3 до 7 суток" },
+  { id: "warehouse", label: "Склад", duration: "от 3 суток и далее" },
+  { id: "controlled_env", label: "Помещение с контролируемой средой", duration: "от 3 суток и далее" },
+  { id: "reception", label: "Зона приёмки", duration: "от 3 суток и далее" },
+  { id: "expedition", label: "Зона экспедиции", duration: "от 3 суток и далее" },
   { id: "cold_room", label: "Холодильная/морозильная камера в помещении с контролируемой средой", duration: "24–72 ч" },
 ] as const;
+
+export const WAREHOUSE_MAPPING_METHOD_NOTE =
+  "Руководство по проведению температурного картирования зон хранения лекарственных средств, " +
+  "утверждённое Рекомендацией Коллегии ЕЭК № 8, носит рекомендательный характер. " +
+  "Настоящий протокол адаптирован к его структуре и методическим подходам. " +
+  "Продолжительность испытания установлена внутренней процедурой: от 3 суток и далее " +
+  "(не менее 72 часов), с учётом оценки рисков, режима работы объекта и репрезентативности периода наблюдения.";
 
 export const WAREHOUSE_SEASONS = [
   { id: "summer", label: "Летнее (тёплый период)" },

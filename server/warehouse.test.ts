@@ -1,14 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { computeWarehouseSensorCount, WAREHOUSE_STUDY_TYPES } from "../shared/validation";
+import {
+  computeWarehouseSensorCount,
+  WAREHOUSE_MAPPING_METHOD_NOTE,
+  WAREHOUSE_STUDY_TYPES,
+} from "../shared/validation";
 import { generateProtocolPdf } from "./pdfReport";
 
 /* -------------------------------------------------------------------------- */
 /* EAEU Рек. №8 (п. 16д) — расчёт количества регистраторов                    */
 /* -------------------------------------------------------------------------- */
 describe("computeWarehouseSensorCount – EAEU Рек. №8 п. 16д", () => {
-  it("uses a 3–7 day duration for storage-room studies", () => {
+  it("uses a duration from 3 days onward for storage-room studies", () => {
     const storageRoomStudies = WAREHOUSE_STUDY_TYPES.filter(study => study.id !== "cold_room");
-    expect(storageRoomStudies.every(study => study.duration === "от 3 до 7 суток")).toBe(true);
+    expect(storageRoomStudies.every(study => study.duration === "от 3 суток и далее")).toBe(true);
+    expect(WAREHOUSE_MAPPING_METHOD_NOTE).toContain("носит рекомендательный характер");
+    expect(WAREHOUSE_MAPPING_METHOD_NOTE).toContain("от 3 суток и далее");
   });
 
   it("returns zero total when dimensions are missing", () => {

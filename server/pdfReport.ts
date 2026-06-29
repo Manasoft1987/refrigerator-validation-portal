@@ -22,7 +22,10 @@ import {
   type EventMarker,
 } from "./charts";
 import { calculateAllOperationalMetrics } from "./operationalMetrics";
-import { computeWarehouseSensorCount } from "../shared/validation";
+import {
+  computeWarehouseSensorCount,
+  WAREHOUSE_MAPPING_METHOD_NOTE,
+} from "../shared/validation";
 import type { OperationalMetrics } from "./operationalMetrics";
 
 const PAGE_MARGIN = 56;
@@ -1330,7 +1333,7 @@ function drawStageVerdict(
 function drawPVParams(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: ReportInput) {
   const durationMs = pv.startAt && pv.endAt ? pv.endAt - pv.startAt : 0;
   const durationRequirement = input?.protocol?.equipmentType === "warehouse"
-    ? `от 3 до 7 суток (72–168 ч); выбрано ${pv.minDurationHours} ч`
+    ? `от 3 суток и далее (не менее 72 ч); выбрано ${pv.minDurationHours} ч`
     : `${pv.minDurationHours} ч`;
   const rows: Array<[string, string]> = [
     ["Температурный режим", TEMP_MODE_LABEL[pv.tempMode] || pv.tempMode],
@@ -2080,7 +2083,7 @@ function drawChecklistPlan(doc: PDFKit.PDFDocument, items: ChecklistItem[]) {
 
 function drawPVPlan(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: ReportInput) {
   const durationRequirement = input?.protocol?.equipmentType === "warehouse"
-    ? `от 3 до 7 суток (72–168 ч); выбрано ${pv.minDurationHours} ч`
+    ? `от 3 суток и далее (не менее 72 ч); выбрано ${pv.minDurationHours} ч`
     : `не менее ${pv.minDurationHours} ч`;
   const rows: Array<[string, string]> = [
     ["Температурный режим", TEMP_MODE_LABEL[pv.tempMode] || pv.tempMode],
@@ -4163,6 +4166,8 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
   drawSubTitle(doc, "2.2. Обоснование проведения температурного картирования");
   drawSubTitle2(doc, "2.2.1. Нормативные основания");
   renderTextBlock(doc, sec("2.2.1"));
+  drawSubTitle2(doc, "Принятый методологический подход");
+  renderTextBlock(doc, WAREHOUSE_MAPPING_METHOD_NOTE);
   drawSubTitle2(doc, "2.2.2. Конкретные основания для проведения исследования");
   renderTextBlock(doc, sec("2.2.2"));
 
