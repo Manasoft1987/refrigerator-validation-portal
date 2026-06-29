@@ -31,7 +31,7 @@ export interface ObjectSensor {
 export type FloorObjectType =
   | "shelf" | "pallet" | "cabinet" | "display_case" | "refrigerator"
   | "table" | "window" | "radiator" | "vent" | "door_obj" | "cooling_unit"
-  | "sensor_point";
+  | "partition" | "sensor_point";
 
 export interface FloorPlanObject {
   id: string;
@@ -71,6 +71,7 @@ const OBJECT_DEFS: ObjectDef[] = [
   { type: "vent",         ruLabel: "Вентшахта",   defaultW: 3,  defaultH: 3,  fill: "#f3e8ff", stroke: "#7c3aed", textColor: "#4c1d95", icon: "⊕" },
   { type: "door_obj",     ruLabel: "Дверь",       defaultW: 4,  defaultH: 1,  fill: "#fde68a", stroke: "#b45309", textColor: "#78350f", icon: "🚪" },
   { type: "cooling_unit", ruLabel: "Агрегат",     defaultW: 6,  defaultH: 4,  fill: "#a5f3fc", stroke: "#0891b2", textColor: "#164e63", icon: "❄" },
+  { type: "partition",    ruLabel: "Стена / перегородка", defaultW: 18, defaultH: 1.5, fill: "#64748b", stroke: "#334155", textColor: "#0f172a", icon: "▰" },
   { type: "sensor_point",  ruLabel: "Датчик",      defaultW: 3,  defaultH: 3,  fill: "#e0f2fe", stroke: "#0369a1", textColor: "#1e3a8a", icon: "●" },
 ];
 
@@ -278,8 +279,8 @@ function ObjectShape({
       {/* Resize handles (when selected) */}
       {selected && (
         <>
-          {([[-1,-1],[1,-1],[1,1],[-1,1]] as [number,number][]).map(([dx, dy], i) => (
-            <circle key={i} cx={x + dx * w/2} cy={y + dy * h/2} r={HR} fill="white" stroke="#f59e0b" strokeWidth={1.5}
+          {([[x,y],[x+w,y],[x+w,y+h],[x,y+h]] as [number,number][]).map(([handleX, handleY], i) => (
+            <circle key={i} cx={handleX} cy={handleY} r={HR} fill="white" stroke="#f59e0b" strokeWidth={1.5}
               style={{ cursor: "nwse-resize", pointerEvents: "all" }}
               onPointerDown={ev => { ev.stopPropagation(); onResizePointerDown(obj.id, (["nw","ne","se","sw"][i] as "nw"|"ne"|"se"|"sw"), ev); }}
             />

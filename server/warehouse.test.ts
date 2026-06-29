@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { computeWarehouseSensorCount } from "../shared/validation";
+import { computeWarehouseSensorCount, WAREHOUSE_STUDY_TYPES } from "../shared/validation";
 import { generateProtocolPdf } from "./pdfReport";
 
 /* -------------------------------------------------------------------------- */
 /* EAEU Рек. №8 (п. 16д) — расчёт количества регистраторов                    */
 /* -------------------------------------------------------------------------- */
 describe("computeWarehouseSensorCount – EAEU Рек. №8 п. 16д", () => {
+  it("uses a 3–7 day duration for storage-room studies", () => {
+    const storageRoomStudies = WAREHOUSE_STUDY_TYPES.filter(study => study.id !== "cold_room");
+    expect(storageRoomStudies.every(study => study.duration === "от 3 до 7 суток")).toBe(true);
+  });
+
   it("returns zero total when dimensions are missing", () => {
     const r = computeWarehouseSensorCount({});
     expect(r.total).toBe(0);
@@ -174,6 +179,19 @@ describe("generateProtocolPdf – warehouse / storage zone", () => {
           hotIdx: 0, coldIdx: 0, extIndices: [],
         },
         pvLoggers,
+        floorPlanObjects: [
+          {
+            id: "partition-1",
+            type: "partition",
+            xPct: 35,
+            yPct: 20,
+            widthPct: 30,
+            heightPct: 1.5,
+            heightM: 3,
+            rotation: 90,
+            label: "Перегородка",
+          },
+        ],
       } as any);
 
       expect(Buffer.isBuffer(buf)).toBe(true);

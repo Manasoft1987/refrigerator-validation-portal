@@ -650,7 +650,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   doc.addPage();
   drawSectionTitle(doc, "9. Результаты PV — Эксплуатационная квалификация");
   drawStageDataEntryTable(doc, input, "PV");
-  drawPVParams(doc, input.pv);
+  drawPVParams(doc, input.pv, input);
 
   if (input.pvLoggers && input.pvLoggers.length > 0) {
     const eqType = input.generalInfo?.equipmentType || input.protocol?.equipmentType || "";
@@ -1327,15 +1327,23 @@ function drawStageVerdict(
   doc.moveDown(0.6);
 }
 
-function drawPVParams(doc: PDFKit.PDFDocument, pv: ReportInput["pv"]) {
+function drawPVParams(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: ReportInput) {
   const durationMs = pv.startAt && pv.endAt ? pv.endAt - pv.startAt : 0;
+  const durationRequirement = input?.protocol?.equipmentType === "warehouse"
+    ? `от 3 до 7 суток (72–168 ч); выбрано ${pv.minDurationHours} ч`
+    : `${pv.minDurationHours} ч`;
   const rows: Array<[string, string]> = [
     ["Температурный режим", TEMP_MODE_LABEL[pv.tempMode] || pv.tempMode],
     ...sensorAccuracyRows(pv),
     ["Начало испытания", pv.startAt ? fmtDate(pv.startAt) : "—"],
     ["Окончание испытания", pv.endAt ? fmtDate(pv.endAt) : "—"],
     ["Фактическая длительность", durationMs ? fmtDuration(durationMs) : "—"],
-    ["Минимальная длительность (по умолчанию)", `${pv.minDurationHours} ч`],
+    [
+      input?.protocol?.equipmentType === "warehouse"
+        ? "Требуемая длительность"
+        : "Минимальная длительность (по умолчанию)",
+      durationRequirement,
+    ],
     ["Минимальное число датчиков (по умолчанию)", String(pv.minSensorCount)],
     ["Использовано датчиков", String(pv.loggers.length)],
     ["Внутренних датчиков", String(pv.loggers.filter(l => l.role === "internal").length)],
@@ -2071,10 +2079,13 @@ function drawChecklistPlan(doc: PDFKit.PDFDocument, items: ChecklistItem[]) {
 }
 
 function drawPVPlan(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: ReportInput) {
+  const durationRequirement = input?.protocol?.equipmentType === "warehouse"
+    ? `от 3 до 7 суток (72–168 ч); выбрано ${pv.minDurationHours} ч`
+    : `не менее ${pv.minDurationHours} ч`;
   const rows: Array<[string, string]> = [
     ["Температурный режим", TEMP_MODE_LABEL[pv.tempMode] || pv.tempMode],
     ...sensorAccuracyRows(pv),
-    ["Требуемая длительность испытания", `не менее ${pv.minDurationHours} ч`],
+    ["Требуемая длительность испытания", durationRequirement],
     ["Минимальное число внутренних датчиков", String(pv.minSensorCount)],
     [
       "Места установки датчиков",
@@ -3363,6 +3374,7 @@ function drawWarehousePlanDiagram(
       vent:         { fill: "#f3e8ff", stroke: "#7c3aed", text: "#4c1d95" },
       door_obj:     { fill: "#fde68a", stroke: "#b45309", text: "#78350f" },
       cooling_unit: { fill: "#a5f3fc", stroke: "#0891b2", text: "#164e63" },
+      partition:    { fill: "#64748b", stroke: "#334155", text: "#0f172a" },
     };
     for (const obj of floorObjs) {
       doc.save(); // isolate each object's transform
@@ -3378,8 +3390,12 @@ function drawWarehousePlanDiagram(
         doc.translate(cx, cy).rotate(obj.rotation).translate(-cx, -cy);
       }
       // Fill + stroke
-      doc.fillColor(style.fill).strokeColor(style.stroke).lineWidth(0.8)
-        .roundedRect(ox, oy, ow, oh, 2).fillAndStroke();
+      doc.fillColor(style.fill).strokeColor(style.stroke).lineWidth(0.8);
+      if (obj.type === "partition") {
+        doc.rect(ox, oy, ow, oh).fillAndStroke();
+      } else {
+        doc.roundedRect(ox, oy, ow, oh, 2).fillAndStroke();
+      }
       // Shelf vertical lines
       if (obj.type === "shelf" && ow > 20) {
         const nLines = Math.max(1, Math.floor(ow / 15));

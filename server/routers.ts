@@ -807,9 +807,12 @@ export const appRouter = router({
         }),
       )
       .mutation(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
         const { protocolId, customMin, customMax, samplingStepMinutes, coolingUnitPos, doorPos, floorPlanObjects, roomLengthM, roomWidthM, roomHeightM, planImageKey, planImageUrl, ...rest } = input;
         const patch: any = { ...rest };
+        if (protocol.equipmentType === "warehouse" && patch.minDurationHours !== undefined) {
+          patch.minDurationHours = Math.min(168, Math.max(72, patch.minDurationHours));
+        }
         if (customMin !== undefined) patch.customMin = customMin === null ? null : String(customMin);
         if (customMax !== undefined) patch.customMax = customMax === null ? null : String(customMax);
         if (samplingStepMinutes !== undefined) {
@@ -1338,7 +1341,7 @@ export const appRouter = router({
           const durationHours = session?.startAt && session?.endAt
             ? (session.endAt - session.startAt) / 3600000
             : 0;
-          const minDurationHours = session?.minDurationHours ?? (isWarehouseProtocol ? 168 : 72);
+          const minDurationHours = session?.minDurationHours ?? 72;
           const minSensorCount = session?.minSensorCount ?? (isWarehouseProtocol ? 8 : 9);
           if (durationHours < minDurationHours) {
             reportFailureReasons.push(
@@ -1479,7 +1482,7 @@ export const appRouter = router({
             rangeMax: max,
             startAt: session?.startAt ?? null,
             endAt: session?.endAt ?? null,
-            minDurationHours: session?.minDurationHours ?? (isWarehouseProtocol ? 168 : 72),
+            minDurationHours: session?.minDurationHours ?? 72,
             minSensorCount: session?.minSensorCount ?? (isWarehouseProtocol ? 8 : 9),
             loggers: preparedLoggers.map(({ logger: l, series, stats, deviations }) => ({
               id: l.id,

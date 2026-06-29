@@ -67,6 +67,7 @@ export default function PVStep({
   const giQ = trpc.generalInfo.get.useQuery({ protocolId });
   const protocolQ = trpc.protocols.get.useQuery({ id: protocolId });
   const equipmentType = protocolQ.data?.equipmentType ?? "refrigerator";
+  const isWarehouse = equipmentType === "warehouse";
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [selectedLogger, setSelectedLogger] = useState<number | null>(null);
@@ -203,6 +204,11 @@ export default function PVStep({
   }, [form, session]);
 
   const internals = loggers.filter(l => l.role === "internal");
+  const normalizedDurationHours = (value: unknown) => {
+    const parsed = Number(value);
+    const fallback = Number.isFinite(parsed) && parsed > 0 ? parsed : 72;
+    return isWarehouse ? Math.min(168, Math.max(72, fallback)) : fallback;
+  };
 
   if (pvQ.isLoading || !form) {
     return <div className="h-80 rounded-xl bg-muted animate-pulse" />;
@@ -215,7 +221,7 @@ export default function PVStep({
       tempMode: form.tempMode,
       startAt: utcMsFromLocalInput(form.startAt),
       endAt: utcMsFromLocalInput(form.endAt),
-      minDurationHours: Number(form.minDurationHours) || 72,
+      minDurationHours: normalizedDurationHours(form.minDurationHours),
       minSensorCount: Number(form.minSensorCount) || 9,
       samplingStepMinutes: Number.isFinite(step) && step > 0 ? step : null,
       customMin: form.customMin !== "" ? Number(form.customMin) : null,
@@ -273,11 +279,21 @@ export default function PVStep({
                 placeholder="по умолчанию режима"
               />
             </Field>
-            <Field label="Мин. длит., ч">
+            <Field
+              label={isWarehouse ? "Длительность, ч" : "Мин. длит., ч"}
+              hint={isWarehouse ? "Для помещения хранения: от 72 до 168 ч (от 3 до 7 суток)." : undefined}
+            >
               <Input
                 type="number"
+                min={isWarehouse ? 72 : 1}
+                max={isWarehouse ? 168 : undefined}
                 value={form.minDurationHours}
                 onChange={e => setForm({ ...form, minDurationHours: e.target.value })}
+                onBlur={e => {
+                  if (isWarehouse) {
+                    setForm({ ...form, minDurationHours: normalizedDurationHours(e.target.value) });
+                  }
+                }}
               />
             </Field>
             <Field label="Мин. внутренних датчиков">
@@ -309,7 +325,7 @@ export default function PVStep({
                   setWindowSuggestion(null);
                   findOptimalWindow.mutate({
                     protocolId,
-                    durationHours: Number(form.minDurationHours) || 72,
+                    durationHours: normalizedDurationHours(form.minDurationHours),
                   });
                 }}
                 disabled={findOptimalWindow.isPending || loggers.length === 0}
@@ -660,7 +676,7 @@ export default function PVStep({
                 tempMode: form.tempMode,
                 startAt: utcMsFromLocalInput(form.startAt),
                 endAt: utcMsFromLocalInput(form.endAt),
-                minDurationHours: Number(form.minDurationHours) || 72,
+                minDurationHours: normalizedDurationHours(form.minDurationHours),
                 minSensorCount: Number(form.minSensorCount) || 9,
                 samplingStepMinutes: Number.isFinite(step) && step > 0 ? step : null,
                 customMin: form.customMin !== "" ? Number(form.customMin) : null,
