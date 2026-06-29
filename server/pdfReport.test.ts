@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import PDFDocument from "pdfkit";
 import { generateProtocolPdf } from "./pdfReport";
 
 function mkSeries(start: number, hours: number, temp: number) {
@@ -292,6 +293,116 @@ describe("generateProtocolPdf", () => {
     },
     60_000,
   );
+
+  it(
+    "advances past empty warehouse equipment values before rendering the next item",
+    async () => {
+      const now = Date.UTC(2026, 5, 12, 9, 0, 0);
+      const originalText = (PDFDocument.prototype as any).text;
+      let firstSerialValue: string | undefined;
+      let firstSerialLabelY: number | undefined;
+      let firstSerialValueAfterY: number | undefined;
+      let secondEquipmentY: number | undefined;
+      let captureFirstSerialValue = false;
+
+      (PDFDocument.prototype as any).text = function (text: string, ...args: any[]) {
+        const beforeY = this.y;
+        const result = originalText.call(this, text, ...args);
+
+        if (text === "Серийный номер: " && firstSerialLabelY === undefined) {
+          firstSerialLabelY = beforeY;
+          captureFirstSerialValue = true;
+        } else if (captureFirstSerialValue) {
+          firstSerialValue = text;
+          firstSerialValueAfterY = this.y;
+          captureFirstSerialValue = false;
+        }
+
+        if (text.startsWith("Оборудование 2:")) {
+          secondEquipmentY = beforeY;
+        }
+
+        return result;
+      };
+
+      try {
+        await generateProtocolPdf({
+          org: { ...BASE_ORG, name: 'ТОО "АПТЕКАПЛЮС"' },
+          protocol: {
+            number: "VAL-2026-0001",
+            createdAt: new Date(now),
+            equipmentType: "warehouse",
+          },
+          generalInfo: {
+            ...BASE_GI,
+            equipmentType: "warehouse",
+            manufacturer: "",
+            model: "",
+            serial: "",
+            inventory: "",
+            year: 2026,
+            tempMode: "15-25",
+          },
+          warehouseEquipment: [
+            {
+              name: "Сплит-кондиционер настенного типа",
+              manufacturer: "Dantex",
+              model: "DM-PAC036G/YMF",
+              serial: "",
+              purpose: "",
+            },
+            {
+              name: "Прямоугольный канальный вентилятор",
+              manufacturer: "Airone",
+              model: "60-35-4D VA",
+              serial: "",
+              purpose: "",
+            },
+          ],
+          iq: {
+            purpose: "IQ",
+            description: "IQ",
+            criteria: "IQ",
+            items: [],
+            verdict: "none",
+          },
+          oq: {
+            purpose: "OQ",
+            description: "OQ",
+            criteria: "OQ",
+            items: [],
+            verdict: "none",
+          },
+          pv: {
+            purpose: "PV",
+            description: "PV",
+            criteria: "PV",
+            tempMode: "15-25",
+            rangeMin: 15,
+            rangeMax: 25,
+            startAt: now,
+            endAt: now,
+            minDurationHours: 0,
+            minSensorCount: 0,
+            loggers: [],
+            verdict: "none",
+            failureReasons: [],
+            hotIdx: null,
+            coldIdx: null,
+            extIndices: [],
+          },
+        });
+      } finally {
+        (PDFDocument.prototype as any).text = originalText;
+      }
+
+      expect(firstSerialValue).toBe("—");
+      expect(firstSerialValueAfterY).toBeGreaterThan(firstSerialLabelY!);
+      expect(secondEquipmentY).toBeGreaterThan(firstSerialValueAfterY!);
+    },
+    60_000,
+  );
+
   it(
     "generates warehouse protocol without warehouseSections (uses defaults)",
     async () => {

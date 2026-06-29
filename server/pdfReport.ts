@@ -4203,11 +4203,15 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
       ensureSpace(doc, 60);
       doc.font("bold").fontSize(10).fillColor(ACCENT)
         .text(`Оборудование ${idx + 1}: ${eq.name}`, { underline: false });
+      const safeValue = (v: string | null | undefined): string => {
+        const s = (v ?? "").toString().trim();
+        return s.length > 0 ? s : "—";
+      };
       const rows: [string, string][] = [
-        ["Производитель", eq.manufacturer ?? "—"],
-        ["Модель", eq.model ?? "—"],
-        ["Серийный номер", eq.serial ?? "—"],
-        ["Назначение", eq.purpose ?? "—"],
+        ["Производитель", safeValue(eq.manufacturer)],
+        ["Модель", safeValue(eq.model)],
+        ["Серийный номер", safeValue(eq.serial)],
+        ["Назначение", safeValue(eq.purpose)],
       ];
       rows.forEach(([label, value]) => {
         doc.font("body").fontSize(10).fillColor(MUTED).text(`${label}: `, { continued: true })
