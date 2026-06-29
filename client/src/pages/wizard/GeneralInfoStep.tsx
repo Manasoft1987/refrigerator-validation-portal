@@ -340,7 +340,7 @@ export default function GeneralInfoStep({
                     Параметры зоны хранения (Рек. ЕАЭК №8)
                   </h3>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Геометрия используется для расчёта минимального количества регистраторов и построения схемы размещения.
+                    Размеры заполняются при необходимости и используются для расчёта сетки регистраторов.
                   </p>
                 </div>
                 {sensorCalc.total > 0 && (
@@ -357,15 +357,15 @@ export default function GeneralInfoStep({
                 )}
               </div>
               <div className="grid md:grid-cols-3 gap-x-6 gap-y-4">
-                <Field label="Длина, м *">
+                <Field label="Длина, м (необязательно)">
                   <Input type="number" step="0.1" min="0" ref={lengthRef} defaultValue=""
                     onChange={() => setDimsTick(t => t + 1)} placeholder="напр. 12.5" />
                 </Field>
-                <Field label="Ширина, м *">
+                <Field label="Ширина, м (необязательно)">
                   <Input type="number" step="0.1" min="0" ref={widthRef} defaultValue=""
                     onChange={() => setDimsTick(t => t + 1)} placeholder="напр. 8.0" />
                 </Field>
-                <Field label="Высота, м *">
+                <Field label="Высота, м (необязательно)">
                   <Input type="number" step="0.1" min="0" ref={heightRef} defaultValue=""
                     onChange={() => setDimsTick(t => t + 1)} placeholder="напр. 3.5" />
                 </Field>

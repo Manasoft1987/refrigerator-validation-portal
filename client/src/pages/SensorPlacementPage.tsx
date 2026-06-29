@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import { ArrowLeft, Camera, Info, MapPin, Save } from "lucide-react";
@@ -196,6 +197,7 @@ export default function SensorPlacementPage() {
   const [doorPos, setDoorPos] = useState<{ x: number; y: number } | null>(null);
   const [floorPlanObjects, setFloorPlanObjects] = useState<FloorPlanObject[]>([]);
   const [activeTier, setActiveTier] = useState<number>(1);
+  const [showDimensions, setShowDimensions] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
   // Uncontrolled refs for room dimensions — immune to React re-renders
@@ -214,7 +216,11 @@ export default function SensorPlacementPage() {
     setInitialized(true);
     if ((session as any).coolingUnitPos) setCoolingUnitPos((session as any).coolingUnitPos);
     if ((session as any).doorPos) setDoorPos((session as any).doorPos);
-    if ((session as any).floorPlanObjects) setFloorPlanObjects((session as any).floorPlanObjects);
+    if ((session as any).floorPlanObjects) {
+      setFloorPlanObjects((session as any).floorPlanObjects.map((obj: FloorPlanObject) =>
+        obj.type === "cooling_unit" ? { ...obj, label: "Кондиционер" } : obj,
+      ));
+    }
   }
 
   // Seed room dim inputs once from server data (pvSession.roomXxx → fallback to generalInfo.whXxx)
@@ -256,9 +262,8 @@ export default function SensorPlacementPage() {
     const L = readDim(lengthRef);
     const W = readDim(widthRef);
     const H = readDim(heightRef);
-    // Capture plan PNG only if room dims look set (otherwise the SVG would be a useless square).
     let planResult: { ok: boolean; url?: string } = { ok: false };
-    if (isWarehouse && L && W && H && planRef.current) {
+    if (isWarehouse && planRef.current) {
       planResult = await captureAndSavePlan();
     }
     saveSession.mutate({
@@ -273,9 +278,8 @@ export default function SensorPlacementPage() {
     } as any, {
       onSuccess: () => {
         if (isWarehouse) {
-          if (planResult.ok) toast.success("Схема и размеры сохранены");
-          else if (L && W && H) toast.success("Размеры сохранены (снимок схемы не удалось получить)");
-          else toast.warning("Размеры помещения не указаны — снимок схемы не сохранён");
+          if (planResult.ok) toast.success("Схема сохранена");
+          else toast.warning("Данные схемы сохранены, но снимок для PDF создать не удалось");
         } else {
           toast.success("Сохранено");
         }
@@ -316,6 +320,7 @@ export default function SensorPlacementPage() {
           lengthM: liveL, widthM: liveW, heightM: liveH, externalEnv: !!giQ.data?.whExternalEnv,
         });
         const ready = calc.total > 0;
+        const canShowDimensions = liveL > 0 && liveW > 0;
         const allSensorPositions: SensorPosition[] = ready
           ? buildWarehousePositions({ lengthM: liveL, widthM: liveW, heightM: liveH, nL: calc.nL, nW: calc.nW, nV: calc.nV, externalEnv: !!giQ.data?.whExternalEnv })
           : [];
@@ -336,8 +341,8 @@ export default function SensorPlacementPage() {
                       Кликните по кружку датчика для назначения. Перетащите объект мышью.
                     </p>
                   ) : (
-                    <p className="text-sm text-amber-700 mt-1">
-                      Укажите размеры помещения ниже, затем нажмите «Сохранить».
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Размеры необязательны. Без них схема сохраняется без масштаба и расчётной сетки.
                     </p>
                   )}
                 </div>
@@ -348,7 +353,22 @@ export default function SensorPlacementPage() {
 
               {/* ── Room dimension inputs (single source of truth) ── */}
               <div className="mt-4 p-3 rounded-lg border bg-muted/30">
-                <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">Размеры зоны хранения</p>
+                <div className="flex items-center justify-between gap-4 mb-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Размеры зоны хранения (необязательно)
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="show-plan-dimensions"
+                      checked={showDimensions && canShowDimensions}
+                      disabled={!canShowDimensions}
+                      onCheckedChange={setShowDimensions}
+                    />
+                    <Label htmlFor="show-plan-dimensions" className="text-xs">
+                      Показывать на схеме
+                    </Label>
+                  </div>
+                </div>
                 <div className="flex flex-wrap gap-4">
                   <div className="flex items-center gap-2">
                     <Label htmlFor="dim-length" className="text-sm whitespace-nowrap">Длина, м</Label>
@@ -359,7 +379,7 @@ export default function SensorPlacementPage() {
                       min={0}
                       step={0.1}
                       className="w-24 h-8 text-sm"
-                      placeholder="0"
+                      placeholder="не указано"
                       onChange={() => setDimsTick(t => t + 1)}
                     />
                   </div>
@@ -372,7 +392,7 @@ export default function SensorPlacementPage() {
                       min={0}
                       step={0.1}
                       className="w-24 h-8 text-sm"
-                      placeholder="0"
+                      placeholder="не указано"
                       onChange={() => setDimsTick(t => t + 1)}
                     />
                   </div>
@@ -385,7 +405,7 @@ export default function SensorPlacementPage() {
                       min={0}
                       step={0.1}
                       className="w-24 h-8 text-sm"
-                      placeholder="0"
+                      placeholder="не указано"
                       onChange={() => setDimsTick(t => t + 1)}
                     />
                   </div>
@@ -418,8 +438,9 @@ export default function SensorPlacementPage() {
                 <FloorPlanEditor
                   objects={floorPlanObjects}
                   onChange={setFloorPlanObjects}
-                  roomLengthM={liveL || 1}
-                  roomWidthM={liveW || 1}
+                  roomLengthM={liveL}
+                  roomWidthM={liveW}
+                  showDimensions={showDimensions && canShowDimensions}
                   sensorPositions={allSensorPositions}
                   sensorLoggers={loggers as SensorLogger[]}
                   activeTier={activeTier}

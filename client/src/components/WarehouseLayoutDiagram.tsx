@@ -172,7 +172,7 @@ export default function WarehouseLayoutDiagram({
             <div className="text-[11px] text-muted-foreground mb-2">
               План помещения (вид сверху). Размеры: {geometry.lengthM.toFixed(1)} × {geometry.widthM.toFixed(1)} м.
               Сетка регистраторов: <b>{geometry.nL}</b> по длине × <b>{geometry.nW}</b> по ширине.
-              Кликните по точке, чтобы назначить датчик. Перетащите «Дверь» и «Агрегат» для отметки положения.
+              Кликните по точке, чтобы назначить датчик. Перетащите «Дверь» и «Кондиционер» для отметки положения.
             </div>
             <svg
               viewBox={`0 0 ${SVG_W} ${SVG_H}`}
@@ -252,7 +252,7 @@ export default function WarehouseLayoutDiagram({
                   style={{ cursor: readOnly ? "default" : "move" }}
                 >
                   <rect x={-22} y={-12} width={44} height={24} rx={4} fill="#bae6fd" stroke="#0369a1" />
-                  <text textAnchor="middle" y={4} fontSize={10} fill="#075985" fontWeight="700">Агрегат</text>
+                  <text textAnchor="middle" y={4} fontSize={10} fill="#075985" fontWeight="700">Кондиционер</text>
                 </g>
               )}
 
@@ -340,7 +340,7 @@ export default function WarehouseLayoutDiagram({
       {!readOnly && (
         <div className="rounded-md border bg-amber-50/40 p-3 text-xs text-amber-900 leading-relaxed flex items-center gap-3">
           <Snowflake className="h-4 w-4 text-sky-600" />
-          <span>Двойной клик по плану — поставить «Агрегат». Клик правой кнопкой — поставить «Дверь».</span>
+          <span>Двойной клик по плану — поставить «Кондиционер». Клик правой кнопкой — поставить «Дверь».</span>
           <DoorOpen className="h-4 w-4 text-amber-700" />
         </div>
       )}

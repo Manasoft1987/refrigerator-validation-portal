@@ -70,7 +70,7 @@ const OBJECT_DEFS: ObjectDef[] = [
   { type: "radiator",     ruLabel: "Радиатор",    defaultW: 5,  defaultH: 1,  fill: "#fee2e2", stroke: "#dc2626", textColor: "#7f1d1d", icon: "♨" },
   { type: "vent",         ruLabel: "Вентшахта",   defaultW: 3,  defaultH: 3,  fill: "#f3e8ff", stroke: "#7c3aed", textColor: "#4c1d95", icon: "⊕" },
   { type: "door_obj",     ruLabel: "Дверь",       defaultW: 4,  defaultH: 1,  fill: "#fde68a", stroke: "#b45309", textColor: "#78350f", icon: "🚪" },
-  { type: "cooling_unit", ruLabel: "Агрегат",     defaultW: 6,  defaultH: 4,  fill: "#a5f3fc", stroke: "#0891b2", textColor: "#164e63", icon: "❄" },
+  { type: "cooling_unit", ruLabel: "Кондиционер", defaultW: 6,  defaultH: 4,  fill: "#a5f3fc", stroke: "#0891b2", textColor: "#164e63", icon: "❄" },
   { type: "partition",    ruLabel: "Стена / перегородка", defaultW: 18, defaultH: 1.5, fill: "#64748b", stroke: "#334155", textColor: "#0f172a", icon: "▰" },
   { type: "sensor_point",  ruLabel: "Датчик",      defaultW: 3,  defaultH: 3,  fill: "#e0f2fe", stroke: "#0369a1", textColor: "#1e3a8a", icon: "●" },
 ];
@@ -114,6 +114,7 @@ function ObjectShape({
   obj,
   planX, planY, drawW, drawH,
   roomLengthM, roomWidthM,
+  showDimensions,
   selected,
   onPointerDown,
   onResizePointerDown,
@@ -122,6 +123,7 @@ function ObjectShape({
   obj: FloorPlanObject;
   planX: number; planY: number; drawW: number; drawH: number;
   roomLengthM: number; roomWidthM: number;
+  showDimensions: boolean;
   selected: boolean;
   onPointerDown: (id: string, e: React.PointerEvent) => void;
   onResizePointerDown: (id: string, corner: "nw"|"ne"|"se"|"sw", e: React.PointerEvent) => void;
@@ -252,7 +254,7 @@ function ObjectShape({
       </text>
 
       {/* Dimension label */}
-      {h > 18 && (
+      {showDimensions && h > 18 && (
         <text
           x={cx} y={cy + 8}
           textAnchor="middle"
@@ -498,6 +500,7 @@ export interface FloorPlanEditorProps {
   onChange: (objs: FloorPlanObject[]) => void;
   roomLengthM: number;
   roomWidthM: number;
+  showDimensions?: boolean;
   readOnly?: boolean;
   sensorPositions?: SensorPosition[];
   sensorLoggers?: SensorLogger[];
@@ -510,6 +513,7 @@ export function FloorPlanEditor({
   onChange,
   roomLengthM,
   roomWidthM,
+  showDimensions = false,
   readOnly = false,
   sensorPositions = [],
   sensorLoggers = [],
@@ -540,7 +544,7 @@ export function FloorPlanEditor({
   // Compute draw area dimensions
   const planW = SVG_W - PAD * 2;
   const planH = SVG_H - PAD * 2;
-  const aspect = (roomLengthM || 1) / (roomWidthM || 1);
+  const aspect = roomLengthM > 0 && roomWidthM > 0 ? roomLengthM / roomWidthM : 1;
   let drawW = planW;
   let drawH = planW / aspect;
   if (drawH > planH) { drawH = planH; drawW = planH * aspect; }
@@ -820,13 +824,6 @@ export function FloorPlanEditor({
         </div>
       )}
 
-      {/* Room dims warning */}
-      {roomLengthM <= 0 && (
-        <div className="mx-1 mb-2 px-3 py-2 rounded-md bg-amber-50 border border-amber-200 text-xs text-amber-800 flex items-center gap-2">
-          <span>⚠</span>
-          <span>Размеры помещения не заданы — укажите Д×Ш×В в «Общих сведениях». Размеры объектов будут показаны в % от плана.</span>
-        </div>
-      )}
       {/* Canvas + side panel */}
       <div className="relative">
         <svg
@@ -846,18 +843,22 @@ export function FloorPlanEditor({
             {/* Room outline */}
             <rect x={planX} y={planY} width={drawW} height={drawH} fill="#f8fafc" stroke="#0f172a" strokeWidth={1.5} />
 
-            {/* Dimension labels */}
-            <text x={planX + drawW/2} y={planY - 10} textAnchor="middle" fontSize={11} fill="#475569" style={{ userSelect: "none" }}>
-              {roomLengthM > 0 ? `${roomLengthM.toFixed(1)} м (длина)` : "длина не задана"}
-            </text>
-            <text
-              x={planX - 16} y={planY + drawH/2}
-              textAnchor="middle" fontSize={11} fill="#475569"
-              transform={`rotate(-90, ${planX - 16}, ${planY + drawH/2})`}
-              style={{ userSelect: "none" }}
-            >
-              {roomWidthM > 0 ? `${roomWidthM.toFixed(1)} м (ширина)` : "ширина не задана"}
-            </text>
+            {/* Optional dimension labels */}
+            {showDimensions && roomLengthM > 0 && roomWidthM > 0 && (
+              <>
+                <text x={planX + drawW/2} y={planY - 10} textAnchor="middle" fontSize={11} fill="#475569" style={{ userSelect: "none" }}>
+                  {`${roomLengthM.toFixed(1)} м (длина)`}
+                </text>
+                <text
+                  x={planX - 16} y={planY + drawH/2}
+                  textAnchor="middle" fontSize={11} fill="#475569"
+                  transform={`rotate(-90, ${planX - 16}, ${planY + drawH/2})`}
+                  style={{ userSelect: "none" }}
+                >
+                  {`${roomWidthM.toFixed(1)} м (ширина)`}
+                </text>
+              </>
+            )}
 
             {/* Compass */}
             <g transform={`translate(${SVG_W - 50}, 28)`}>
@@ -876,6 +877,7 @@ export function FloorPlanEditor({
                 obj={obj}
                 planX={planX} planY={planY} drawW={drawW} drawH={drawH}
                 roomLengthM={roomLengthM || 1} roomWidthM={roomWidthM || 1}
+                showDimensions={showDimensions}
                 selected={selectedId === obj.id}
                 onPointerDown={handleObjectPointerDown}
                 onResizePointerDown={handleResizePointerDown}

@@ -220,7 +220,7 @@ export type ReportInput = {
     nextCalibrationDate: string | Date | null;
     status?: string;
   }>;
-  /** Позиция холодильного агрегата на интерактивной схеме */
+  /** Позиция кондиционера на интерактивной схеме помещения */
   coolingUnitPos?: { x: number; y: number } | null;
   /** Позиция двери на интерактивной схеме */
   doorPos?: { x: number; y: number } | null;
@@ -970,6 +970,7 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
 
   if (isWarehouse) {
     // Warehouse: show object-specific fields only.
+    const hasDimensions = !!(gi?.whLengthM || gi?.whWidthM || gi?.whHeightM);
     const lengthM = gi?.whLengthM ? Number(gi.whLengthM).toFixed(2) : "—";
     const widthM  = gi?.whWidthM ? Number(gi.whWidthM).toFixed(2) : "—";
     const heightM = gi?.whHeightM ? Number(gi.whHeightM).toFixed(2) : "—";
@@ -979,7 +980,6 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
       ["Тип объекта", gi?.equipmentType === "warehouse" ? getEquipmentName(input) : EQUIPMENT_LABEL[gi?.equipmentType || ""] || "—"],
       ["Тип помещения / зоны", WAREHOUSE_STUDY_LABEL[gi?.whStudyType || ""] || "—"],
       ["Адрес объекта", gi?.location || "—"],
-      ["Геометрические размеры", dims],
       ["Температурный режим", TEMP_MODE_LABEL[gi?.tempMode || ""] || "—"],
       ["Контроль влажности", gi?.whHumidityControl ? `Да (${gi?.whHumidityMin ?? "—"} – ${gi?.whHumidityMax ?? "—"} % о.в.)` : "Не контролируется"],
       ["Сезон исследования", gi?.season ? { warm: "Тёплый период", cold: "Холодный период", interseasonal: "Межсезонье", none: "Не применимо" }[gi.season] || WAREHOUSE_SEASON_LABEL[gi.season] || "—" : "—"],
@@ -993,6 +993,9 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
       ["Ответственное лицо", input.org.responsible || "—"],
       ["Контакты", input.org.phone || "—"],
     ];
+    if (hasDimensions) {
+      rows.splice(3, 0, ["Геометрические размеры", dims]);
+    }
     if (gi?.whLayoutNotes) {
       rows.push(["Примечания к планировке", gi.whLayoutNotes]);
     }
@@ -3297,15 +3300,15 @@ function drawWarehousePlanDiagram(
     return;
   }
 
+  const hasRoomDimensions = lengthM > 0 && widthM > 0;
   if (calc.total === 0) {
     doc.fillColor(MUTED).font("body").fontSize(10)
       .text(
-        "Размеры помещения не указаны — расчётная сетка регистраторов согласно п. 16д " +
-        "Рек. ЕАЭК №8 не построена. Заполните длину, ширину и высоту в разделе «Схема помещения».",
+        "Размеры помещения не указаны. Схема приведена без масштаба; расчётная сетка " +
+        "регистраторов не формировалась.",
         { align: "justify" },
       );
     doc.moveDown(0.5);
-    return;
   }
 
   // Plan dimensions
@@ -3318,7 +3321,7 @@ function drawWarehousePlanDiagram(
   const planMaxH = 320;
   // aspect = widthM / lengthM so that drawW maps to lengthM (horizontal) and
   // drawH maps to widthM (vertical) — matching FloorPlanEditor's SVG orientation.
-  const aspect = (widthM || 1) / (lengthM || 1);
+  const aspect = hasRoomDimensions ? widthM / lengthM : 1;
   let drawW = usableW;
   let drawH = drawW * aspect;
   if (drawH > planMaxH) {
@@ -3335,15 +3338,17 @@ function drawWarehousePlanDiagram(
     .rect(planX, planY, drawW, drawH).stroke();
   doc.restore();
 
-  // Rulers
-  const lengthLabel = lengthM > 0 ? `${lengthM.toFixed(1)} м (длина)` : "— м (длина не указана)";
-  const widthLabel  = widthM  > 0 ? `${widthM.toFixed(1)} м (ширина)` : "— м (ширина не указана)";
-  doc.fillColor(MUTED).font("body").fontSize(8)
-    .text(lengthLabel, planX, planY - 12, { width: drawW, align: "center" });
-  doc.save();
-  doc.rotate(-90, { origin: [planX - 14, planY + drawH / 2] });
-  doc.text(widthLabel, planX - 60, planY + drawH / 2 - 4, { width: 80, align: "center" });
-  doc.restore();
+  // Rulers are omitted when room dimensions are not provided.
+  if (hasRoomDimensions) {
+    const lengthLabel = `${lengthM.toFixed(1)} м (длина)`;
+    const widthLabel = `${widthM.toFixed(1)} м (ширина)`;
+    doc.fillColor(MUTED).font("body").fontSize(8)
+      .text(lengthLabel, planX, planY - 12, { width: drawW, align: "center" });
+    doc.save();
+    doc.rotate(-90, { origin: [planX - 14, planY + drawH / 2] });
+    doc.text(widthLabel, planX - 60, planY + drawH / 2 - 4, { width: 80, align: "center" });
+    doc.restore();
+  }
 
   // Grid lines (light)
   doc.save();
@@ -3382,6 +3387,7 @@ function drawWarehousePlanDiagram(
     for (const obj of floorObjs) {
       doc.save(); // isolate each object's transform
       const style = OBJ_STYLES[obj.type] ?? { fill: "#f1f5f9", stroke: "#64748b", text: "#1e293b" };
+      const objectLabel = obj.type === "cooling_unit" ? "Кондиционер" : obj.label;
       const ox = planX + (obj.xPct / 100) * drawW;
       const oy = planY + (obj.yPct / 100) * drawH;
       const ow = Math.max(4, (obj.widthPct / 100) * drawW);
@@ -3419,18 +3425,20 @@ function drawWarehousePlanDiagram(
       // Label
       const fontSize = Math.max(5, Math.min(8, Math.min(ow, oh) * 0.3));
       doc.fillColor(style.text).font("body").fontSize(fontSize)
-        .text(obj.label.slice(0, 14), ox, cy - fontSize / 2, { width: ow, align: "center" });
+        .text(objectLabel.slice(0, 14), ox, cy - fontSize / 2, { width: ow, align: "center" });
       
-      // Draw dimension label (Д×Ш×В in meters)
-      const dimFontSize = Math.max(4, Math.min(6, Math.min(ow, oh) * 0.2));
-      const wM = lengthM > 0 ? ((obj.widthPct / 100) * lengthM).toFixed(1) : obj.widthPct.toFixed(0) + "%";
-      const hM = widthM > 0 ? ((obj.heightPct / 100) * widthM).toFixed(1) : obj.heightPct.toFixed(0) + "%";
-      const htStr = obj.heightM && obj.heightM > 0 ? `×${obj.heightM.toFixed(1)}м` : "";
-      const dimStr = `${wM}м×${hM}м${htStr}`;
-      const dimY = oh > 20 ? cy + fontSize / 2 + 2 : oy + oh + 3;
-      doc.fillColor(style.text).font("body").fontSize(dimFontSize).opacity(0.7)
-        .text(dimStr, ox, dimY, { width: ow, align: "center" });
-      doc.opacity(1);
+      if (hasRoomDimensions) {
+        // Draw dimension label (Д×Ш×В in meters)
+        const dimFontSize = Math.max(4, Math.min(6, Math.min(ow, oh) * 0.2));
+        const wM = lengthM > 0 ? ((obj.widthPct / 100) * lengthM).toFixed(1) : obj.widthPct.toFixed(0) + "%";
+        const hM = widthM > 0 ? ((obj.heightPct / 100) * widthM).toFixed(1) : obj.heightPct.toFixed(0) + "%";
+        const htStr = obj.heightM && obj.heightM > 0 ? `×${obj.heightM.toFixed(1)}м` : "";
+        const dimStr = `${wM}м×${hM}м${htStr}`;
+        const dimY = oh > 20 ? cy + fontSize / 2 + 2 : oy + oh + 3;
+        doc.fillColor(style.text).font("body").fontSize(dimFontSize).opacity(0.7)
+          .text(dimStr, ox, dimY, { width: ow, align: "center" });
+        doc.opacity(1);
+      }
       
       doc.restore(); // always restore per-object
     }
@@ -3452,9 +3460,9 @@ function drawWarehousePlanDiagram(
     const cy = planY + (input.coolingUnitPos.y / 100) * drawH;
     doc.save();
     doc.fillColor("#bae6fd").strokeColor("#0369a1").lineWidth(0.8)
-      .roundedRect(cx - 22, cy - 8, 44, 16, 3).fillAndStroke();
+      .roundedRect(cx - 28, cy - 8, 56, 16, 3).fillAndStroke();
     doc.fillColor("#075985").font("body").fontSize(7)
-      .text("Агрегат", cx - 22, cy - 4, { width: 44, align: "center" });
+      .text("Кондиционер", cx - 28, cy - 4, { width: 56, align: "center" });
     doc.restore();
   }
 
