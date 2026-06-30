@@ -1882,8 +1882,10 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
     };
   }
 
-  // Add operational parameters section
-  if (allPass) {
+  // Add operational parameters section.
+  // Only когда аварийные (excursion) испытания действительно проводились — иначе
+  // эти значения вычисляются из логгеров картирования и недостоверны (напр. «0 минут»).
+  if (allPass && input.excursion?.enabled) {
     doc.moveDown(0.3);
     doc.font("body").fontSize(10).fillColor(MUTED);
     doc.text("Параметры эксплуатации:", { underline: true });
