@@ -944,8 +944,13 @@ export function FloorPlanEditor({
           viewBox={`0 0 ${SVG_W} ${SVG_H}`}
           className="w-full max-w-3xl mx-auto bg-white rounded-md border"
           style={{ touchAction: "none", cursor: isPanning ? "grabbing" : (placingType ? "crosshair" : "default"), display: "block" }}
-          onClick={() => {
+          onClick={(e) => {
             if (suppressCanvasClickRef.current) { suppressCanvasClickRef.current = false; return; }
+            const target = e.target as Element;
+            const clickedCanvasBackground =
+              e.target === e.currentTarget ||
+              target.getAttribute("data-room-background") === "true";
+            if (!clickedCanvasBackground) return;
             if (!placingType) { setSelectedId(null); setPickerForCell(null); }
           }}
           onWheel={handleWheel}
@@ -957,7 +962,16 @@ export function FloorPlanEditor({
           {/* Zoom and pan group */}
           <g transform={`translate(${panX}, ${panY}) scale(${zoomLevel})`}>
             {/* Room outline */}
-            <rect x={planX} y={planY} width={drawW} height={drawH} fill="#f8fafc" stroke="#0f172a" strokeWidth={1.5} />
+            <rect
+              x={planX}
+              y={planY}
+              width={drawW}
+              height={drawH}
+              fill="#f8fafc"
+              stroke="#0f172a"
+              strokeWidth={1.5}
+              data-room-background="true"
+            />
 
             {/* Optional dimension labels */}
             {showDimensions && roomLengthM > 0 && roomWidthM > 0 && (
