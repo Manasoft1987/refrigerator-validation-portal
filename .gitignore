@@ -114,7 +114,7 @@ temp/
 # Webdev artifacts (checkpoint zips, migrations, etc.)
 .webdev/
 server/*.patch
-api/index.js
+api/generated.js
 
 # Manus version file (auto-generated, not part of source)
 client/public/__manus__/version.json
