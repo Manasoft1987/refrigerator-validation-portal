@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import PDFDocument from "pdfkit";
 import {
   computeWarehouseSensorCount,
   WAREHOUSE_MAPPING_METHOD_NOTE,
@@ -96,6 +97,29 @@ describe("generateProtocolPdf – warehouse / storage zone", () => {
       const now = Date.UTC(2026, 4, 1, 9, 0, 0);
       const series = mkSeries(now, 168, 20);
       const calc = computeWarehouseSensorCount({ lengthM: 25, widthM: 20, heightM: 4 });
+      const originalImage = (PDFDocument.prototype as any).image;
+      const originalText = (PDFDocument.prototype as any).text;
+      let imageCallCount = 0;
+      let diagramTitlePage: number | undefined;
+      let diagramLengthLabelPage: number | undefined;
+      const planImageBuffer = Buffer.from("editor screenshot should not be embedded");
+
+      (PDFDocument.prototype as any).image = function (...args: any[]) {
+        if (args[0] === planImageBuffer) {
+          imageCallCount += 1;
+        }
+        return originalImage.apply(this, args);
+      };
+      (PDFDocument.prototype as any).text = function (text: string, ...args: any[]) {
+        const pageId = (this.page as any)?.dictionary?.id;
+        if (text.startsWith("Схема. Расстановка датчиков")) {
+          diagramTitlePage = pageId;
+        }
+        if (text === "25.0 м (длина)") {
+          diagramLengthLabelPage = pageId;
+        }
+        return originalText.call(this, text, ...args);
+      };
       // Generate one logger per (row, col, tier) according to EAEU grid
       const loggers: any[] = [];
       let id = 1;
@@ -124,8 +148,10 @@ describe("generateProtocolPdf – warehouse / storage zone", () => {
         posY: null,
       }));
 
-      const buf = await generateProtocolPdf({
-        org: {
+      let buf: Buffer;
+      try {
+        buf = await generateProtocolPdf({
+          org: {
           name: "ТОО «Складской комплекс»",
           bin: "200000000000",
           addressLegal: "г. Алматы",
@@ -185,24 +211,32 @@ describe("generateProtocolPdf – warehouse / storage zone", () => {
           hotIdx: 0, coldIdx: 0, extIndices: [],
         },
         pvLoggers,
-        floorPlanObjects: [
-          {
-            id: "partition-1",
-            type: "partition",
-            xPct: 35,
-            yPct: 20,
-            widthPct: 30,
-            heightPct: 1.5,
-            heightM: 3,
-            rotation: 90,
-            label: "Перегородка",
-          },
-        ],
-      } as any);
+          floorPlanObjects: [
+            {
+              id: "partition-1",
+              type: "partition",
+              xPct: 35,
+              yPct: 20,
+              widthPct: 30,
+              heightPct: 1.5,
+              heightM: 3,
+              rotation: 90,
+              label: "Перегородка",
+            },
+          ],
+          planImageUrl: planImageBuffer,
+        } as any);
+      } finally {
+        (PDFDocument.prototype as any).image = originalImage;
+        (PDFDocument.prototype as any).text = originalText;
+      }
 
       expect(Buffer.isBuffer(buf)).toBe(true);
       expect(buf.length).toBeGreaterThan(2000);
       expect(buf.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+      expect(imageCallCount).toBe(0);
+      expect(diagramTitlePage).toBeDefined();
+      expect(diagramLengthLabelPage).toBe(diagramTitlePage);
     },
     90_000,
   );

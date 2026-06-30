@@ -239,9 +239,9 @@ export type ReportInput = {
   }> | null;
   /**
    * Saved PNG screenshot of the FloorPlanEditor (stored in S3).
-   * When present, PDF renders this image instead of the vector drawing.
+   * Used only as a fallback when structured plan coordinates are unavailable.
    */
-  planImageUrl?: string | null;
+  planImageUrl?: string | Buffer | null;
   /** Room dimensions from pvSession (preferred over generalInfo.whXxx) */
   pvRoomLengthM?: number | null;
   pvRoomWidthM?: number | null;
@@ -3225,15 +3225,21 @@ function drawWarehousePlanDiagram(
     heightM,
     externalEnv: !!gi?.whExternalEnv,
   });
-
-  drawSubTitle(doc, title);
+  const hasRoomDimensions = lengthM > 0 && widthM > 0;
+  const hasStructuredPlanData =
+    hasRoomDimensions ||
+    (input.floorPlanObjects?.length ?? 0) > 0 ||
+    (input.pvLoggers?.length ?? 0) > 0;
 
   // ── If we have a saved PNG screenshot, embed it directly ──
-  if (input.planImageUrl) {
+  // Prefer structured coordinates: screenshots can contain editor controls,
+  // zoom state and other UI that does not belong in the report.
+  if (input.planImageUrl && !hasStructuredPlanData) {
     const pageLeft = PAGE_MARGIN;
     const usableW = doc.page.width - PAGE_MARGIN * 2;
     const imgMaxH = 448;
-    ensureSpace(doc, imgMaxH + 20);
+    ensureSpace(doc, imgMaxH + 70);
+    drawSubTitle(doc, title);
     try {
       // planImageUrl is a relative path like /manus-storage/... or a full URL
       const imgY = doc.y + 8;
@@ -3300,17 +3306,6 @@ function drawWarehousePlanDiagram(
     return;
   }
 
-  const hasRoomDimensions = lengthM > 0 && widthM > 0;
-  if (calc.total === 0) {
-    doc.fillColor(MUTED).font("body").fontSize(10)
-      .text(
-        "Размеры помещения не указаны. Схема приведена без масштаба; расчётная сетка " +
-        "регистраторов не формировалась.",
-        { align: "justify" },
-      );
-    doc.moveDown(0.5);
-  }
-
   // Plan dimensions
   // NOTE: In FloorPlanEditor, xPct is along the LENGTH axis (horizontal) and
   // yPct is along the WIDTH axis (vertical), so the PDF must use the same
@@ -3328,7 +3323,18 @@ function drawWarehousePlanDiagram(
     drawH = planMaxH;
     drawW = drawH / aspect;
   }
-  ensureSpace(doc, drawH + 90);
+  const missingDimensionsNoteHeight = calc.total === 0 ? 42 : 0;
+  ensureSpace(doc, drawH + 110 + missingDimensionsNoteHeight);
+  drawSubTitle(doc, title);
+  if (calc.total === 0) {
+    doc.fillColor(MUTED).font("body").fontSize(10)
+      .text(
+        "Размеры помещения не указаны. Схема приведена без масштаба; расчётная сетка " +
+        "регистраторов не формировалась.",
+        { align: "justify" },
+      );
+    doc.moveDown(0.5);
+  }
   const planX = pageLeft + (usableW - drawW) / 2;
   const planY = doc.y + 10;
 
@@ -3424,10 +3430,13 @@ function drawWarehousePlanDiagram(
       }
       // Label
       const fontSize = Math.max(5, Math.min(8, Math.min(ow, oh) * 0.3));
-      doc.fillColor(style.text).font("body").fontSize(fontSize)
-        .text(objectLabel.slice(0, 14), ox, cy - fontSize / 2, { width: ow, align: "center" });
+      const canFitObjectLabel = ow >= 24 && oh >= 8;
+      if (canFitObjectLabel) {
+        doc.fillColor(style.text).font("body").fontSize(fontSize)
+          .text(objectLabel.slice(0, 14), ox, cy - fontSize / 2, { width: ow, align: "center" });
+      }
       
-      if (hasRoomDimensions) {
+      if (hasRoomDimensions && ow >= 42 && oh >= 20) {
         // Draw dimension label (Д×Ш×В in meters)
         const dimFontSize = Math.max(4, Math.min(6, Math.min(ow, oh) * 0.2));
         const wM = lengthM > 0 ? ((obj.widthPct / 100) * lengthM).toFixed(1) : obj.widthPct.toFixed(0) + "%";
@@ -3491,7 +3500,11 @@ function drawWarehousePlanDiagram(
           const placed = placedById.get(id);
           if (placed) matches.push((placed.customName || placed.label));
         }
-        if (matches.length) label = matches.slice(0, 2).join("/");
+        if (matches.length) {
+          const firstLabel = matches[0];
+          const shortSensorLabel = firstLabel.length > 4 ? firstLabel.slice(-4) : firstLabel;
+          label = matches.length > 1 ? `${shortSensorLabel}+` : shortSensorLabel;
+        }
       }
       const filled = !template && /[A-Za-zА-Яа-я0-9]/.test(label) && label !== `${r}-${c}`;
       doc.save();
@@ -3517,6 +3530,7 @@ function drawWarehousePlanDiagram(
     doc.restore();
   }
 
+  doc.x = pageLeft;
   doc.y = planY + drawH + 12;
   // ── Sensor placement table for floor plan objects ────────────────────────
   {
@@ -3576,6 +3590,7 @@ function drawWarehousePlanDiagram(
         ty += rowH;
       });
       doc.restore();
+      doc.x = pageLeft;
       doc.y = ty + 6;
     }
   }
@@ -3585,14 +3600,18 @@ function drawWarehousePlanDiagram(
     .text(
       `Размещено ${calc.nL} × ${calc.nW} точек на ${calc.nV} ярус(а), всего ${calc.base} внутренних регистраторов` +
       (calc.external ? `; +${calc.external} внешний регистратор (контакт с внешней средой)` : "") + ".",
-      { align: "center" },
+      pageLeft,
+      doc.y,
+      { width: usableW, align: "center" },
     );
   doc.moveDown(0.4);
   doc.fillColor(MUTED).font("body").fontSize(8)
     .text(
       "Сетка построена по таблицам п. 16д Рек. ЕАЭК №8 (горизонталь: 2/3/4/5 точек при ≤10/40/60/>60 м; " +
       "вертикаль: 1/2/3 точки при ≤1.5 / <5 / ≥5 м).",
-      { align: "justify" },
+      pageLeft,
+      doc.y,
+      { width: usableW, align: "justify" },
     );
   doc.moveDown(0.3);
 

@@ -6,7 +6,8 @@
  *
  * Features:
  *  - Drag objects anywhere including to walls (no clamp preventing edge placement)
- *  - 4-corner resize handles
+ *  - 8 resize handles (corners + sides)
+ *  - Draw new objects by dragging
  *  - 90° rotation
  *  - Side panel with precise numeric inputs (meters)
  *  - Height field per object (stored in heightM)
@@ -20,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RotateCw, Trash2, Plus, Move, Layers, X, ChevronRight } from "lucide-react";
 import { nanoid } from "nanoid";
+import { viewportToCanvasPoint } from "../lib/floorPlanGeometry";
 
 export interface ObjectSensor {
   sensorId: string;     // user-entered ID/serial of the sensor
@@ -83,6 +85,17 @@ function getDef(type: FloorObjectType): ObjectDef {
 
 function clamp(v: number, lo: number, hi: number) { return Math.max(lo, Math.min(hi, v)); }
 
+/** Snap a value to the nearest multiple of `step` (no-op when step <= 0). */
+function snapVal(v: number, step: number): number {
+  return step > 0 ? Math.round(v / step) * step : v;
+}
+
+// Resize handle identifiers: 4 corners + 4 side midpoints
+type ResizeCorner = "nw" | "ne" | "se" | "sw" | "n" | "e" | "s" | "w";
+
+// Minimum object size, in % of room dimension
+const MIN_SIZE_PCT = 1.5;
+
 // ─── SVG constants ────────────────────────────────────────────────────────────
 
 const SVG_W = 700;
@@ -126,7 +139,7 @@ function ObjectShape({
   showDimensions: boolean;
   selected: boolean;
   onPointerDown: (id: string, e: React.PointerEvent) => void;
-  onResizePointerDown: (id: string, corner: "nw"|"ne"|"se"|"sw", e: React.PointerEvent) => void;
+  onResizePointerDown: (id: string, corner: ResizeCorner, e: React.PointerEvent) => void;
   onDoubleClick: (id: string) => void;
 }) {
   const def = getDef(obj.type);
@@ -147,7 +160,8 @@ function ObjectShape({
   // Sensor count badge
   const sensorCount = (obj.sensors ?? []).filter(s => s.sensorId.trim()).length;
 
-  const HR = 6; // handle radius
+  const HR = 7;  // visible handle radius (larger = easier to grab)
+  const HIT = 15; // invisible hit-area radius around each handle
 
   // Sensor point: render as circle with ID label + height below
   if (obj.type === "sensor_point") {
@@ -278,17 +292,39 @@ function ObjectShape({
         </text>
       )}
 
-      {/* Resize handles (when selected) */}
-      {selected && (
-        <>
-          {([[x,y],[x+w,y],[x+w,y+h],[x,y+h]] as [number,number][]).map(([handleX, handleY], i) => (
-            <circle key={i} cx={handleX} cy={handleY} r={HR} fill="white" stroke="#f59e0b" strokeWidth={1.5}
-              style={{ cursor: "nwse-resize", pointerEvents: "all" }}
-              onPointerDown={ev => { ev.stopPropagation(); onResizePointerDown(obj.id, (["nw","ne","se","sw"][i] as "nw"|"ne"|"se"|"sw"), ev); }}
-            />
-          ))}
-        </>
-      )}
+      {/* Resize handles (when selected): 4 corners + 4 side midpoints */}
+      {selected && (() => {
+        const handles: Array<{ key: ResizeCorner; hx: number; hy: number; cursor: string }> = [
+          { key: "nw", hx: x,         hy: y,         cursor: "nwse-resize" },
+          { key: "ne", hx: x + w,     hy: y,         cursor: "nesw-resize" },
+          { key: "se", hx: x + w,     hy: y + h,     cursor: "nwse-resize" },
+          { key: "sw", hx: x,         hy: y + h,     cursor: "nesw-resize" },
+          { key: "n",  hx: x + w / 2, hy: y,         cursor: "ns-resize" },
+          { key: "e",  hx: x + w,     hy: y + h / 2, cursor: "ew-resize" },
+          { key: "s",  hx: x + w / 2, hy: y + h,     cursor: "ns-resize" },
+          { key: "w",  hx: x,         hy: y + h / 2, cursor: "ew-resize" },
+        ];
+        return (
+          <>
+            {handles.map(hd => (
+              <g key={hd.key}>
+                {/* large invisible hit target makes the handle easy to grab */}
+                <circle
+                  cx={hd.hx} cy={hd.hy} r={HIT}
+                  fill="transparent"
+                  style={{ cursor: hd.cursor, pointerEvents: "all", touchAction: "none" }}
+                  onPointerDown={ev => { ev.stopPropagation(); onResizePointerDown(obj.id, hd.key, ev); }}
+                />
+                <circle
+                  cx={hd.hx} cy={hd.hy} r={HR}
+                  fill="white" stroke="#f59e0b" strokeWidth={1.5}
+                  style={{ pointerEvents: "none" }}
+                />
+              </g>
+            ))}
+          </>
+        );
+      })()}
     </g>
   );
 }
@@ -493,7 +529,7 @@ function SidePanel({
 
 type DragMode =
   | { kind: "move"; id: string }
-  | { kind: "resize"; id: string; corner: "nw"|"ne"|"se"|"sw" };
+  | { kind: "resize"; id: string; corner: ResizeCorner };
 
 export interface FloorPlanEditorProps {
   objects: FloorPlanObject[];
@@ -529,9 +565,16 @@ export function FloorPlanEditor({
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
   const [isPanning, setIsPanning] = useState(false);
+  // Live preview rect while drawing a new object by dragging (in room %)
+  const [draftRect, setDraftRect] = useState<{ xPct: number; yPct: number; wPct: number; hPct: number } | null>(null);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
+  // Drag-to-draw state: start point + last pointer point (room %) + object type
+  const drawStateRef = useRef<{ startXPct: number; startYPct: number; lastXPct: number; lastYPct: number; type: FloorObjectType } | null>(null);
+  // Suppresses the single canvas click that fires right after placing an object,
+  // so the freshly created (and selected) object is not immediately deselected.
+  const suppressCanvasClickRef = useRef(false);
 
   // Active drag/resize state stored in ref to avoid stale closure issues
   const dragState = useRef<{
@@ -554,8 +597,8 @@ export function FloorPlanEditor({
   const drawRef = useRef({ planX, planY, drawW, drawH });
   drawRef.current = { planX, planY, drawW, drawH };
 
-  // Convert client coords → SVG coords
-  const clientToSvg = useCallback((clientX: number, clientY: number) => {
+  // Convert client coordinates to the outer, untransformed SVG viewport.
+  const clientToViewportSvg = useCallback((clientX: number, clientY: number) => {
     const svg = svgRef.current;
     if (!svg) return { x: 0, y: 0 };
     const rect = svg.getBoundingClientRect();
@@ -565,6 +608,16 @@ export function FloorPlanEditor({
     };
   }, []);
 
+  // Convert client coordinates into the zoomed/panned canvas coordinate system.
+  const clientToCanvasSvg = useCallback((clientX: number, clientY: number) => {
+    const viewportPoint = clientToViewportSvg(clientX, clientY);
+    return viewportToCanvasPoint(
+      viewportPoint,
+      { x: panX, y: panY },
+      zoomLevel,
+    );
+  }, [clientToViewportSvg, panX, panY, zoomLevel]);
+
   // Convert SVG coords → room % (clamped 0–100)
   const svgToRoomPct = useCallback((svgX: number, svgY: number) => {
     const { planX, planY, drawW, drawH } = drawRef.current;
@@ -573,6 +626,12 @@ export function FloorPlanEditor({
       y: clamp(((svgY - planY) / drawH) * 100, 0, 100),
     };
   }, []);
+
+  // Grid step in % for snapping: 0.1 m when the room dimension is known, else 1%.
+  const gridStep = useCallback((axis: "x" | "y") => {
+    const m = axis === "x" ? roomLengthM : roomWidthM;
+    return m > 0 ? (0.1 / m) * 100 : 1;
+  }, [roomLengthM, roomWidthM]);
 
   // ── Pointer events on SVG objects ──────────────────────────────────────────
 
@@ -591,7 +650,7 @@ export function FloorPlanEditor({
       setPanelOpen(false);
       dblClickTimer.current = setTimeout(() => { dblClickTimer.current = null; }, 300);
     }
-    const { x, y } = clientToSvg(e.clientX, e.clientY);
+    const { x, y } = clientToCanvasSvg(e.clientX, e.clientY);
     const obj = objects.find(o => o.id === id);
     if (!obj) return;
     dragState.current = {
@@ -600,13 +659,13 @@ export function FloorPlanEditor({
       startSvgY: y,
       snapshot: { ...obj },
     };
-  }, [readOnly, objects, clientToSvg, selectedId]);
+  }, [readOnly, objects, clientToCanvasSvg, selectedId]);
 
-  const handleResizePointerDown = useCallback((id: string, corner: "nw"|"ne"|"se"|"sw", e: React.PointerEvent) => {
+  const handleResizePointerDown = useCallback((id: string, corner: ResizeCorner, e: React.PointerEvent) => {
     if (readOnly) return;
     e.preventDefault();
     (e.target as Element).setPointerCapture(e.pointerId);
-    const { x, y } = clientToSvg(e.clientX, e.clientY);
+    const { x, y } = clientToCanvasSvg(e.clientX, e.clientY);
     const obj = objects.find(o => o.id === id);
     if (!obj) return;
     dragState.current = {
@@ -615,71 +674,132 @@ export function FloorPlanEditor({
       startSvgY: y,
       snapshot: { ...obj },
     };
-  }, [readOnly, objects, clientToSvg]);
+  }, [readOnly, objects, clientToCanvasSvg]);
 
   // ── Global pointer move / up ───────────────────────────────────────────────
 
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
+      // ── Drawing a new object by dragging ──────────────────────────────────
+      const draw = drawStateRef.current;
+      if (draw) {
+        const { x: svgX, y: svgY } = clientToCanvasSvg(e.clientX, e.clientY);
+        const { x: curX, y: curY } = svgToRoomPct(svgX, svgY);
+        draw.lastXPct = curX;
+        draw.lastYPct = curY;
+        setDraftRect({
+          xPct: Math.min(draw.startXPct, curX),
+          yPct: Math.min(draw.startYPct, curY),
+          wPct: Math.abs(curX - draw.startXPct),
+          hPct: Math.abs(curY - draw.startYPct),
+        });
+        return;
+      }
+
       const ds = dragState.current;
       if (!ds) return;
       const { drawW, drawH } = drawRef.current;
-      const { x: svgX, y: svgY } = (() => {
-        const svg = svgRef.current;
-        if (!svg) return { x: 0, y: 0 };
-        const rect = svg.getBoundingClientRect();
-        return {
-          x: (e.clientX - rect.left) * (SVG_W / rect.width),
-          y: (e.clientY - rect.top)  * (SVG_H / rect.height),
-        };
-      })();
+      const { x: svgX, y: svgY } = clientToCanvasSvg(e.clientX, e.clientY);
 
       const dxPct = ((svgX - ds.startSvgX) / drawW) * 100;
       const dyPct = ((svgY - ds.startSvgY) / drawH) * 100;
       const snap  = ds.snapshot;
-      const MIN   = 1.5; // minimum size in %
+      const stepX = gridStep("x");
+      const stepY = gridStep("y");
 
       if (ds.mode.kind === "move") {
-        // Allow objects to reach walls: clamp so object stays within 0–100%
-        // No wall snap — allow precise positioning at any edge
-        let newX = clamp(snap.xPct + dxPct, 0, Math.max(0, 100 - snap.widthPct));
-        let newY = clamp(snap.yPct + dyPct, 0, Math.max(0, 100 - snap.heightPct));
+        // Snap position to the grid, keep object fully inside the room
+        const newX = clamp(snapVal(snap.xPct + dxPct, stepX), 0, Math.max(0, 100 - snap.widthPct));
+        const newY = clamp(snapVal(snap.yPct + dyPct, stepY), 0, Math.max(0, 100 - snap.heightPct));
         onChange(objects.map(o => o.id === ds.mode.id ? { ...o, xPct: newX, yPct: newY } : o));
       } else {
         const { corner } = ds.mode;
         let nx = snap.xPct, ny = snap.yPct, nw = snap.widthPct, nh = snap.heightPct;
+        const rightEdge  = snap.xPct + snap.widthPct;
+        const bottomEdge = snap.yPct + snap.heightPct;
 
-        if (corner === "se") {
-          nw = Math.max(MIN, snap.widthPct  + dxPct);
-          nh = Math.max(MIN, snap.heightPct + dyPct);
-        } else if (corner === "sw") {
-          const w2 = Math.max(MIN, snap.widthPct - dxPct);
-          nx = snap.xPct + (snap.widthPct - w2);
+        const movesE = corner === "se" || corner === "ne" || corner === "e";
+        const movesW = corner === "sw" || corner === "nw" || corner === "w";
+        const movesS = corner === "se" || corner === "sw" || corner === "s";
+        const movesN = corner === "ne" || corner === "nw" || corner === "n";
+
+        if (movesE) {
+          nw = Math.max(MIN_SIZE_PCT, snap.widthPct + dxPct);
+        } else if (movesW) {
+          const w2 = Math.max(MIN_SIZE_PCT, snap.widthPct - dxPct);
+          nx = rightEdge - w2;
           nw = w2;
-          nh = Math.max(MIN, snap.heightPct + dyPct);
-        } else if (corner === "ne") {
-          nw = Math.max(MIN, snap.widthPct + dxPct);
-          const h2 = Math.max(MIN, snap.heightPct - dyPct);
-          ny = snap.yPct + (snap.heightPct - h2);
-          nh = h2;
-        } else { // nw
-          const w2 = Math.max(MIN, snap.widthPct - dxPct);
-          nx = snap.xPct + (snap.widthPct - w2);
-          nw = w2;
-          const h2 = Math.max(MIN, snap.heightPct - dyPct);
-          ny = snap.yPct + (snap.heightPct - h2);
+        }
+        if (movesS) {
+          nh = Math.max(MIN_SIZE_PCT, snap.heightPct + dyPct);
+        } else if (movesN) {
+          const h2 = Math.max(MIN_SIZE_PCT, snap.heightPct - dyPct);
+          ny = bottomEdge - h2;
           nh = h2;
         }
-        // Allow resize to reach walls
-        nw = Math.min(nw, 100 - nx);
-        nh = Math.min(nh, 100 - ny);
+
+        // Snap edges to the grid for clean numbers
+        nx = snapVal(nx, stepX);
+        ny = snapVal(ny, stepY);
+        nw = Math.max(MIN_SIZE_PCT, snapVal(nw, stepX));
+        nh = Math.max(MIN_SIZE_PCT, snapVal(nh, stepY));
+
+        // Keep within walls
         nx = clamp(nx, 0, 100);
         ny = clamp(ny, 0, 100);
+        nw = Math.min(nw, 100 - nx);
+        nh = Math.min(nh, 100 - ny);
         onChange(objects.map(o => o.id === ds.mode.id ? { ...o, xPct: nx, yPct: ny, widthPct: nw, heightPct: nh } : o));
       }
     };
 
-    const onUp = () => { dragState.current = null; };
+    const onUp = () => {
+      // ── Commit a drag-to-draw rectangle ───────────────────────────────────
+      const draw = drawStateRef.current;
+      if (draw) {
+        drawStateRef.current = null;
+        setDraftRect(null);
+        const def = getDef(draw.type);
+        const stepX = gridStep("x");
+        const stepY = gridStep("y");
+        let xPct = Math.min(draw.startXPct, draw.lastXPct);
+        let yPct = Math.min(draw.startYPct, draw.lastYPct);
+        let wPct = Math.abs(draw.lastXPct - draw.startXPct);
+        let hPct = Math.abs(draw.lastYPct - draw.startYPct);
+
+        if (wPct < MIN_SIZE_PCT || hPct < MIN_SIZE_PCT) {
+          // Treated as a plain click → place a default-sized object centred on the click
+          wPct = def.defaultW;
+          hPct = def.defaultH;
+          xPct = clamp(draw.startXPct - wPct / 2, 0, Math.max(0, 100 - wPct));
+          yPct = clamp(draw.startYPct - hPct / 2, 0, Math.max(0, 100 - hPct));
+        } else {
+          xPct = snapVal(xPct, stepX);
+          yPct = snapVal(yPct, stepY);
+          wPct = Math.max(MIN_SIZE_PCT, snapVal(wPct, stepX));
+          hPct = Math.max(MIN_SIZE_PCT, snapVal(hPct, stepY));
+          wPct = Math.min(wPct, 100 - xPct);
+          hPct = Math.min(hPct, 100 - yPct);
+        }
+
+        const newObj: FloorPlanObject = {
+          id: nanoid(),
+          type: draw.type,
+          xPct, yPct,
+          widthPct: wPct,
+          heightPct: hPct,
+          heightM: 0,
+          rotation: 0,
+          label: def.ruLabel,
+        };
+        onChange([...objects, newObj]);
+        setPlacingType(null);
+        setSelectedId(newObj.id);
+        suppressCanvasClickRef.current = true;
+        return;
+      }
+      dragState.current = null;
+    };
 
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -687,7 +807,7 @@ export function FloorPlanEditor({
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };
-  }, [objects, onChange]);
+  }, [objects, onChange, gridStep, svgToRoomPct, clientToCanvasSvg]);
 
   // ── Zoom and Pan handlers ──────────────────────────────────────────────────
 
@@ -713,49 +833,42 @@ export function FloorPlanEditor({
     if ((e.ctrlKey || e.metaKey) && e.button === 0) {
       e.preventDefault();
       setIsPanning(true);
+      const start = clientToViewportSvg(e.clientX, e.clientY);
       panStartRef.current = {
-        x: e.clientX,
-        y: e.clientY,
+        x: start.x,
+        y: start.y,
         panX,
         panY,
       };
     }
-  }, [panX, panY]);
+  }, [clientToViewportSvg, panX, panY]);
 
   const handleSvgPointerMove = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
     if (isPanning) {
-      const dx = e.clientX - panStartRef.current.x;
-      const dy = e.clientY - panStartRef.current.y;
-      setPanX(panStartRef.current.panX + dx / zoomLevel);
-      setPanY(panStartRef.current.panY + dy / zoomLevel);
+      const current = clientToViewportSvg(e.clientX, e.clientY);
+      const dx = current.x - panStartRef.current.x;
+      const dy = current.y - panStartRef.current.y;
+      setPanX(panStartRef.current.panX + dx);
+      setPanY(panStartRef.current.panY + dy);
     }
-  }, [isPanning, zoomLevel]);
+  }, [clientToViewportSvg, isPanning]);
 
   const handleSvgPointerUp = useCallback(() => {
     setIsPanning(false);
   }, []);
 
-  // ── Place new object on canvas click ──────────────────────────────────────
+  // ── Place new object: click to drop a default size, or drag to draw a size ──
 
-  const handleCanvasClick = useCallback((e: React.MouseEvent<SVGRectElement>) => {
+  const handlePlacePointerDown = useCallback((e: React.PointerEvent<SVGRectElement>) => {
     if (!placingType || readOnly) return;
-    const { x, y } = clientToSvg(e.clientX, e.clientY);
+    e.stopPropagation();
+    e.preventDefault();
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    const { x, y } = clientToCanvasSvg(e.clientX, e.clientY);
     const { x: xPct, y: yPct } = svgToRoomPct(x, y);
-    const def = getDef(placingType);
-    const newObj: FloorPlanObject = {
-      id: nanoid(),
-      type: placingType,
-      xPct,
-      yPct,
-      widthPct: def.defaultW,
-      heightPct: def.defaultH,
-      heightM: 0,
-      rotation: 0,
-      label: def.ruLabel,
-    };
-    onChange([...objects, newObj]);
-    setPlacingType(null);
-  }, [placingType, readOnly, clientToSvg, svgToRoomPct, objects, onChange]);
+    drawStateRef.current = { startXPct: xPct, startYPct: yPct, lastXPct: xPct, lastYPct: yPct, type: placingType };
+    setDraftRect({ xPct, yPct, wPct: 0, hPct: 0 });
+  }, [placingType, readOnly, clientToCanvasSvg, svgToRoomPct]);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -817,7 +930,7 @@ export function FloorPlanEditor({
           {placingType && (
             <div className="px-3 py-1.5 bg-amber-50 border-t text-xs text-amber-800 flex items-center gap-2">
               <Move className="h-3.5 w-3.5" />
-              Кликните по плану для размещения: <b>{getDef(placingType).ruLabel}</b>
+              Кликните по плану, либо растяните мышью нужный размер: <b>{getDef(placingType).ruLabel}</b>
               <button className="ml-auto underline" onClick={() => setPlacingType(null)}>Отмена</button>
             </div>
           )}
@@ -831,7 +944,10 @@ export function FloorPlanEditor({
           viewBox={`0 0 ${SVG_W} ${SVG_H}`}
           className="w-full max-w-3xl mx-auto bg-white rounded-md border"
           style={{ touchAction: "none", cursor: isPanning ? "grabbing" : (placingType ? "crosshair" : "default"), display: "block" }}
-          onClick={() => { if (!placingType) { setSelectedId(null); setPickerForCell(null); } }}
+          onClick={() => {
+            if (suppressCanvasClickRef.current) { suppressCanvasClickRef.current = false; return; }
+            if (!placingType) { setSelectedId(null); setPickerForCell(null); }
+          }}
           onWheel={handleWheel}
           onPointerDown={handleSvgPointerDown}
           onPointerMove={handleSvgPointerMove}
@@ -887,13 +1003,29 @@ export function FloorPlanEditor({
 
             {/* Sensor positions overlay removed — sensors are now attached to objects */}
 
-            {/* Transparent click overlay for placing objects */}
+            {/* Transparent overlay for placing objects (click to drop, drag to draw) */}
             {placingType && (
               <rect
                 x={planX} y={planY} width={drawW} height={drawH}
                 fill="transparent"
-                style={{ cursor: "crosshair" }}
-                onClick={handleCanvasClick}
+                style={{ cursor: "crosshair", touchAction: "none" }}
+                onPointerDown={handlePlacePointerDown}
+              />
+            )}
+
+            {/* Live preview rect while drawing a new object */}
+            {draftRect && draftRect.wPct > 0 && draftRect.hPct > 0 && (
+              <rect
+                x={planX + (draftRect.xPct / 100) * drawW}
+                y={planY + (draftRect.yPct / 100) * drawH}
+                width={(draftRect.wPct / 100) * drawW}
+                height={(draftRect.hPct / 100) * drawH}
+                rx={2}
+                fill="rgba(245,158,11,0.12)"
+                stroke="#f59e0b"
+                strokeWidth={1.3}
+                strokeDasharray="5 3"
+                style={{ pointerEvents: "none" }}
               />
             )}
           </g>
@@ -960,8 +1092,13 @@ export function FloorPlanEditor({
       )}
 
       {/* Zoom info */}
-      <div className="text-[11px] text-muted-foreground px-1">
-        💡 Совет: Используйте <kbd className="px-1.5 py-0.5 bg-gray-100 border rounded text-[10px]">Ctrl</kbd> + <kbd className="px-1.5 py-0.5 bg-gray-100 border rounded text-[10px]">Scroll</kbd> для масштабирования, <kbd className="px-1.5 py-0.5 bg-gray-100 border rounded text-[10px]">Ctrl</kbd> + <kbd className="px-1.5 py-0.5 bg-gray-100 border rounded text-[10px]">Drag</kbd> для перемещения
+      <div className="text-[11px] text-muted-foreground px-1 space-y-1">
+        <div>
+          ✏️ Выберите объект на панели и <b>растяните мышью</b> нужный размер на плане (или просто кликните для стандартного). Выделенный объект можно тянуть за <b>ручки по углам и сторонам</b>; размеры привязываются к сетке 0,1 м.
+        </div>
+        <div>
+          💡 <kbd className="px-1.5 py-0.5 bg-gray-100 border rounded text-[10px]">Ctrl</kbd> + <kbd className="px-1.5 py-0.5 bg-gray-100 border rounded text-[10px]">Scroll</kbd> — масштаб, <kbd className="px-1.5 py-0.5 bg-gray-100 border rounded text-[10px]">Ctrl</kbd> + <kbd className="px-1.5 py-0.5 bg-gray-100 border rounded text-[10px]">Drag</kbd> — перемещение холста
+        </div>
       </div>
     </div>
   );

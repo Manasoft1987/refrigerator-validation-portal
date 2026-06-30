@@ -1520,7 +1520,7 @@ export const appRouter = router({
           doorPos: session?.doorPos as any,
           floorPlanObjects: session?.floorPlanObjects as any,
           // Saved plan screenshot (preferred over vector drawing in PDF) — pass as Buffer for PDFKit
-          planImageUrl: planImageBuffer as any,
+          planImageUrl: planImageBuffer,
           // Room dims from pvSession (preferred over generalInfo.whXxx)
           pvRoomLengthM: (session as any)?.roomLengthM ? Number((session as any).roomLengthM) : null,
           pvRoomWidthM: (session as any)?.roomWidthM ? Number((session as any).roomWidthM) : null,
