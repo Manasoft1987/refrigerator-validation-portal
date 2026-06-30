@@ -4,6 +4,8 @@ import {
   DEFAULT_IQ_QUESTIONS_AUTO_REFRIGERATOR,
   DEFAULT_IQ_QUESTIONS_CHAMBER,
   CHAMBER_STAGE_TEMPLATES,
+  STAGE_TEMPLATES,
+  AUTO_REFRIGERATOR_STAGE_TEMPLATES,
   DEFAULT_IQ_QUESTIONS_WAREHOUSE,
   DEFAULT_OQ_QUESTIONS,
   DEFAULT_OQ_QUESTIONS_AUTO_REFRIGERATOR,
@@ -53,6 +55,26 @@ describe("cold chamber stage text", () => {
       .join(" ");
     expect(text).not.toMatch(/авторефрижератор|кузов|кабина|транспортное средство|VIN/i);
     expect(text).toContain("холодильная камера");
+  });
+});
+
+describe("generic (refrigerator) stage text", () => {
+  it("does not leak auto-refrigerator wording", () => {
+    const text = Object.values(STAGE_TEMPLATES)
+      .flatMap(stage => [stage.purpose, stage.description, stage.criteria])
+      .join(" ");
+    expect(text).not.toMatch(/авторефрижератор|кузов|кабин|транспортное средство|VIN/i);
+    expect(text).toContain("холодильное оборудование");
+  });
+});
+
+describe("auto-refrigerator stage text", () => {
+  it("keeps its transport-specific wording", () => {
+    const text = Object.values(AUTO_REFRIGERATOR_STAGE_TEMPLATES)
+      .flatMap(stage => [stage.purpose, stage.description, stage.criteria])
+      .join(" ");
+    expect(text).toMatch(/авторефрижератор/i);
+    expect(text).toMatch(/кузов/i);
   });
 });
 

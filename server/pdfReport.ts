@@ -309,9 +309,13 @@ const WAREHOUSE_SEASON_LABEL: Record<string, string> = {
   n_a: "Не применимо (нет контакта с внешней средой)",
 };
 
+function getReportEquipmentType(input?: ReportInput): string | null {
+  return input?.generalInfo?.equipmentType || input?.protocol?.equipmentType || null;
+}
+
 /** Returns the human-readable equipment name from protocol-level fields (nominative case) */
 function getEquipmentName(input: ReportInput): string {
-  const type = input.protocol?.equipmentType;
+  const type = getReportEquipmentType(input);
   if (type === "other" && input.protocol?.customEquipmentName) {
     return input.protocol.customEquipmentName;
   }
@@ -324,7 +328,7 @@ function getEquipmentName(input: ReportInput): string {
 
 /** Returns equipment name with proper Russian case declension */
 function getEquipmentNameWithCase(input: ReportInput, gramCase: "nominative" | "genitive" | "accusative" | "instrumental" = "nominative"): string {
-  const type = input.protocol?.equipmentType;
+  const type = getReportEquipmentType(input);
   if (type === "other" && input.protocol?.customEquipmentName) {
     return input.protocol.customEquipmentName;
   }
@@ -345,23 +349,38 @@ function isReeferLike(type: string | null | undefined): boolean {
 }
 
 function reeferSubject(type: string | null | undefined): string {
-  return type === "chamber" ? "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430" : "\u0410\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440";
+  if (type === "chamber") return "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430";
+  if (type === "refrigerator") return "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a";
+  if (type === "freezer") return "\u041c\u043e\u0440\u043e\u0437\u0438\u043b\u044c\u043d\u0438\u043a";
+  return "\u0410\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440";
 }
 
 function reeferArea(type: string | null | undefined): string {
-  return type === "chamber" ? "\u043a\u0430\u043c\u0435\u0440\u0430" : "\u043a\u0443\u0437\u043e\u0432";
+  if (type === "chamber") return "\u043a\u0430\u043c\u0435\u0440\u0430";
+  if (type === "refrigerator") return "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a";
+  if (type === "freezer") return "\u043c\u043e\u0440\u043e\u0437\u0438\u043b\u044c\u043d\u0438\u043a";
+  return "\u043a\u0443\u0437\u043e\u0432";
 }
 
 function reeferAreaGenitive(type: string | null | undefined): string {
-  return type === "chamber" ? "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0439 \u043a\u0430\u043c\u0435\u0440\u044b" : "\u043a\u0443\u0437\u043e\u0432\u0430 \u0430\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440\u0430";
+  if (type === "chamber") return "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0439 \u043a\u0430\u043c\u0435\u0440\u044b";
+  if (type === "refrigerator") return "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a\u0430";
+  if (type === "freezer") return "\u043c\u043e\u0440\u043e\u0437\u0438\u043b\u044c\u043d\u0438\u043a\u0430";
+  return "\u043a\u0443\u0437\u043e\u0432\u0430 \u0430\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440\u0430";
 }
 
 function reeferInsideVolume(type: string | null | undefined): string {
-  return type === "chamber" ? "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0439 \u043a\u0430\u043c\u0435\u0440\u044b" : "\u043a\u0443\u0437\u043e\u0432\u0430 \u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440\u0430";
+  if (type === "chamber") return "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0439 \u043a\u0430\u043c\u0435\u0440\u044b";
+  if (type === "refrigerator") return "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a\u0430";
+  if (type === "freezer") return "\u043c\u043e\u0440\u043e\u0437\u0438\u043b\u044c\u043d\u0438\u043a\u0430";
+  return "\u043a\u0443\u0437\u043e\u0432\u0430 \u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440\u0430";
 }
 
 function reeferAreaAfterIn(type: string | null | undefined): string {
-  return type === "chamber" ? "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0439 \u043a\u0430\u043c\u0435\u0440\u0435" : reeferAreaGenitive(type);
+  if (type === "chamber") return "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0439 \u043a\u0430\u043c\u0435\u0440\u0435";
+  if (type === "refrigerator") return "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a\u0435";
+  if (type === "freezer") return "\u043c\u043e\u0440\u043e\u0437\u0438\u043b\u044c\u043d\u0438\u043a\u0435";
+  return reeferAreaGenitive(type);
 }
 
 function reeferLocationLabel(type: string | null | undefined): string {
@@ -375,10 +394,12 @@ function reeferUnitLabel(type: string | null | undefined): string {
 function reeferConclusionObject(input: ReportInput): string {
   const unit = ((input.generalInfo?.manufacturer || "") + " " + (input.generalInfo?.model || "")).trim();
   const serial = input.generalInfo?.serial || "\u2014";
-  if (input.protocol?.equipmentType === "chamber") {
-    return "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0443\u044e \u043a\u0430\u043c\u0435\u0440\u0443 \u0441 \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435\u043c \u00ab" + unit + "\u00bb (\u0441\u0435\u0440. \u2116 " + serial + ")";
-  }
-  return "\u0430\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440 \u0441 \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435\u043c \u00ab" + unit + "\u00bb (\u0441\u0435\u0440. \u2116 " + serial + ")";
+  const type = getReportEquipmentType(input);
+  const withUnit = (obj: string) => obj + " \u0441 \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435\u043c \u00ab" + unit + "\u00bb (\u0441\u0435\u0440. \u2116 " + serial + ")";
+  if (type === "chamber") return withUnit("\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0443\u044e \u043a\u0430\u043c\u0435\u0440\u0443");
+  if (type === "refrigerator") return withUnit("\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a");
+  if (type === "freezer") return withUnit("\u043c\u043e\u0440\u043e\u0437\u0438\u043b\u044c\u043d\u0438\u043a");
+  return withUnit("\u0430\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440");
 }
 
 const ANSWER_LABEL: Record<string, string> = {
@@ -1335,7 +1356,7 @@ function drawStageVerdict(
 
 function drawPVParams(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: ReportInput) {
   const durationMs = pv.startAt && pv.endAt ? pv.endAt - pv.startAt : 0;
-  const durationRequirement = input?.protocol?.equipmentType === "warehouse"
+  const durationRequirement = getReportEquipmentType(input) === "warehouse"
     ? `от 3 суток и далее (не менее 72 ч); выбрано ${pv.minDurationHours} ч`
     : `${pv.minDurationHours} ч`;
   const rows: Array<[string, string]> = [
@@ -1345,7 +1366,7 @@ function drawPVParams(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Re
     ["Окончание испытания", pv.endAt ? fmtDate(pv.endAt) : "—"],
     ["Фактическая длительность", durationMs ? fmtDuration(durationMs) : "—"],
     [
-      input?.protocol?.equipmentType === "warehouse"
+      getReportEquipmentType(input) === "warehouse"
         ? "Требуемая длительность"
         : "Минимальная длительность (по умолчанию)",
       durationRequirement,
@@ -1473,10 +1494,10 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
       pv.rangeMin,
       pv.rangeMax,
     );
-    const externalChartText = input?.protocol?.equipmentType === "warehouse"
+    const externalChartText = getReportEquipmentType(input) === "warehouse"
       ? "\u0413\u0440\u0430\u0444\u0438\u043a \u0432\u043d\u0435\u0448\u043d\u0435\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0430\u0435\u0442 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u0443 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u044b \u0432\u043d\u0435 \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f (\u0437\u043e\u043d\u044b) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f. " +
         "\u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u043d\u0435 \u0432\u0445\u043e\u0434\u0438\u0442 \u0432 \u0440\u0430\u0441\u0447\u0451\u0442 \u043a\u0440\u0438\u0442\u0435\u0440\u0438\u0435\u0432 \u043f\u0440\u0438\u0435\u043c\u043b\u0435\u043c\u043e\u0441\u0442\u0438 PV, \u043d\u043e \u043f\u043e\u043c\u043e\u0433\u0430\u0435\u0442 \u043e\u0446\u0435\u043d\u0438\u0442\u044c \u0432\u043b\u0438\u044f\u043d\u0438\u0435 \u0441\u0440\u0435\u0434\u044b."
-      : "\u0413\u0440\u0430\u0444\u0438\u043a \u0432\u043d\u0435\u0448\u043d\u0435\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0430\u0435\u0442 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u0443 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u044b \u0432\u043d\u0435 " + reeferAreaGenitive(input?.protocol?.equipmentType) + ". " +
+      : "\u0413\u0440\u0430\u0444\u0438\u043a \u0432\u043d\u0435\u0448\u043d\u0435\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0430\u0435\u0442 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u0443 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u044b \u0432\u043d\u0435 " + reeferAreaGenitive(getReportEquipmentType(input)) + ". " +
         "\u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u043d\u0435 \u0432\u0445\u043e\u0434\u0438\u0442 \u0432 \u0440\u0430\u0441\u0447\u0451\u0442 \u043a\u0440\u0438\u0442\u0435\u0440\u0438\u0435\u0432 \u043f\u0440\u0438\u0435\u043c\u043b\u0435\u043c\u043e\u0441\u0442\u0438 PV, \u043d\u043e \u043f\u043e\u043c\u043e\u0433\u0430\u0435\u0442 \u043e\u0446\u0435\u043d\u0438\u0442\u044c \u0432\u043b\u0438\u044f\u043d\u0438\u0435 \u0441\u0440\u0435\u0434\u044b.";
     drawChartExplanation(doc, externalChartText);
   }
@@ -1495,9 +1516,9 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     );
     drawChartExplanation(
       doc,
-      input?.protocol?.equipmentType === "warehouse"
+      getReportEquipmentType(input) === "warehouse"
         ? "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0430\u043c\u043e\u0433\u043e \u0442\u0451\u043f\u043b\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 (\u0441 \u043d\u0430\u0438\u0431\u043e\u043b\u044c\u0448\u0438\u043c \u0441\u0440\u0435\u0434\u043d\u0438\u043c \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435\u043c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b). \u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u043e\u0431\u044b\u0447\u043d\u043e \u0440\u0430\u0441\u043f\u043e\u043b\u0430\u0433\u0430\u0435\u0442\u0441\u044f \u0432 \u0437\u043e\u043d\u0435 \u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u0435\u0435 \u044d\u0444\u0444\u0435\u043a\u0442\u0438\u0432\u043d\u044b\u043c \u043e\u0445\u043b\u0430\u0436\u0434\u0435\u043d\u0438\u0435\u043c \u0438 \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438 \u043d\u0430\u0438\u0445\u0443\u0434\u0448\u0438\u0445 \u0443\u0441\u043b\u043e\u0432\u0438\u0439 \u0432 \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0438."
-        : "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0430\u043c\u043e\u0433\u043e \u0442\u0451\u043f\u043b\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 (\u0441 \u043d\u0430\u0438\u0431\u043e\u043b\u044c\u0448\u0438\u043c \u0441\u0440\u0435\u0434\u043d\u0438\u043c \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435\u043c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b). \u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u043e\u0431\u044b\u0447\u043d\u043e \u0440\u0430\u0441\u043f\u043e\u043b\u0430\u0433\u0430\u0435\u0442\u0441\u044f \u0432 \u0437\u043e\u043d\u0435 \u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u0435\u0435 \u044d\u0444\u0444\u0435\u043a\u0442\u0438\u0432\u043d\u044b\u043c \u043e\u0445\u043b\u0430\u0436\u0434\u0435\u043d\u0438\u0435\u043c \u0438 \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438 \u043d\u0430\u0438\u0445\u0443\u0434\u0448\u0438\u0445 \u0443\u0441\u043b\u043e\u0432\u0438\u0439 \u0432 " + reeferAreaAfterIn(input?.protocol?.equipmentType) + "."
+        : "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0430\u043c\u043e\u0433\u043e \u0442\u0451\u043f\u043b\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 (\u0441 \u043d\u0430\u0438\u0431\u043e\u043b\u044c\u0448\u0438\u043c \u0441\u0440\u0435\u0434\u043d\u0438\u043c \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435\u043c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b). \u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u043e\u0431\u044b\u0447\u043d\u043e \u0440\u0430\u0441\u043f\u043e\u043b\u0430\u0433\u0430\u0435\u0442\u0441\u044f \u0432 \u0437\u043e\u043d\u0435 \u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u0435\u0435 \u044d\u0444\u0444\u0435\u043a\u0442\u0438\u0432\u043d\u044b\u043c \u043e\u0445\u043b\u0430\u0436\u0434\u0435\u043d\u0438\u0435\u043c \u0438 \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438 \u043d\u0430\u0438\u0445\u0443\u0434\u0448\u0438\u0445 \u0443\u0441\u043b\u043e\u0432\u0438\u0439 \u0432 " + reeferAreaAfterIn(getReportEquipmentType(input)) + "."
     );
   }
 
@@ -1515,9 +1536,9 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     );
     drawChartExplanation(
       doc,
-      input?.protocol?.equipmentType === "warehouse"
+      getReportEquipmentType(input) === "warehouse"
         ? "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0430\u043c\u043e\u0433\u043e \u0445\u043e\u043b\u043e\u0434\u043d\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 (\u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u044c\u0448\u0438\u043c \u0441\u0440\u0435\u0434\u043d\u0438\u043c \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435\u043c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b). \u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438 \u043d\u0430\u0438\u0431\u043e\u043b\u0435\u0435 \u0445\u043e\u043b\u043e\u0434\u043d\u043e\u0439 \u0437\u043e\u043d\u044b \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f."
-        : "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0430\u043c\u043e\u0433\u043e \u0445\u043e\u043b\u043e\u0434\u043d\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 (\u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u044c\u0448\u0438\u043c \u0441\u0440\u0435\u0434\u043d\u0438\u043c \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435\u043c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b). \u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438 \u043d\u0430\u0438\u0431\u043e\u043b\u0435\u0435 \u0445\u043e\u043b\u043e\u0434\u043d\u043e\u0439 \u0437\u043e\u043d\u044b \u0432 " + reeferAreaAfterIn(input?.protocol?.equipmentType) + "."
+        : "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0430\u043c\u043e\u0433\u043e \u0445\u043e\u043b\u043e\u0434\u043d\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 (\u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u044c\u0448\u0438\u043c \u0441\u0440\u0435\u0434\u043d\u0438\u043c \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435\u043c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b). \u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438 \u043d\u0430\u0438\u0431\u043e\u043b\u0435\u0435 \u0445\u043e\u043b\u043e\u0434\u043d\u043e\u0439 \u0437\u043e\u043d\u044b \u0432 " + reeferAreaAfterIn(getReportEquipmentType(input)) + "."
     );
   }
 
@@ -1533,9 +1554,9 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     );
     drawChartExplanation(
       doc,
-      input?.protocol?.equipmentType === "warehouse"
+      getReportEquipmentType(input) === "warehouse"
         ? "\u0422\u0435\u043f\u043b\u043e\u0432\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u043f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442 \u0440\u0430\u0441\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u0438\u0435 \u0441\u0440\u0435\u0434\u043d\u0438\u0445 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440 \u043f\u043e \u0432\u0441\u0435\u043c \u0434\u0430\u0442\u0447\u0438\u043a\u0430\u043c \u0432 \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0438 (\u0437\u043e\u043d\u0435) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f."
-        : "\u0422\u0435\u043f\u043b\u043e\u0432\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u043f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442 \u0440\u0430\u0441\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u0438\u0435 \u0441\u0440\u0435\u0434\u043d\u0438\u0445 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440 \u043f\u043e \u0432\u0441\u0435\u043c \u0434\u0430\u0442\u0447\u0438\u043a\u0430\u043c \u0432 " + reeferAreaAfterIn(input?.protocol?.equipmentType) + "."
+        : "\u0422\u0435\u043f\u043b\u043e\u0432\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u043f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442 \u0440\u0430\u0441\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u0438\u0435 \u0441\u0440\u0435\u0434\u043d\u0438\u0445 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440 \u043f\u043e \u0432\u0441\u0435\u043c \u0434\u0430\u0442\u0447\u0438\u043a\u0430\u043c \u0432 " + reeferAreaAfterIn(getReportEquipmentType(input)) + "."
     );
 
     drawStatsBarChart(
@@ -1661,7 +1682,7 @@ function drawStagePVVerdict(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], inpu
     fg = "#065f46";
     
     // Enhanced conclusion for warehouse protocols with sensor analysis
-    if (input?.protocol?.equipmentType === "warehouse") {
+    if (getReportEquipmentType(input) === "warehouse") {
       const hotSensor = pv.hotIdx !== null ? pv.loggers[pv.hotIdx] : null;
       const coldSensor = pv.coldIdx !== null ? pv.loggers[pv.coldIdx] : null;
       const hotLabel = hotSensor ? `датчик "${hotSensor.customName || hotSensor.label}"` : "датчик";
@@ -1748,7 +1769,7 @@ function drawSensorPlacementAnalysis(
     });
 
     analysisText += "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0434\u0430\u0442\u0447\u0438\u043a\u0438 \u0440\u0430\u0441\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u044b \u0432 \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u043f\u043e\u0437\u0438\u0446\u0438\u044f\u0445 " +
-      (input?.protocol?.equipmentType === "warehouse" ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f (\u0437\u043e\u043d\u044b) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : reeferAreaGenitive(input?.protocol?.equipmentType)) + ": ";
+      (getReportEquipmentType(input) === "warehouse" ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f (\u0437\u043e\u043d\u044b) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : reeferAreaGenitive(getReportEquipmentType(input))) + ": ";
     const positions = [];
     if (hasTop) positions.push("верхняя полка");
     if (hasMiddle) positions.push("средняя часть");
@@ -1756,7 +1777,7 @@ function drawSensorPlacementAnalysis(
     if (hasDoor) positions.push("дверная зона");
     analysisText += positions.join(", ") + ".\n\n";
 
-    if (input?.protocol?.equipmentType === "warehouse") {
+    if (getReportEquipmentType(input) === "warehouse") {
       analysisText +=
         `Такая многоточечная расстановка позволяет выявить температурные градиенты внутри помещения (зоны) хранения и оценить ` +
         "равномерность распределения температуры по всему объёму помещения. Датчики на верхней и нижней полках фиксируют " +
@@ -1765,7 +1786,7 @@ function drawSensorPlacementAnalysis(
         "неисправностей системы кондиционирования или отопления на ранних этапах.\n\n";
     } else {
       analysisText +=
-        "\u0422\u0430\u043a\u0430\u044f \u043c\u043d\u043e\u0433\u043e\u0442\u043e\u0447\u0435\u0447\u043d\u0430\u044f \u0440\u0430\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430 \u043f\u043e\u0437\u0432\u043e\u043b\u044f\u0435\u0442 \u0432\u044b\u044f\u0432\u0438\u0442\u044c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u043d\u044b\u0435 \u0433\u0440\u0430\u0434\u0438\u0435\u043d\u0442\u044b \u0432\u043d\u0443\u0442\u0440\u0438 " + reeferInsideVolume(input?.protocol?.equipmentType) + " \u0438 \u043e\u0446\u0435\u043d\u0438\u0442\u044c " +
+        "\u0422\u0430\u043a\u0430\u044f \u043c\u043d\u043e\u0433\u043e\u0442\u043e\u0447\u0435\u0447\u043d\u0430\u044f \u0440\u0430\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430 \u043f\u043e\u0437\u0432\u043e\u043b\u044f\u0435\u0442 \u0432\u044b\u044f\u0432\u0438\u0442\u044c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u043d\u044b\u0435 \u0433\u0440\u0430\u0434\u0438\u0435\u043d\u0442\u044b \u0432\u043d\u0443\u0442\u0440\u0438 " + reeferInsideVolume(getReportEquipmentType(input)) + " \u0438 \u043e\u0446\u0435\u043d\u0438\u0442\u044c " +
         "равномерность распределения холода по всему объёму объекта. Датчики на верхней и нижней полках фиксируют " +
         "потенциальные зоны риска, где может возникнуть локальное отклонение температуры от установленного диапазона. " +
         "Это критически важно для обеспечения стабильности условий хранения лекарственных средств и выявления " +
@@ -1775,7 +1796,7 @@ function drawSensorPlacementAnalysis(
 
   // External sensor role
   if (externals.length > 0) {
-    if (input?.protocol?.equipmentType === "warehouse") {
+    if (getReportEquipmentType(input) === "warehouse") {
       analysisText +=
         "Внешний датчик (расположенный вне помещения (зоны) хранения) служит для мониторинга параметров окружающей среды " +
         "и не входит в расчёт основных критериев приемлемости этапа PV. Данные внешнего датчика используются для " +
@@ -1784,7 +1805,7 @@ function drawSensorPlacementAnalysis(
         "от колебаний, обусловленных изменениями температуры в окружающей среде.";
     } else {
       analysisText +=
-        "\u0412\u043d\u0435\u0448\u043d\u0438\u0439 \u0434\u0430\u0442\u0447\u0438\u043a (\u0440\u0430\u0441\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0439 \u0432\u043d\u0435 " + reeferAreaGenitive(input?.protocol?.equipmentType) + ") \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043c\u043e\u043d\u0438\u0442\u043e\u0440\u0438\u043d\u0433\u0430 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u044b " +
+        "\u0412\u043d\u0435\u0448\u043d\u0438\u0439 \u0434\u0430\u0442\u0447\u0438\u043a (\u0440\u0430\u0441\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0439 \u0432\u043d\u0435 " + reeferAreaGenitive(getReportEquipmentType(input)) + ") \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043c\u043e\u043d\u0438\u0442\u043e\u0440\u0438\u043d\u0433\u0430 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u044b " +
         "\u0438 \u043d\u0435 \u0432\u0445\u043e\u0434\u0438\u0442 \u0432 \u0440\u0430\u0441\u0447\u0451\u0442 \u043e\u0441\u043d\u043e\u0432\u043d\u044b\u0445 \u043a\u0440\u0438\u0442\u0435\u0440\u0438\u0435\u0432 \u043f\u0440\u0438\u0435\u043c\u043b\u0435\u043c\u043e\u0441\u0442\u0438 \u044d\u0442\u0430\u043f\u0430 PV. \u0414\u0430\u043d\u043d\u044b\u0435 \u0432\u043d\u0435\u0448\u043d\u0435\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u044e\u0442\u0441\u044f \u0434\u043b\u044f \u0430\u043d\u0430\u043b\u0438\u0437\u0430 \u0432\u043b\u0438\u044f\u043d\u0438\u044f \u0443\u0441\u043b\u043e\u0432\u0438\u0439 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u044b \u043d\u0430 \u0440\u0430\u0431\u043e\u0442\u0443 \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u044f.";
     }
   }
@@ -1828,7 +1849,7 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
     input.pv.hotIdx,
     input.pv.coldIdx,
     undefined,
-    input.protocol?.equipmentType ?? undefined,
+    getReportEquipmentType(input) ?? undefined,
   );
   
   // Override with excursion test data if available
@@ -1848,7 +1869,7 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
       thermalRetentionMinutes: thermalRetentionMinutes,
       warmupDescription:
         warmupMinutes !== null
-          ? (input?.protocol?.equipmentType === "warehouse" ? "\u041f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : reeferSubject(input?.protocol?.equipmentType)) + " \u0432\u0445\u043e\u0434\u0438\u0442 \u0432 \u0442\u0440\u0435\u0431\u0443\u0435\u043c\u044b\u0439 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u043d\u044b\u0439 \u0440\u0435\u0436\u0438\u043c \u0437\u0430 " + warmupText + "."
+          ? (getReportEquipmentType(input) === "warehouse" ? "\u041f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : reeferSubject(getReportEquipmentType(input))) + " \u0432\u0445\u043e\u0434\u0438\u0442 \u0432 \u0442\u0440\u0435\u0431\u0443\u0435\u043c\u044b\u0439 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u043d\u044b\u0439 \u0440\u0435\u0436\u0438\u043c \u0437\u0430 " + warmupText + "."
           : "Время входа в режим не определено.",
       doorOpeningDescription:
         doorOpeningMinutes !== null
@@ -1856,7 +1877,7 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
           : "Время открытия двери не определено.",
       thermalRetentionDescription:
         thermalRetentionMinutes !== null
-          ? "\u041f\u0440\u0438 \u0432\u044b\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0438 \u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0433\u043e \u0430\u0433\u0440\u0435\u0433\u0430\u0442\u0430 " + (input?.protocol?.equipmentType === "warehouse" ? "\u043e\u0431\u044a\u0435\u043a\u0442" : reeferArea(input?.protocol?.equipmentType)) + " \u0441\u043f\u043e\u0441\u043e\u0431\u0435\u043d \u0441\u043e\u0445\u0440\u0430\u043d\u044f\u0442\u044c \u0442\u0440\u0435\u0431\u0443\u0435\u043c\u044b\u0439 \u0440\u0435\u0436\u0438\u043c \u0432 \u0442\u0435\u0447\u0435\u043d\u0438\u0435 " + thermalRetentionText + "."
+          ? "\u041f\u0440\u0438 \u0432\u044b\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0438 \u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0433\u043e \u0430\u0433\u0440\u0435\u0433\u0430\u0442\u0430 " + (getReportEquipmentType(input) === "warehouse" ? "\u043e\u0431\u044a\u0435\u043a\u0442" : reeferArea(getReportEquipmentType(input))) + " \u0441\u043f\u043e\u0441\u043e\u0431\u0435\u043d \u0441\u043e\u0445\u0440\u0430\u043d\u044f\u0442\u044c \u0442\u0440\u0435\u0431\u0443\u0435\u043c\u044b\u0439 \u0440\u0435\u0436\u0438\u043c \u0432 \u0442\u0435\u0447\u0435\u043d\u0438\u0435 " + thermalRetentionText + "."
           : "Время сохранения режима не определено.",
     };
   }
@@ -1903,12 +1924,12 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
     const excNote = input.excursion?.enabled
       ? ` Испытания на температурное отклонение проведены и зафиксированы в разделе 10 настоящего отчёта.`
       : "";
-    const suitabilityWord = input.protocol?.equipmentType === "chamber" ? "пригодной" : "пригодным";
+    const suitabilityWord = getReportEquipmentType(input) === "chamber" ? "пригодной" : "пригодным";
     text =
-      "\u041d\u0430 \u043e\u0441\u043d\u043e\u0432\u0430\u043d\u0438\u0438 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u043e\u0432 IQ, OQ \u0438 PV \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u043f\u0440\u0438\u0437\u043d\u0430\u0451\u0442 " + (input.protocol?.equipmentType === "warehouse" ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 (\u0437\u043e\u043d\u0443) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : reeferConclusionObject(input)) + " " +
+      "\u041d\u0430 \u043e\u0441\u043d\u043e\u0432\u0430\u043d\u0438\u0438 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u043e\u0432 IQ, OQ \u0438 PV \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u043f\u0440\u0438\u0437\u043d\u0430\u0451\u0442 " + (getReportEquipmentType(input) === "warehouse" ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 (\u0437\u043e\u043d\u0443) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : reeferConclusionObject(input)) + " " +
       `${suitabilityWord} для хранения лекарственных средств ` +
       `в температурном режиме ${TEMP_MODE_LABEL[input.pv.tempMode || ""] || "—"} в соответствии с требованиями GDP / GPP. ` +
-      (input.protocol?.equipmentType === "warehouse" 
+      (getReportEquipmentType(input) === "warehouse"
         ? `Система кондиционирования/отопления обеспечивает стабильное распределение температуры по всему объёму помещения. ` 
         : "") +
       `Валидация завершена с положительным заключением.${excNote}`;
@@ -2085,7 +2106,7 @@ function drawChecklistPlan(doc: PDFKit.PDFDocument, items: ChecklistItem[]) {
 }
 
 function drawPVPlan(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: ReportInput) {
-  const durationRequirement = input?.protocol?.equipmentType === "warehouse"
+  const durationRequirement = getReportEquipmentType(input) === "warehouse"
     ? `от 3 суток и далее (не менее 72 ч); выбрано ${pv.minDurationHours} ч`
     : `не менее ${pv.minDurationHours} ч`;
   const rows: Array<[string, string]> = [
@@ -2096,9 +2117,9 @@ function drawPVPlan(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     [
       "Места установки датчиков",
       pv.sensorPlacement
-        || (input?.protocol?.equipmentType === "warehouse"
+        || (getReportEquipmentType(input) === "warehouse"
           ? "Регистраторы данных следует располагать в форме сетки и таким образом, чтобы они покрывать зону хранения по всей ее длине и ширине, а также высоте. Регистраторы данных размещаются по возможности с равными интервалами. Внешний датчик — для контроля температуры вне помещения."
-          : "\u0414\u0430\u0442\u0447\u0438\u043a\u0438 \u0440\u0430\u0441\u043f\u043e\u043b\u0430\u0433\u0430\u044e\u0442\u0441\u044f \u0432 \u0445\u0430\u0440\u0430\u043a\u0442\u0435\u0440\u043d\u044b\u0445 \u0442\u043e\u0447\u043a\u0430\u0445 \u043e\u0431\u044a\u0451\u043c\u0430 " + reeferAreaGenitive(input?.protocol?.equipmentType) + ": \u043f\u043e \u0441\u0442\u0435\u043d\u0430\u043c \u0438 \u043f\u043e \u0446\u0435\u043d\u0442\u0440\u0443 \u043e\u0431\u044a\u0435\u043a\u0442\u0430. \u0412\u043d\u0435\u0448\u043d\u0438\u0439 \u0434\u0430\u0442\u0447\u0438\u043a \u2014 \u0434\u043b\u044f \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044f \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b \u0432 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u0435."),
+          : "\u0414\u0430\u0442\u0447\u0438\u043a\u0438 \u0440\u0430\u0441\u043f\u043e\u043b\u0430\u0433\u0430\u044e\u0442\u0441\u044f \u0432 \u0445\u0430\u0440\u0430\u043a\u0442\u0435\u0440\u043d\u044b\u0445 \u0442\u043e\u0447\u043a\u0430\u0445 \u043e\u0431\u044a\u0451\u043c\u0430 " + reeferAreaGenitive(getReportEquipmentType(input)) + ": \u043f\u043e \u0441\u0442\u0435\u043d\u0430\u043c \u0438 \u043f\u043e \u0446\u0435\u043d\u0442\u0440\u0443 \u043e\u0431\u044a\u0435\u043a\u0442\u0430. \u0412\u043d\u0435\u0448\u043d\u0438\u0439 \u0434\u0430\u0442\u0447\u0438\u043a \u2014 \u0434\u043b\u044f \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044f \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b \u0432 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u0435."),
     ],
   ];
   drawKVTable(doc, rows);

@@ -591,7 +591,7 @@ export default function SensorPlacementPage() {
                 doorPos={doorPos ?? (session as any)?.doorPos}
                 onCoolingUnitPosChange={setCoolingUnitPos}
                 onDoorPosChange={setDoorPos}
-                objectType={equipmentType === "chamber" ? "chamber" : "truck"}
+                objectType={equipmentType === "auto-refrigerator" ? "truck" : "chamber"}
               />
             </CardContent>
           </Card>

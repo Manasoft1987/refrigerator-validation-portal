@@ -10,6 +10,7 @@ import {
   DEFAULT_IQ_QUESTIONS_WAREHOUSE,
   DEFAULT_OQ_QUESTIONS_WAREHOUSE,
   STAGE_TEMPLATES,
+  AUTO_REFRIGERATOR_STAGE_TEMPLATES,
   CHAMBER_STAGE_TEMPLATES,
   WAREHOUSE_STAGE_TEMPLATES,
   TEMP_MODES,
@@ -680,7 +681,9 @@ export const appRouter = router({
       .input(z.object({ stage: z.enum(["iq", "oq", "pv"]), equipmentType: z.string().optional() }))
       .query(({ input }) => input.equipmentType === "chamber"
         ? CHAMBER_STAGE_TEMPLATES[input.stage]
-        : STAGE_TEMPLATES[input.stage]),
+        : input.equipmentType === "auto-refrigerator"
+          ? AUTO_REFRIGERATOR_STAGE_TEMPLATES[input.stage]
+          : STAGE_TEMPLATES[input.stage]),
   }),
 
   /* -------------------------------------------------------------- */
@@ -1316,11 +1319,15 @@ export const appRouter = router({
         const isWarehouseProtocol = protocol.equipmentType === "warehouse";
         const isChamberProtocol =
           protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || gi?.equipmentType === "chamber";
+        const isAutoRefrigeratorProtocol =
+          (protocol.equipmentType ?? gi?.equipmentType) === "auto-refrigerator";
         const reportStageTemplates = isWarehouseProtocol
           ? WAREHOUSE_STAGE_TEMPLATES
           : isChamberProtocol
             ? CHAMBER_STAGE_TEMPLATES
-            : STAGE_TEMPLATES;
+            : isAutoRefrigeratorProtocol
+              ? AUTO_REFRIGERATOR_STAGE_TEMPLATES
+              : STAGE_TEMPLATES;
         if (hasPVData) {
           for (const item of reportInternalLoggers) {
             const l = item.logger;

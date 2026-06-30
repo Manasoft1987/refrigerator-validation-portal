@@ -223,8 +223,16 @@ export function calculateAllOperationalMetrics(
     sensorPositions,
   );
 
-  const subject = equipmentType === "chamber" ? "Холодильная камера" : "Авторефрижератор";
-  const retentionSubject = equipmentType === "chamber" ? "камера способна" : "кузов способен";
+  const subject =
+    equipmentType === "chamber" ? "Холодильная камера"
+    : equipmentType === "refrigerator" ? "Холодильник"
+    : equipmentType === "freezer" ? "Морозильник"
+    : "Авторефрижератор";
+  const retentionSubject =
+    equipmentType === "chamber" ? "камера способна"
+    : equipmentType === "refrigerator" ? "холодильник способен"
+    : equipmentType === "freezer" ? "морозильник способен"
+    : "кузов способен";
 
   return {
     warmupTimeMinutes,

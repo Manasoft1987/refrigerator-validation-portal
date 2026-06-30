@@ -24,6 +24,22 @@ describe("operational metric wording", () => {
     expect(text).not.toMatch(/авторефрижератор|кузов|кабина|транспортное средство/i);
   });
 
+  it("uses refrigerator wording for a refrigerator", () => {
+    const result = calculateAllOperationalMetrics(
+      [{ series }],
+      2.2,
+      7.8,
+      null,
+      null,
+      undefined,
+      "refrigerator",
+    );
+    const text = [result.warmupDescription, result.thermalRetentionDescription].join(" ");
+    expect(text).toContain("Холодильник");
+    expect(text).toContain("холодильник способен");
+    expect(text).not.toMatch(/авторефрижератор|кузов|кабина|транспортное средство/i);
+  });
+
   it("keeps existing auto-refrigerator wording unchanged", () => {
     const result = calculateAllOperationalMetrics(
       [{ series }],
@@ -31,8 +47,11 @@ describe("operational metric wording", () => {
       7.8,
       null,
       null,
+      undefined,
+      "auto-refrigerator",
     );
-    expect(result.warmupDescription).toContain("Авторефрижератор");
-    expect(result.thermalRetentionDescription).toContain("кузов способен");
+    const text = [result.warmupDescription, result.thermalRetentionDescription].join(" ");
+    expect(text).toContain("Авторефрижератор");
+    expect(text).toContain("кузов способен");
   });
 });
