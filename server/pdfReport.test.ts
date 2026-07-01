@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import PDFDocument from "pdfkit";
-import { generateProtocolPdf } from "./pdfReport";
+import {
+  generateProtocolPdf,
+  getSensorCalibrationStatusAtProtocolDate,
+  resolveProtocolReferenceDate,
+} from "./pdfReport";
 
 function mkSeries(start: number, hours: number, temp: number) {
   const ts: number[] = [];
@@ -38,6 +42,35 @@ const BASE_GI = {
   validationDate: "2024-07-15",
   basis: "primary",
 };
+
+describe("sensor calibration status in PDF", () => {
+  it("uses the protocol validation date instead of today or the stored sensor status", () => {
+    const protocolDate = resolveProtocolReferenceDate(
+      "2024-07-15",
+      new Date("2026-01-01T12:00:00Z"),
+    );
+
+    expect(getSensorCalibrationStatusAtProtocolDate("2024-07-14", protocolDate)).toBe("expired");
+    expect(getSensorCalibrationStatusAtProtocolDate("2024-07-15", protocolDate)).toBe("valid");
+    expect(getSensorCalibrationStatusAtProtocolDate("2025-07-15", protocolDate)).toBe("valid");
+  });
+
+  it("falls back to protocol.createdAt and handles Date/null values", () => {
+    const protocolDate = resolveProtocolReferenceDate(
+      null,
+      new Date("2024-08-20T18:30:00Z"),
+    );
+
+    expect(
+      getSensorCalibrationStatusAtProtocolDate(new Date("2024-08-19T00:00:00Z"), protocolDate),
+    ).toBe("expired");
+    expect(
+      getSensorCalibrationStatusAtProtocolDate(new Date("2024-08-20T00:00:00Z"), protocolDate),
+    ).toBe("valid");
+    expect(getSensorCalibrationStatusAtProtocolDate(null, protocolDate)).toBeNull();
+    expect(getSensorCalibrationStatusAtProtocolDate("not-a-date", protocolDate)).toBeNull();
+  });
+});
 
 describe("generateProtocolPdf", () => {
   it(

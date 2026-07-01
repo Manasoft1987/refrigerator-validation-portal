@@ -477,6 +477,35 @@ function coerceDate(value: string | Date | number | null | undefined): Date | nu
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+export function resolveProtocolReferenceDate(
+  validationDate: string | Date | number | null | undefined,
+  protocolCreatedAt: string | Date | number | null | undefined,
+): Date | null {
+  return coerceDate(validationDate) ?? coerceDate(protocolCreatedAt);
+}
+
+export function getSensorCalibrationStatusAtProtocolDate(
+  nextCalibrationDate: string | Date | number | null | undefined,
+  protocolDate: string | Date | number | null | undefined,
+): "expired" | "valid" | null {
+  const nextDate = coerceDate(nextCalibrationDate);
+  const referenceDate = coerceDate(protocolDate);
+  if (!nextDate || !referenceDate) return null;
+
+  const nextDateOnly = Date.UTC(
+    nextDate.getUTCFullYear(),
+    nextDate.getUTCMonth(),
+    nextDate.getUTCDate(),
+  );
+  const referenceDateOnly = Date.UTC(
+    referenceDate.getUTCFullYear(),
+    referenceDate.getUTCMonth(),
+    referenceDate.getUTCDate(),
+  );
+
+  return nextDateOnly < referenceDateOnly ? "expired" : "valid";
+}
+
 function latestDate(values: Array<string | Date | number | null | undefined>): Date | null {
   return values
     .map(coerceDate)
@@ -629,7 +658,12 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     if (input.protocolSensors && input.protocolSensors.length > 0) {
       doc.addPage();
       drawSectionTitle(doc, "1.1. Датчики, используемые для валидации");
-      drawSensorTable(doc, input.protocolSensors, input.pv.sensorAccuracy);
+      drawSensorTable(
+        doc,
+        input.protocolSensors,
+        input.pv.sensorAccuracy,
+        resolveProtocolReferenceDate(input.generalInfo?.validationDate, input.protocol.createdAt),
+      );
     }
     
     doc.addPage();
@@ -4348,6 +4382,7 @@ function drawSensorTable(
     status?: string;
   }>,
   sensorAccuracy = 0.2,
+  protocolDate: string | Date | number | null = null,
 ): void {
   const left = PAGE_MARGIN;
   const right = doc.page.width - PAGE_MARGIN;
@@ -4390,38 +4425,26 @@ function drawSensorTable(
   // Draw data rows
   doc.font("body").fontSize(9).fillColor(ACCENT);
   const accuracyText = `±${sensorAccuracy.toFixed(2)}`;
-  const now = Date.now();
   uniqueSensors.forEach((sensor) => {
     ensureSpace(doc, 28);
     const rowY = doc.y;
     
     // Format dates
-    const calibDate = sensor.calibrationDate
-      ? new Date(sensor.calibrationDate).toLocaleDateString("ru-RU")
-      : "—";
-    const nextDate = sensor.nextCalibrationDate
-      ? new Date(sensor.nextCalibrationDate).toLocaleDateString("ru-RU")
-      : "—";
-    
-    const nextTime = sensor.nextCalibrationDate ? new Date(sensor.nextCalibrationDate).getTime() : NaN;
-    const computedStatus = Number.isFinite(nextTime) && nextTime < now
-      ? "expired"
-      : Number.isFinite(nextTime) && nextTime - now <= 30 * 24 * 60 * 60 * 1000
-        ? "expiring_soon"
-        : sensor.status;
-    (sensor as any).status = computedStatus;
+    const calibDate = fmtTraceDate(sensor.calibrationDate);
+    const nextDate = fmtTraceDate(sensor.nextCalibrationDate);
+    const calibrationStatus = getSensorCalibrationStatusAtProtocolDate(
+      sensor.nextCalibrationDate,
+      protocolDate,
+    );
 
     // Determine status color
-    let statusText = sensor.status || "—";
+    let statusText = "—";
     let statusColor = ACCENT;
-    if (sensor.status === "expired") {
-      statusText = "Просрочена";
+    if (calibrationStatus === "expired") {
+      statusText = "Истекла";
       statusColor = "#d32f2f"; // Red
-    } else if (sensor.status === "expiring_soon") {
-      statusText = "Истекает";
-      statusColor = "#f57c00"; // Orange
-    } else if (sensor.status === "active") {
-      statusText = "Активна";
+    } else if (calibrationStatus === "valid") {
+      statusText = "Действительна";
       statusColor = "#388e3c"; // Green
     }
     
