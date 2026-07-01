@@ -921,8 +921,12 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
       "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430",
     ]);
     doc.font("bold").fontSize(valueFontSize);
-    if (threeLineKeys.has(key)) return fitTextToLines(doc, text, valueW, 3);
-    if (twoLineKeys.has(key)) return fitTextToLines(doc, text, valueW, 2);
+    // Allow long organisation names / addresses to wrap fully instead of being
+    // cut off with «…». The card auto-sizes to the measured value height, so a
+    // generous line cap keeps real values readable while still bounding
+    // pathologically long input.
+    if (threeLineKeys.has(key)) return fitTextToLines(doc, text, valueW, 8);
+    if (twoLineKeys.has(key)) return fitTextToLines(doc, text, valueW, 4);
     return text;
   };
   const measuredRows = rows.map(([k, rawValue]) => {
