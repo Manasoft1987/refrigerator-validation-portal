@@ -294,15 +294,28 @@ function ObjectShape({
 
       {/* Resize handles (when selected): 4 corners + 4 side midpoints */}
       {selected && (() => {
+        // Handles are drawn inside the rotated group, so their on-screen
+        // orientation is rotated too. Rotate the resize cursor to match, so a
+        // side handle on a 90°-rotated wall shows ↔ (not ↕).
+        const rot = (((obj.rotation ?? 0) % 360) + 360) % 360;
+        const rotateCursor = (c: string): string => {
+          if (rot === 90 || rot === 270) {
+            if (c === "ns-resize") return "ew-resize";
+            if (c === "ew-resize") return "ns-resize";
+            if (c === "nwse-resize") return "nesw-resize";
+            if (c === "nesw-resize") return "nwse-resize";
+          }
+          return c;
+        };
         const handles: Array<{ key: ResizeCorner; hx: number; hy: number; cursor: string }> = [
-          { key: "nw", hx: x,         hy: y,         cursor: "nwse-resize" },
-          { key: "ne", hx: x + w,     hy: y,         cursor: "nesw-resize" },
-          { key: "se", hx: x + w,     hy: y + h,     cursor: "nwse-resize" },
-          { key: "sw", hx: x,         hy: y + h,     cursor: "nesw-resize" },
-          { key: "n",  hx: x + w / 2, hy: y,         cursor: "ns-resize" },
-          { key: "e",  hx: x + w,     hy: y + h / 2, cursor: "ew-resize" },
-          { key: "s",  hx: x + w / 2, hy: y + h,     cursor: "ns-resize" },
-          { key: "w",  hx: x,         hy: y + h / 2, cursor: "ew-resize" },
+          { key: "nw", hx: x,         hy: y,         cursor: rotateCursor("nwse-resize") },
+          { key: "ne", hx: x + w,     hy: y,         cursor: rotateCursor("nesw-resize") },
+          { key: "se", hx: x + w,     hy: y + h,     cursor: rotateCursor("nwse-resize") },
+          { key: "sw", hx: x,         hy: y + h,     cursor: rotateCursor("nesw-resize") },
+          { key: "n",  hx: x + w / 2, hy: y,         cursor: rotateCursor("ns-resize") },
+          { key: "e",  hx: x + w,     hy: y + h / 2, cursor: rotateCursor("ew-resize") },
+          { key: "s",  hx: x + w / 2, hy: y + h,     cursor: rotateCursor("ns-resize") },
+          { key: "w",  hx: x,         hy: y + h / 2, cursor: rotateCursor("ew-resize") },
         ];
         return (
           <>
