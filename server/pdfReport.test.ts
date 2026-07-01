@@ -180,6 +180,76 @@ describe("generateProtocolPdf", () => {
   );
 
   it(
+    "splits wide measurement tables into readable sensor blocks",
+    async () => {
+      const now = Date.UTC(2026, 5, 12, 14, 30, 0);
+      const loggers = Array.from({ length: 18 }, (_, idx) => {
+        const first = 20 + idx / 10;
+        const second = first + 0.2;
+        return {
+          id: idx + 1,
+          label: String(20 + idx * 3),
+          customName: null,
+          role: "internal" as const,
+          pointCount: 2,
+          min: first,
+          max: second,
+          avg: (first + second) / 2,
+          std: 0.1,
+          mkt: (first + second) / 2,
+          series: {
+            ts: [now, now + 10 * 60_000],
+            temp: [first, second],
+          },
+          deviations: [],
+        };
+      });
+      const originalText = (PDFDocument.prototype as any).text;
+      const blockLabels = new Set<string>();
+
+      (PDFDocument.prototype as any).text = function (text: string, ...args: any[]) {
+        if (text.startsWith("Датчики ") && text.endsWith(" из 18")) {
+          blockLabels.add(text);
+        }
+        return originalText.call(this, text, ...args);
+      };
+
+      try {
+        await generateProtocolPdf({
+          org: BASE_ORG,
+          protocol: { number: "VAL-2026-0038", createdAt: new Date(now) },
+          generalInfo: { ...BASE_GI, validationDate: "2026-06-12" },
+          iq: {
+            purpose: "IQ", description: "IQ", criteria: "IQ",
+            items: [], verdict: "none",
+          },
+          oq: {
+            purpose: "OQ", description: "OQ", criteria: "OQ",
+            items: [], verdict: "none",
+          },
+          pv: {
+            purpose: "PV", description: "PV", criteria: "PV",
+            tempMode: "2-8", rangeMin: 2, rangeMax: 8,
+            samplingStepMinutes: 10,
+            startAt: now, endAt: now + 10 * 60_000,
+            minDurationHours: 0, minSensorCount: 18,
+            loggers, verdict: "none", failureReasons: [],
+            hotIdx: 0, coldIdx: 1, extIndices: [],
+          },
+        });
+      } finally {
+        (PDFDocument.prototype as any).text = originalText;
+      }
+
+      expect(Array.from(blockLabels)).toEqual([
+        "Датчики 1–12 из 18",
+        "Датчики 13–18 из 18",
+      ]);
+    },
+    60_000,
+  );
+
+  it(
     "includes excursion section when excursion is enabled",
     async () => {
       const now = Date.UTC(2024, 6, 15, 9, 0, 0);

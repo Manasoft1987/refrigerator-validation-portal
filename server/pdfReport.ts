@@ -2343,37 +2343,9 @@ function drawMeasurementTable(doc: PDFKit.PDFDocument, loggers: LoggerSummary[],
     return undefined;
   }
 
-  // Column widths: timestamp col + one col per logger
-  const tsColW = 0.18;
-  const sensorColW = (1 - tsColW) / loggers.length;
-  const cols: Array<{ label: string; w: number }> = [
-    { label: "Дата / Время", w: tsColW },
-    ...loggers.map(l => ({
-      label: shortLabel(l.label, l.customName),
-      w: sensorColW,
-    })),
-  ];
-
   const ROW_H = 18;
   const HEADER_H = 26;
-
-  function drawHeader() {
-    ensureSpace(doc, HEADER_H + ROW_H);
-    const y = doc.y;
-    doc.save();
-    doc.rect(left, y, w, HEADER_H).fillColor(ACCENT).fill();
-    doc.restore();
-    let cx = left;
-    doc.fillColor("white").font("bold").fontSize(6.5);
-    cols.forEach(c => {
-      const cw = c.w * w;
-      doc.text(c.label, cx + 3, y + 5, { width: cw - 6, lineBreak: true });
-      cx += cw;
-    });
-    doc.y = y + HEADER_H;
-  }
-
-  drawHeader();
+  const MAX_SENSORS_PER_BLOCK = 12;
 
   // Limit to 2000 rows to avoid huge PDFs; if more, sample evenly
   const MAX_ROWS = 2000;
@@ -2383,49 +2355,105 @@ function drawMeasurementTable(doc: PDFKit.PDFDocument, loggers: LoggerSummary[],
     rows = Array.from({ length: MAX_ROWS }, (_, i) => rows[Math.round(i * step)]);
   }
 
-  let rowIdx = 0;
-  let pageRowCount = 0;
-  const PAGE_ROWS_BEFORE_REHEADER = Math.floor((doc.page.height - doc.y - PAGE_MARGIN) / ROW_H);
+  const loggerGroups = Array.from(
+    { length: Math.ceil(loggers.length / MAX_SENSORS_PER_BLOCK) },
+    (_, groupIdx) => {
+      const startIdx = groupIdx * MAX_SENSORS_PER_BLOCK;
+      return loggers
+        .slice(startIdx, startIdx + MAX_SENSORS_PER_BLOCK)
+        .map((logger, offset) => ({ logger, loggerIdx: startIdx + offset }));
+    },
+  );
 
-  for (const ts of rows) {
-    // Add new page + header when page is full
-    if (pageRowCount > 0 && pageRowCount % PAGE_ROWS_BEFORE_REHEADER === 0) {
+  loggerGroups.forEach((group, groupIdx) => {
+    if (groupIdx > 0) {
       doc.addPage();
       doc.y = HEADER_CONTENT_TOP;
-      drawHeader();
-      pageRowCount = 0;
     }
 
-    ensureSpace(doc, ROW_H);
-    const ry = doc.y;
-    if (rowIdx % 2 === 0) {
-      doc.save();
-      doc.fillColor(SOFT_BG).rect(left, ry, w, ROW_H).fill();
-      doc.restore();
-    }
-
-    const cells: string[] = [
-      fmtDate(ts),
-      ...loggers.map((_, idx) => {
-        const v = getInterpolatedValue(idx, ts);
-        if (v === undefined) return "—";
-        return Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(2);
-      }),
+    const tsColW = 0.2;
+    const sensorColW = (1 - tsColW) / group.length;
+    const cols: Array<{ label: string; w: number }> = [
+      { label: "Дата / Время", w: tsColW },
+      ...group.map(({ logger }) => ({
+        label: shortLabel(logger.label, logger.customName),
+        w: sensorColW,
+      })),
     ];
+    const firstSensorNo = groupIdx * MAX_SENSORS_PER_BLOCK + 1;
+    const lastSensorNo = firstSensorNo + group.length - 1;
+    const blockLabel = `Датчики ${firstSensorNo}–${lastSensorNo} из ${loggers.length}`;
 
-    let cx2 = left;
-    doc.font("body").fontSize(7.6).fillColor(ACCENT);
-    cells.forEach((val, i) => {
-      const cw = cols[i].w * w;
-      doc.text(val, cx2 + 3, ry + 5, { width: cw - 6, lineBreak: false });
-      cx2 += cw;
-    });
-    doc.y = ry + ROW_H;
-    rowIdx++;
-    pageRowCount++;
-  }
+    const drawBlockHeading = () => {
+      ensureSpace(doc, (loggerGroups.length > 1 ? 20 : 0) + HEADER_H + ROW_H);
+      if (loggerGroups.length > 1) {
+        doc.font("bold").fontSize(8).fillColor(MUTED).text(blockLabel, left, doc.y, {
+          width: w,
+          align: "right",
+        });
+        doc.moveDown(0.15);
+      }
+    };
 
-  doc.moveDown(0.5);
+    const drawHeader = () => {
+      ensureSpace(doc, HEADER_H + ROW_H);
+      const y = doc.y;
+      doc.save();
+      doc.rect(left, y, w, HEADER_H).fillColor(ACCENT).fill();
+      doc.restore();
+      let cx = left;
+      doc.fillColor("white").font("bold").fontSize(6.5);
+      cols.forEach(c => {
+        const cw = c.w * w;
+        doc.text(c.label, cx + 3, y + 5, { width: cw - 6, lineBreak: true });
+        cx += cw;
+      });
+      doc.y = y + HEADER_H;
+    };
+
+    drawBlockHeading();
+    drawHeader();
+
+    let rowIdx = 0;
+    for (const ts of rows) {
+      const bottom = doc.page.height - PAGE_MARGIN;
+      if (doc.y + ROW_H > bottom) {
+        doc.addPage();
+        doc.y = HEADER_CONTENT_TOP;
+        drawBlockHeading();
+        drawHeader();
+      }
+
+      const ry = doc.y;
+      if (rowIdx % 2 === 0) {
+        doc.save();
+        doc.fillColor(SOFT_BG).rect(left, ry, w, ROW_H).fill();
+        doc.restore();
+      }
+
+      const cells: string[] = [
+        fmtDate(ts),
+        ...group.map(({ loggerIdx }) => {
+          const v = getInterpolatedValue(loggerIdx, ts);
+          if (v === undefined) return "—";
+          return Math.abs(v) >= 10 ? v.toFixed(1) : v.toFixed(2);
+        }),
+      ];
+
+      let cx2 = left;
+      doc.font("body").fontSize(7.6).fillColor(ACCENT);
+      cells.forEach((val, i) => {
+        const cw = cols[i].w * w;
+        doc.text(val, cx2 + 3, ry + 5, { width: cw - 6, lineBreak: false });
+        cx2 += cw;
+      });
+      doc.y = ry + ROW_H;
+      rowIdx++;
+    }
+
+    doc.moveDown(0.5);
+  });
+
   if (allTs.length > MAX_ROWS) {
     doc.font("body").fontSize(7.6).fillColor(MUTED)
       .text(`Показано ${MAX_ROWS} из ${allTs.length} строк (равномерная выборка).`, { align: "right" });
