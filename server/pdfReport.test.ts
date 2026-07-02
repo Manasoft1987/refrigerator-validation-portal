@@ -250,6 +250,62 @@ describe("generateProtocolPdf", () => {
   );
 
   it(
+    "centers stage verdict headings across the usable page width",
+    async () => {
+      const now = Date.UTC(2026, 5, 25, 4, 12, 0);
+      const originalText = (PDFDocument.prototype as any).text;
+      const headingCalls: Array<{
+        text: string;
+        x: number;
+        options: { width?: number; align?: string; lineBreak?: boolean };
+      }> = [];
+
+      (PDFDocument.prototype as any).text = function (text: string, ...args: any[]) {
+        if (text === "Заключение по этапу" || text === "Заключение по этапу PV") {
+          headingCalls.push({ text, x: args[0], options: args[2] ?? {} });
+        }
+        return originalText.call(this, text, ...args);
+      };
+
+      try {
+        await generateProtocolPdf({
+          org: BASE_ORG,
+          protocol: { number: "VAL-2026-0039", createdAt: new Date(now) },
+          generalInfo: { ...BASE_GI, validationDate: "2026-06-25" },
+          iq: {
+            purpose: "IQ", description: "IQ", criteria: "IQ",
+            items: [], verdict: "none",
+          },
+          oq: {
+            purpose: "OQ", description: "OQ", criteria: "OQ",
+            items: [], verdict: "none",
+          },
+          pv: {
+            purpose: "PV", description: "PV", criteria: "PV",
+            tempMode: "2-8", rangeMin: 2, rangeMax: 8,
+            startAt: now, endAt: now,
+            minDurationHours: 0, minSensorCount: 0,
+            loggers: [], verdict: "fail",
+            failureReasons: ["Температурное отклонение"],
+            hotIdx: null, coldIdx: null, extIndices: [],
+          },
+        });
+      } finally {
+        (PDFDocument.prototype as any).text = originalText;
+      }
+
+      expect(headingCalls).toHaveLength(3);
+      headingCalls.forEach(call => {
+        expect(call.x).toBe(56);
+        expect(call.options.width).toBeGreaterThan(400);
+        expect(call.options.align).toBe("center");
+        expect(call.options.lineBreak).toBe(false);
+      });
+    },
+    60_000,
+  );
+
+  it(
     "includes excursion section when excursion is enabled",
     async () => {
       const now = Date.UTC(2024, 6, 15, 9, 0, 0);

@@ -1339,7 +1339,16 @@ function drawStageVerdict(
     "Оборудование установлено, подключено и соответствует требованиям проектной, нормативной и эксплуатационной документации.";
   const sampleH = Math.max(60, doc.heightOfString(longestSample, { width: doc.page.width - PAGE_MARGIN * 2 - 28 }) + 28);
   ensureSpace(doc, titleH + 8 + sampleH);
-  doc.fillColor(ACCENT).font("bold").fontSize(12).text("Заключение по этапу", PAGE_MARGIN, doc.y, { lineBreak: false });
+  doc.fillColor(ACCENT).font("bold").fontSize(12).text(
+    "Заключение по этапу",
+    PAGE_MARGIN,
+    doc.y,
+    {
+      width: doc.page.width - PAGE_MARGIN * 2,
+      align: "center",
+      lineBreak: false,
+    },
+  );
   doc.moveDown(0.3);
   // Extra 1.5 cm (≈42.5pt) gap before the verdict box as requested
   doc.y += 42.5;
@@ -1703,13 +1712,19 @@ function drawDeviationsSection(doc: PDFKit.PDFDocument, pv: ReportInput["pv"]) {
 }
 
 function drawStagePVVerdict(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: ReportInput) {
-  ensureSpace(doc, 120);
-  doc.moveDown(0.5);
-  doc.fillColor(ACCENT).font("bold").fontSize(12).text("Заключение по этапу PV");
-  doc.moveDown(0.3);
   const left = PAGE_MARGIN;
   const right = doc.page.width - PAGE_MARGIN;
   const w = right - left;
+  ensureSpace(doc, 120);
+  doc.moveDown(0.5);
+  doc.x = left;
+  doc.fillColor(ACCENT).font("bold").fontSize(12).text(
+    "Заключение по этапу PV",
+    left,
+    doc.y,
+    { width: w, align: "center", lineBreak: false },
+  );
+  doc.moveDown(0.3);
   let text = "Заключение не сформировано — этап не завершён.";
   let bg = "#f1f5f9";
   let bd = BORDER;
