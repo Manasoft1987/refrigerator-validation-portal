@@ -306,6 +306,85 @@ describe("generateProtocolPdf", () => {
   );
 
   it(
+    "autofills IQ, OQ, and PV data entry rows with author and protocol date",
+    async () => {
+      const now = Date.UTC(2026, 5, 20, 9, 0, 0);
+      const originalText = (PDFDocument.prototype as any).text;
+      const captured = new Map<string, Set<string>>();
+      let activeStage: string | null = null;
+
+      (PDFDocument.prototype as any).text = function (text: string, ...args: any[]) {
+        if (
+          text === "Запись ввода данных IQ" ||
+          text === "Запись ввода данных OQ" ||
+          text === "Запись ввода данных PQ/PV"
+        ) {
+          activeStage = text;
+          captured.set(text, new Set());
+        } else if (
+          activeStage &&
+          (text === "Оразалина А.А." || text === "25.06.2026")
+        ) {
+          const values = captured.get(activeStage)!;
+          values.add(text);
+          if (values.size === 2) activeStage = null;
+        }
+        return originalText.call(this, text, ...args);
+      };
+
+      try {
+        await generateProtocolPdf({
+          org: BASE_ORG,
+          protocol: {
+            number: "VAL-2026-0041",
+            createdAt: new Date(now),
+          },
+          generalInfo: {
+            ...BASE_GI,
+            validationDate: "2026-06-25",
+          },
+          iq: {
+            purpose: "IQ", description: "IQ", criteria: "IQ",
+            items: [], verdict: "none",
+          },
+          oq: {
+            purpose: "OQ", description: "OQ", criteria: "OQ",
+            items: [], verdict: "none",
+          },
+          pv: {
+            purpose: "PV", description: "PV", criteria: "PV",
+            tempMode: "2-8", rangeMin: 2, rangeMax: 8,
+            startAt: now, endAt: now,
+            minDurationHours: 0, minSensorCount: 0,
+            loggers: [], verdict: "none", failureReasons: [],
+            hotIdx: null, coldIdx: null, extIndices: [],
+          },
+          dataIntegrity: {
+            revision: "01",
+            preparedBy: "Оразалина А.А.",
+            generatedBy: "Оразалина А.А.",
+            generatedAt: new Date(now),
+            stages: [],
+            revisionHistory: [],
+          },
+        });
+      } finally {
+        (PDFDocument.prototype as any).text = originalText;
+      }
+
+      expect(Array.from(captured.keys())).toEqual([
+        "Запись ввода данных IQ",
+        "Запись ввода данных OQ",
+        "Запись ввода данных PQ/PV",
+      ]);
+      captured.forEach(values => {
+        expect(Array.from(values)).toEqual(["Оразалина А.А.", "25.06.2026"]);
+      });
+    },
+    60_000,
+  );
+
+  it(
     "includes excursion section when excursion is enabled",
     async () => {
       const now = Date.UTC(2024, 6, 15, 9, 0, 0);
