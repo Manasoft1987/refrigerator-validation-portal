@@ -1225,11 +1225,21 @@ function drawRevisionHistorySection(doc: PDFKit.PDFDocument, input: ReportInput)
 
 function drawStageDataEntryTable(doc: PDFKit.PDFDocument, input: ReportInput, stage: "IQ" | "OQ" | "PV") {
   const trace = getStageTrace(input, stage);
+  // Auto-fill: ФИО — автор из истории изменений («внёс/подготовил»),
+  // дата — как дата составления протокола.
+  const filledBy = getTraceablePerson(input);
+  const protocolDate = fmtDateOnly(
+    input.generalInfo?.validationDate
+      ? new Date(input.generalInfo.validationDate)
+      : typeof input.protocol.createdAt === "string"
+        ? new Date(input.protocol.createdAt)
+        : input.protocol.createdAt,
+  );
   drawSubTitle(doc, `Запись ввода данных ${stage === "PV" ? "PQ/PV" : stage}`);
   drawSimpleTable(
     doc,
     ["Раздел данных", "Заполнил (ФИО)", "Дата заполнения", "Источник записи"],
-    [[trace.label, " ", " ", trace.source]],
+    [[trace.label || " ", filledBy || " ", protocolDate || " ", trace.source || " "]],
     [0.30, 0.22, 0.24, 0.24],
   );
 }
