@@ -306,7 +306,7 @@ describe("generateProtocolPdf", () => {
   );
 
   it(
-    "autofills IQ, OQ, and PV data entry rows with author and report date",
+    "autofills IQ, OQ, and PV data entry rows with author and protocol date",
     async () => {
       const now = Date.UTC(2026, 5, 20, 9, 0, 0);
       const originalText = (PDFDocument.prototype as any).text;
@@ -323,7 +323,7 @@ describe("generateProtocolPdf", () => {
           captured.set(text, new Set());
         } else if (
           activeStage &&
-          (text === "Оразалина А.А." || text === "27.06.2026")
+          (text === "Оразалина А.А." || text === "25.06.2026")
         ) {
           const values = captured.get(activeStage)!;
           values.add(text);
@@ -343,7 +343,6 @@ describe("generateProtocolPdf", () => {
             ...BASE_GI,
             validationDate: "2026-06-25",
           },
-          reportDate: "27.06.2026",
           iq: {
             purpose: "IQ", description: "IQ", criteria: "IQ",
             items: [], verdict: "none",
@@ -379,7 +378,7 @@ describe("generateProtocolPdf", () => {
         "Запись ввода данных PQ/PV",
       ]);
       captured.forEach(values => {
-        expect(Array.from(values)).toEqual(["Оразалина А.А.", "27.06.2026"]);
+        expect(Array.from(values)).toEqual(["Оразалина А.А.", "25.06.2026"]);
       });
     },
     60_000,
