@@ -21,7 +21,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RotateCw, Trash2, Plus, Move, Layers, X, ChevronRight } from "lucide-react";
 import { nanoid } from "nanoid";
-import { viewportToCanvasPoint } from "../lib/floorPlanGeometry";
+import {
+  resizeFloorPlanRect,
+  viewportToCanvasPoint,
+  type FloorPlanResizeHandle,
+} from "../lib/floorPlanGeometry";
 
 export interface ObjectSensor {
   sensorId: string;     // user-entered ID/serial of the sensor
@@ -91,7 +95,7 @@ function snapVal(v: number, step: number): number {
 }
 
 // Resize handle identifiers: 4 corners + 4 side midpoints
-type ResizeCorner = "nw" | "ne" | "se" | "sw" | "n" | "e" | "s" | "w";
+type ResizeCorner = FloorPlanResizeHandle;
 
 // Minimum object size, in % of room dimension
 const MIN_SIZE_PCT = 1.5;
@@ -727,57 +731,21 @@ export function FloorPlanEditor({
         onChange(objects.map(o => o.id === ds.mode.id ? { ...o, xPct: newX, yPct: newY } : o));
       } else {
         const { corner } = ds.mode;
-        const w0 = snap.widthPct, h0 = snap.heightPct;
-        const cx0 = snap.xPct + w0 / 2, cy0 = snap.yPct + h0 / 2;
-
-        const movesE = corner === "se" || corner === "ne" || corner === "e";
-        const movesW = corner === "sw" || corner === "nw" || corner === "w";
-        const movesS = corner === "se" || corner === "sw" || corner === "s";
-        const movesN = corner === "ne" || corner === "nw" || corner === "n";
-
-        // Translate the pointer delta from screen axes into the object's local
-        // (unrotated) axes, so a handle always resizes the side it belongs to —
-        // even when the object is rotated 90/180/270°.
-        const theta = ((snap.rotation || 0) * Math.PI) / 180;
-        const cos = Math.cos(theta), sin = Math.sin(theta);
-        const localDx = dxPct * cos + dyPct * sin;
-        const localDy = -dxPct * sin + dyPct * cos;
-
-        // New size in local space — only the dragged side changes; the
-        // perpendicular dimension is left EXACTLY as-is (and is not snapped,
-        // so it never drifts when you drag a side handle).
-        let nw = w0, nh = h0;
-        if (movesE) nw = Math.max(MIN_SIZE_PCT, w0 + localDx);
-        else if (movesW) nw = Math.max(MIN_SIZE_PCT, w0 - localDx);
-        if (movesS) nh = Math.max(MIN_SIZE_PCT, h0 + localDy);
-        else if (movesN) nh = Math.max(MIN_SIZE_PCT, h0 - localDy);
-
-        // Snap only the dimension(s) actually being resized to the grid.
-        if (movesE || movesW) nw = Math.max(MIN_SIZE_PCT, snapVal(nw, stepX));
-        if (movesS || movesN) nh = Math.max(MIN_SIZE_PCT, snapVal(nh, stepY));
-
-        // Keep the edge/corner opposite the dragged one visually fixed (the
-        // "anchor"). Its offset from the centre, in local coords, before/after.
-        const ax0 = movesE ? -w0 / 2 : movesW ? w0 / 2 : 0;
-        const ay0 = movesS ? -h0 / 2 : movesN ? h0 / 2 : 0;
-        const ax1 = movesE ? -nw / 2 : movesW ? nw / 2 : 0;
-        const ay1 = movesS ? -nh / 2 : movesN ? nh / 2 : 0;
-        // Screen position of the anchor (constant during the drag)
-        const screenAx = cx0 + (ax0 * cos - ay0 * sin);
-        const screenAy = cy0 + (ax0 * sin + ay0 * cos);
-        // New centre so the anchor (with the new size) stays on that screen point
-        const cx1 = screenAx - (ax1 * cos - ay1 * sin);
-        const cy1 = screenAy - (ax1 * sin + ay1 * cos);
-
-        let nx = cx1 - nw / 2;
-        let ny = cy1 - nh / 2;
-
-        // Keep the (unrotated) rect within the room
-        nw = Math.min(nw, 100);
-        nh = Math.min(nh, 100);
-        nx = clamp(nx, 0, 100 - nw);
-        ny = clamp(ny, 0, 100 - nh);
-        onChange(objects.map(o => o.id === ds.mode.id ? { ...o, xPct: nx, yPct: ny, widthPct: nw, heightPct: nh } : o));
+        const resized = resizeFloorPlanRect({
+          rect: snap,
+          handle: corner,
+          delta: {
+            x: svgX - ds.startSvgX,
+            y: svgY - ds.startSvgY,
+          },
+          rotationDeg: snap.rotation || 0,
+          drawWidth: drawW,
+          drawHeight: drawH,
+          stepXPct: stepX,
+          stepYPct: stepY,
+          minSizePct: MIN_SIZE_PCT,
+        });
+        onChange(objects.map(o => o.id === ds.mode.id ? { ...o, ...resized } : o));
       }
     };
 
