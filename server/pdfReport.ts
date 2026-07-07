@@ -3476,11 +3476,13 @@ function drawWarehousePlanDiagram(
   const pageLeft = PAGE_MARGIN;
   const pageRight = doc.page.width - PAGE_MARGIN;
   const usableW = pageRight - pageLeft;
+  const externalWarehouseLoggers = (input.pvLoggers ?? []).filter(l => l.role === "external");
+  const externalBadgeW = !template && externalWarehouseLoggers.length > 0 ? 88 : 0;
   const planMaxH = 320;
   // aspect = widthM / lengthM so that drawW maps to lengthM (horizontal) and
   // drawH maps to widthM (vertical) — matching FloorPlanEditor's SVG orientation.
   const aspect = hasRoomDimensions ? widthM / lengthM : 1;
-  let drawW = usableW;
+  let drawW = usableW - externalBadgeW;
   let drawH = drawW * aspect;
   if (drawH > planMaxH) {
     drawH = planMaxH;
@@ -3498,7 +3500,7 @@ function drawWarehousePlanDiagram(
       );
     doc.moveDown(0.5);
   }
-  const planX = pageLeft + (usableW - drawW) / 2;
+  const planX = pageLeft + (usableW - drawW - externalBadgeW) / 2;
   const planY = doc.y + 10;
 
   // Frame
@@ -3506,6 +3508,31 @@ function drawWarehousePlanDiagram(
   doc.lineWidth(1.2).strokeColor(ACCENT)
     .rect(planX, planY, drawW, drawH).stroke();
   doc.restore();
+
+  if (!template && externalWarehouseLoggers.length > 0) {
+    const badgeX = planX + drawW + 14;
+    const firstY = planY + Math.min(48, drawH / 2);
+    doc.save();
+    doc.strokeColor("#64748b").lineWidth(0.8).dash(3, { space: 2 })
+      .moveTo(planX + drawW, firstY)
+      .lineTo(badgeX, firstY)
+      .stroke();
+    doc.undash();
+    externalWarehouseLoggers.slice(0, 3).forEach((logger, idx) => {
+      const y = firstY + idx * 24;
+      const rawLabel = String(logger.customName || logger.label || "EXT");
+      const label = rawLabel.length > 8 ? rawLabel.slice(-8) : rawLabel;
+      doc.fillColor("#f1f5f9").strokeColor("#64748b").lineWidth(0.8)
+        .roundedRect(badgeX, y - 9, 72, 18, 9)
+        .fillAndStroke();
+      doc.fillColor("#64748b").circle(badgeX + 9, y, 4.5).fill();
+      doc.fillColor("#334155").font("bold").fontSize(6.5)
+        .text(label, badgeX + 18, y - 7, { width: 48, align: "left" });
+      doc.fillColor("#64748b").font("body").fontSize(5.5)
+        .text("внешний", badgeX + 18, y + 1, { width: 48, align: "left" });
+    });
+    doc.restore();
+  }
 
   // Rulers are omitted when room dimensions are not provided.
   if (hasRoomDimensions) {
@@ -3645,10 +3672,12 @@ function drawWarehousePlanDiagram(
     if (l.position && l.position.startsWith("L")) placedById.set(l.position, l);
   });
 
-  // Render only the lowest tier on the plan, but list all tiers in the legend underneath
+  // Keep the warehouse plan clean: do not draw automatic numbered grid circles
+  // like "1-1", "2-1". Only user-placed sensor_point objects are rendered below.
+  const renderCalculatedGridMarkers = false;
   const margin = 0.08;
   const span = 1 - margin * 2;
-  for (let r = 1; r <= calc.nL; r++) {
+  for (let r = 1; renderCalculatedGridMarkers && r <= calc.nL; r++) {
     for (let c = 1; c <= calc.nW; c++) {
       const xPct = calc.nW === 1 ? 0.5 : margin + ((c - 1) / (calc.nW - 1)) * span;
       const yPct = calc.nL === 1 ? 0.5 : margin + ((r - 1) / (calc.nL - 1)) * span;

@@ -592,6 +592,7 @@ export function FloorPlanEditor({
   // Suppresses the single canvas click that fires right after placing an object,
   // so the freshly created (and selected) object is not immediately deselected.
   const suppressCanvasClickRef = useRef(false);
+  const externalLoggers = sensorLoggers.filter(logger => logger.role === "external");
 
   // Active drag/resize state stored in ref to avoid stale closure issues
   const dragState = useRef<{
@@ -602,7 +603,8 @@ export function FloorPlanEditor({
   } | null>(null);
 
   // Compute draw area dimensions
-  const planW = SVG_W - PAD * 2;
+  const externalPanelW = externalLoggers.length > 0 ? 130 : 0;
+  const planW = SVG_W - PAD * 2 - externalPanelW;
   const planH = SVG_H - PAD * 2;
   const aspect = roomLengthM > 0 && roomWidthM > 0 ? roomLengthM / roomWidthM : 1;
   let drawW = planW;
@@ -995,6 +997,60 @@ export function FloorPlanEditor({
               <text textAnchor="start" x={19} y={4} fontSize={9} fill="#475569" style={{ userSelect: "none" }}>В</text>
               <polygon points="0,-10 3,0 0,10 -3,0" fill="#0f766e" />
             </g>
+
+            {/* External warehouse logger(s): shown automatically outside the storage zone */}
+            {externalLoggers.length > 0 && (
+              <g transform={`translate(${planX + drawW + 18}, ${planY + Math.min(52, drawH / 2)})`}>
+                <line
+                  x1={-18}
+                  y1={0}
+                  x2={0}
+                  y2={0}
+                  stroke="#64748b"
+                  strokeWidth={1}
+                  strokeDasharray="4 3"
+                  style={{ pointerEvents: "none" }}
+                />
+                {externalLoggers.slice(0, 3).map((logger, idx) => {
+                  const label = logger.customName || logger.label;
+                  const shortLabel = label.length > 8 ? label.slice(-8) : label;
+                  return (
+                    <g key={logger.id} transform={`translate(0, ${idx * 30})`}>
+                      <rect
+                        x={0}
+                        y={-11}
+                        width={92}
+                        height={22}
+                        rx={11}
+                        fill="#f1f5f9"
+                        stroke="#64748b"
+                        strokeWidth={1.2}
+                      />
+                      <circle cx={11} cy={0} r={6} fill="#64748b" />
+                      <text
+                        x={23}
+                        y={-2}
+                        fontSize={8}
+                        fontWeight={700}
+                        fill="#334155"
+                        style={{ pointerEvents: "none", userSelect: "none" }}
+                      >
+                        {shortLabel}
+                      </text>
+                      <text
+                        x={23}
+                        y={7}
+                        fontSize={6}
+                        fill="#64748b"
+                        style={{ pointerEvents: "none", userSelect: "none" }}
+                      >
+                        внешний
+                      </text>
+                    </g>
+                  );
+                })}
+              </g>
+            )}
 
             {/* Floor plan objects (rendered first, below sensors) */}
             {objects.map(obj => (
