@@ -584,6 +584,53 @@ function shortLabel(label: string, customName?: string | null): string {
   return customName ? `${short}\n${customName}` : short;
 }
 
+function normalizeSensorNumber(value: string | null | undefined): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+
+function buildActiveSensorTokens(input: ReportInput): Set<string> {
+  const tokens = new Set<string>();
+  const add = (value: string | null | undefined) => {
+    const token = normalizeSensorNumber(value);
+    if (!token) return;
+    tokens.add(token);
+    if (token.length > 4) tokens.add(token.slice(-4));
+  };
+
+  input.pv.loggers.forEach(logger => {
+    add(logger.label);
+    add(logger.customName);
+  });
+  input.pvLoggers?.forEach(logger => {
+    add(logger.label);
+    add(logger.customName);
+  });
+  input.excursion?.loggers.forEach(logger => add(logger.label));
+  input.floorPlanObjects?.forEach(obj => {
+    if (obj.type === "sensor_point") add(obj.label);
+    obj.sensors?.forEach(sensor => add(sensor.sensorId));
+  });
+
+  return tokens;
+}
+
+export function filterProtocolSensorsForReport(input: ReportInput): ReportInput["protocolSensors"] {
+  const protocolSensors = input.protocolSensors ?? [];
+  if (protocolSensors.length === 0) return protocolSensors;
+
+  const activeTokens = buildActiveSensorTokens(input);
+  if (activeTokens.size === 0) return protocolSensors;
+
+  return protocolSensors.filter(sensor => {
+    const number = normalizeSensorNumber(sensor.number);
+    if (!number) return false;
+    return activeTokens.has(number) || (number.length > 4 && activeTokens.has(number.slice(-4)));
+  });
+}
+
 function findFontPath(): { regular?: string; bold?: string } {
   // In production the build script copies server/fonts/ → dist/fonts/
   // so __dirname resolves to dist/ and the fonts are at dist/fonts/.
@@ -654,13 +701,15 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     drawGeneralInfoTable(doc, input);
     drawRevisionHistorySection(doc, input);
     
-    // Draw sensor table if sensors are linked to protocol
-    if (input.protocolSensors && input.protocolSensors.length > 0) {
+    // Draw only sensors still present in the final protocol data.
+    // Historical protocol_sensors links can remain after a logger is deleted.
+    const reportSensors = filterProtocolSensorsForReport(input);
+    if (reportSensors && reportSensors.length > 0) {
       doc.addPage();
       drawSectionTitle(doc, "1.1. Датчики, используемые для валидации");
       drawSensorTable(
         doc,
-        input.protocolSensors,
+        reportSensors,
         input.pv.sensorAccuracy,
         resolveProtocolReferenceDate(input.generalInfo?.validationDate, input.protocol.createdAt),
       );

@@ -116,6 +116,40 @@ import { generateProtocolPdf, type ReportInput } from "./pdfReport";
 import { storagePut, storageReadBuffer } from "./storage";
 import { buildWarehouseQuestions } from "./warehouseQuestions";
 
+function normalizeSensorNumber(value: string | null | undefined): string {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+}
+
+function sensorNumberMatchesLabel(sensorNumber: string, loggerLabel: string | null | undefined): boolean {
+  const number = normalizeSensorNumber(sensorNumber);
+  const label = normalizeSensorNumber(loggerLabel);
+  if (!number || !label) return false;
+  return number === label || (label.length >= 4 && number.endsWith(label));
+}
+
+async function removeAutoLinkedSensorIfUnused(protocolId: number, removedLabel: string | null | undefined) {
+  const removed = normalizeSensorNumber(removedLabel);
+  if (!removed) return;
+
+  const sensors = await listSensors();
+  const matched = sensors.find(sensor => sensorNumberMatchesLabel(sensor.number, removed));
+  if (!matched) return;
+
+  const [pvLoggers, excursionLoggers] = await Promise.all([
+    listLoggers(protocolId),
+    listExcursionLoggers(protocolId),
+  ]);
+  const stillUsed = [...pvLoggers, ...excursionLoggers].some(logger =>
+    sensorNumberMatchesLabel(matched.number, logger.label),
+  );
+  if (!stillUsed) {
+    await removeProtocolSensor(protocolId, matched.id);
+  }
+}
+
 const TEMP_MODE_SCHEMA = z.enum(["2-8", "8-15", "15-25"]);
 const PORTAL_ADMIN_OPEN_ID = "local-dev-admin";
 const PORTAL_ADMIN_NAME = "Local Dev Admin";
@@ -993,7 +1027,10 @@ export const appRouter = router({
       .input(z.object({ protocolId: z.number(), loggerId: z.number() }))
       .mutation(async ({ ctx, input }) => {
         await ownProtocol(ctx.user.id, input.protocolId);
+        const existingLoggers = await listLoggers(input.protocolId);
+        const deletedLogger = existingLoggers.find(logger => logger.id === input.loggerId);
         await deleteLogger(input.loggerId);
+        await removeAutoLinkedSensorIfUnused(input.protocolId, deletedLogger?.label);
         return { success: true };
       }),
     autoDetectExternal: protectedProcedure
@@ -1830,7 +1867,10 @@ export const appRouter = router({
       .input(z.object({ id: z.number(), protocolId: z.number() }))
       .mutation(async ({ ctx, input }) => {
         await ownProtocol(ctx.user.id, input.protocolId);
+        const existingLoggers = await listExcursionLoggers(input.protocolId);
+        const deletedLogger = existingLoggers.find(logger => logger.id === input.id);
         await deleteExcursionLogger(input.id);
+        await removeAutoLinkedSensorIfUnused(input.protocolId, deletedLogger?.label);
         return { success: true };
       }),
 

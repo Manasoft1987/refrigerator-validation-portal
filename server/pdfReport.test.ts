@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import PDFDocument from "pdfkit";
 import {
+  filterProtocolSensorsForReport,
   generateProtocolPdf,
   getSensorCalibrationStatusAtProtocolDate,
   resolveProtocolReferenceDate,
@@ -69,6 +70,29 @@ describe("sensor calibration status in PDF", () => {
     ).toBe("valid");
     expect(getSensorCalibrationStatusAtProtocolDate(null, protocolDate)).toBeNull();
     expect(getSensorCalibrationStatusAtProtocolDate("not-a-date", protocolDate)).toBeNull();
+  });
+});
+
+describe("protocol sensor filtering", () => {
+  it("keeps only sensors that are still present in the final logger set", () => {
+    const filtered = filterProtocolSensorsForReport({
+      protocolSensors: [
+        { id: 1, number: "230609STS0013706", calibrationDate: null, nextCalibrationDate: null },
+        { id: 2, number: "230609STS0013707", calibrationDate: null, nextCalibrationDate: null },
+        { id: 3, number: "230609STS0013708", calibrationDate: null, nextCalibrationDate: null },
+      ],
+      pv: {
+        loggers: [
+          { label: "230609STS0013706", customName: null },
+          { label: "3708", customName: null },
+        ],
+      },
+    } as any);
+
+    expect(filtered?.map(sensor => sensor.number)).toEqual([
+      "230609STS0013706",
+      "230609STS0013708",
+    ]);
   });
 });
 
