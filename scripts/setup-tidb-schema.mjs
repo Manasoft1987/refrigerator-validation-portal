@@ -8,6 +8,7 @@ if (!process.env.DATABASE_URL) {
 const replace = process.argv.includes("--replace");
 
 const tableNames = [
+  "protocolAttachments",
   "protocolSensors",
   "sensors",
   "warehouseProtocolSections",
@@ -95,6 +96,23 @@ const schemaSql = [
     equipmentType enum('refrigerator','auto-refrigerator','warehouse','other') NOT NULL DEFAULT 'refrigerator',
     customEquipmentName varchar(255),
     PRIMARY KEY (id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS protocolAttachments (
+    id int AUTO_INCREMENT NOT NULL,
+    protocolId int NOT NULL,
+    kind varchar(64) NOT NULL,
+    title varchar(255) NOT NULL,
+    comment text,
+    fileName varchar(255) NOT NULL,
+    fileKey varchar(512) NOT NULL,
+    fileUrl varchar(512) NOT NULL,
+    contentType varchar(128),
+    size int NOT NULL DEFAULT 0,
+    includeInPdf int NOT NULL DEFAULT 1,
+    createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY protocolAttachments_protocolId_idx (protocolId)
   )`,
   `CREATE TABLE IF NOT EXISTS generalInfo (
     id int AUTO_INCREMENT NOT NULL,

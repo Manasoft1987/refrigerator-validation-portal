@@ -98,6 +98,11 @@ import {
   createWarehouseEquipment,
   updateWarehouseEquipment,
   deleteWarehouseEquipment,
+  listProtocolAttachments,
+  getProtocolAttachment,
+  createProtocolAttachment,
+  updateProtocolAttachment,
+  deleteProtocolAttachment,
   getUserByEmail,
   upsertUser,
 } from "./db";
@@ -153,6 +158,24 @@ async function removeAutoLinkedSensorIfUnused(protocolId: number, removedLabel: 
 }
 
 const TEMP_MODE_SCHEMA = z.enum(["2-8", "8-15", "15-25"]);
+const ATTACHMENT_KINDS = [
+  "vehicle_registration",
+  "vehicle_photo",
+  "cargo_body_photo",
+  "refrigeration_unit_photo",
+  "unit_nameplate",
+  "operating_manual",
+  "other",
+] as const;
+const ATTACHMENT_KIND_LABELS: Record<(typeof ATTACHMENT_KINDS)[number], string> = {
+  vehicle_registration: "Техпаспорт / СРТС",
+  vehicle_photo: "Фото автомобиля",
+  cargo_body_photo: "Фото кузова / отсека",
+  refrigeration_unit_photo: "Фото холодильного агрегата",
+  unit_nameplate: "Фото шильдика агрегата",
+  operating_manual: "Инструкция / руководство",
+  other: "Прочее",
+};
 const PORTAL_ADMIN_OPEN_ID = "local-dev-admin";
 const PORTAL_ADMIN_NAME = "Local Dev Admin";
 const PORTAL_ADMIN_EMAIL = "dev@local.test";
@@ -182,6 +205,23 @@ function secureStringEquals(a: string, b: string) {
   const left = sha256(a);
   const right = sha256(b);
   return timingSafeEqual(left, right);
+}
+
+function sanitizeStorageFileName(value: string) {
+  const cleaned = value
+    .replace(/[/\\?%*:|"<>]+/g, "_")
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_")
+    .slice(0, 160);
+  return cleaned || "attachment";
+}
+
+function parseDataUrlOrBase64(value: string, fallbackContentType?: string | null) {
+  const match = value.match(/^data:([^;]+);base64,(.+)$/);
+  return {
+    contentType: match?.[1] || fallbackContentType || "application/octet-stream",
+    buffer: Buffer.from(match?.[2] || value, "base64"),
+  };
 }
 
 function passwordLoginKey(req: unknown) {
@@ -1361,6 +1401,99 @@ export const appRouter = router({
       }),
   }),
 
+  attachments: router({
+    list: protectedProcedure
+      .input(z.object({ protocolId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
+        if (protocol.equipmentType !== "auto-refrigerator") return [];
+        return listProtocolAttachments(input.protocolId);
+      }),
+    upload: protectedProcedure
+      .input(z.object({
+        protocolId: z.number(),
+        kind: z.enum(ATTACHMENT_KINDS),
+        title: z.string().max(255).optional().nullable(),
+        comment: z.string().max(3000).optional().nullable(),
+        fileName: z.string().min(1).max(255),
+        contentType: z.string().max(128).optional().nullable(),
+        base64: z.string().min(1),
+        includeInPdf: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
+        if (protocol.equipmentType !== "auto-refrigerator") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Приложения пока доступны только для протоколов авторефрижераторов",
+          });
+        }
+        const { buffer, contentType } = parseDataUrlOrBase64(input.base64, input.contentType);
+        if (buffer.length > 25 * 1024 * 1024) {
+          throw new TRPCError({
+            code: "PAYLOAD_TOO_LARGE",
+            message: "Файл приложения больше 25 МБ",
+          });
+        }
+        const safeName = sanitizeStorageFileName(input.fileName);
+        const { key, url } = await storagePut(
+          `protocol-${input.protocolId}/attachments/${Date.now()}-${safeName}`,
+          buffer,
+          contentType,
+        );
+        const title = nonBlankString(input.title) || ATTACHMENT_KIND_LABELS[input.kind];
+        return createProtocolAttachment({
+          protocolId: input.protocolId,
+          kind: input.kind,
+          title,
+          comment: nonBlankString(input.comment),
+          fileName: input.fileName,
+          fileKey: key,
+          fileUrl: url,
+          contentType,
+          size: buffer.length,
+          includeInPdf: input.includeInPdf === false ? 0 : 1,
+        });
+      }),
+    update: protectedProcedure
+      .input(z.object({
+        protocolId: z.number(),
+        id: z.number(),
+        kind: z.enum(ATTACHMENT_KINDS).optional(),
+        title: z.string().max(255).optional().nullable(),
+        comment: z.string().max(3000).optional().nullable(),
+        includeInPdf: z.boolean().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
+        if (protocol.equipmentType !== "auto-refrigerator") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Приложения доступны только для авторефрижераторов" });
+        }
+        const existing = await getProtocolAttachment(input.protocolId, input.id);
+        if (!existing) throw new TRPCError({ code: "NOT_FOUND", message: "Приложение не найдено" });
+        const patch: Record<string, unknown> = {};
+        if (input.kind !== undefined) patch.kind = input.kind;
+        if (input.title !== undefined) {
+          const labelKind = (input.kind ?? existing.kind) as keyof typeof ATTACHMENT_KIND_LABELS;
+          patch.title = nonBlankString(input.title) || ATTACHMENT_KIND_LABELS[labelKind] || existing.title;
+        }
+        if (input.comment !== undefined) patch.comment = nonBlankString(input.comment);
+        if (input.includeInPdf !== undefined) patch.includeInPdf = input.includeInPdf ? 1 : 0;
+        await updateProtocolAttachment(input.protocolId, input.id, patch as any);
+        return { success: true };
+      }),
+    delete: protectedProcedure
+      .input(z.object({ protocolId: z.number(), id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
+        if (protocol.equipmentType !== "auto-refrigerator") {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Приложения доступны только для авторефрижераторов" });
+        }
+        await deleteProtocolAttachment(input.protocolId, input.id);
+        return { success: true };
+      }),
+  }),
+
   /* -------------------------------------------------------------- */
   /* PDF generation                                                 */
   /* -------------------------------------------------------------- */
@@ -1538,6 +1671,34 @@ export const appRouter = router({
           nonBlankString(gi?.validationDate) ||
           nonBlankString(gi?.reportDate) ||
           generatedAt;
+        const reportAttachments = isAutoRefrigeratorProtocol
+          ? await Promise.all(
+              (await listProtocolAttachments(input.protocolId))
+                .filter(item => item.includeInPdf !== 0)
+                .map(async item => {
+                  let imageBuffer: Buffer | null = null;
+                  if ((item.contentType ?? "").startsWith("image/")) {
+                    try {
+                      imageBuffer = (await storageReadBuffer(item.fileKey)).data;
+                    } catch (error) {
+                      console.warn("Attachment image fetch failed:", error);
+                    }
+                  }
+                  return {
+                    id: item.id,
+                    kind: item.kind,
+                    title: item.title,
+                    comment: item.comment,
+                    fileName: item.fileName,
+                    fileUrl: item.fileUrl,
+                    contentType: item.contentType,
+                    size: item.size,
+                    includeInPdf: item.includeInPdf,
+                    imageBuffer,
+                  };
+                }),
+            )
+          : [];
 
         const reportInput: ReportInput = {
           org: {
@@ -1705,6 +1866,7 @@ export const appRouter = router({
                 purpose: e.purpose,
               }))
             : undefined,
+          attachments: reportAttachments.length > 0 ? reportAttachments : undefined,
         };
         
         // Load protocol sensors if any are linked

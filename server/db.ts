@@ -19,7 +19,9 @@ import {
   Organization,
   organizations,
   Protocol,
+  ProtocolAttachment,
   protocols,
+  protocolAttachments,
   protocolSensors,
   pvLoggers,
   pvSessions,
@@ -35,6 +37,7 @@ import {
   warehouseEquipment,
   type WarehouseEquipment,
   type InsertWarehouseEquipment,
+  type InsertProtocolAttachment,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { DEFAULT_SENSOR_ACCURACY_C, normalizeSensorAccuracyC } from "../shared/validation";
@@ -65,6 +68,7 @@ type LocalDevDb = {
     excursionLoggers: number;
     sensors: number;
     protocolSensors: number;
+    protocolAttachments: number;
     users: number;
     questionTemplates: number;
   };
@@ -80,6 +84,7 @@ type LocalDevDb = {
   excursionLoggers: Array<typeof excursionLoggers.$inferSelect>;
   sensors: Sensor[];
   protocolSensors: ProtocolSensor[];
+  protocolAttachments: ProtocolAttachment[];
   users: User[];
   questionTemplates: Array<typeof questionTemplates.$inferSelect>;
 };
@@ -118,6 +123,7 @@ function createEmptyLocalDevDb(): LocalDevDb {
       excursionLoggers: 0,
       sensors: 0,
       protocolSensors: 0,
+      protocolAttachments: 0,
       users: 1,
       questionTemplates: 0,
     },
@@ -133,6 +139,7 @@ function createEmptyLocalDevDb(): LocalDevDb {
     excursionLoggers: [],
     sensors: [],
     protocolSensors: [],
+    protocolAttachments: [],
     users: [localDevAdminUser()],
     questionTemplates: [],
   };
@@ -156,6 +163,7 @@ async function readLocalDevDb(): Promise<LocalDevDb> {
         excursionLoggers: parsed.counters?.excursionLoggers ?? (parsed.excursionLoggers ?? []).length,
         sensors: parsed.counters?.sensors ?? (parsed.sensors ?? []).length,
         protocolSensors: parsed.counters?.protocolSensors ?? (parsed.protocolSensors ?? []).length,
+        protocolAttachments: parsed.counters?.protocolAttachments ?? (parsed.protocolAttachments ?? []).length,
         users: parsed.counters?.users ?? Math.max(1, ...parsed.users.map(user => user.id)),
         questionTemplates: parsed.counters?.questionTemplates ?? (parsed.questionTemplates ?? []).length,
       },
@@ -171,6 +179,7 @@ async function readLocalDevDb(): Promise<LocalDevDb> {
       excursionLoggers: parsed.excursionLoggers ?? [],
       sensors: parsed.sensors ?? [],
       protocolSensors: parsed.protocolSensors ?? [],
+      protocolAttachments: parsed.protocolAttachments ?? [],
       users: hasAdmin ? parsed.users : [localDevAdminUser(), ...(parsed.users ?? [])],
       questionTemplates: parsed.questionTemplates ?? [],
     };
@@ -829,6 +838,7 @@ export async function deleteProtocolCascade(userId: number, protocolId: number) 
       data.generalInfo = data.generalInfo.filter(item => item.protocolId !== protocolId);
       data.pvLoggers = data.pvLoggers.filter(item => item.protocolId !== protocolId);
       data.pvSessions = data.pvSessions.filter(item => item.protocolId !== protocolId);
+      data.protocolAttachments = data.protocolAttachments.filter(item => item.protocolId !== protocolId);
       data.protocols = data.protocols.filter(item => item.id !== protocolId);
     });
     return;
@@ -839,6 +849,8 @@ export async function deleteProtocolCascade(userId: number, protocolId: number) 
   await db.delete(generalInfo).where(eq(generalInfo.protocolId, protocolId));
   await db.delete(pvLoggers).where(eq(pvLoggers.protocolId, protocolId));
   await db.delete(pvSessions).where(eq(pvSessions.protocolId, protocolId));
+  await ensureProtocolAttachmentStorage();
+  await db.delete(protocolAttachments).where(eq(protocolAttachments.protocolId, protocolId));
   await db.delete(protocols).where(eq(protocols.id, protocolId));
 }
 
@@ -2135,6 +2147,155 @@ export async function deleteWarehouseEquipment(id: number): Promise<void> {
   const db = await getDb();
   if (!db) return;
   await db.delete(warehouseEquipment).where(eq(warehouseEquipment.id, id));
+}
+
+/* ------------------------------------------------------------------ */
+/* Protocol Attachments                                               */
+/* ------------------------------------------------------------------ */
+
+let protocolAttachmentSchemaPromise: Promise<void> | null = null;
+
+async function ensureProtocolAttachmentStorage() {
+  const db = await getDb();
+  if (!db) return;
+  if (protocolAttachmentSchemaPromise) return protocolAttachmentSchemaPromise;
+
+  protocolAttachmentSchemaPromise = (async () => {
+    await db.execute(sql.raw(`
+      CREATE TABLE IF NOT EXISTS protocolAttachments (
+        id int AUTO_INCREMENT NOT NULL,
+        protocolId int NOT NULL,
+        kind varchar(64) NOT NULL,
+        title varchar(255) NOT NULL,
+        comment text,
+        fileName varchar(255) NOT NULL,
+        fileKey varchar(512) NOT NULL,
+        fileUrl varchar(512) NOT NULL,
+        contentType varchar(128),
+        size int NOT NULL DEFAULT 0,
+        includeInPdf int NOT NULL DEFAULT 1,
+        createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        KEY protocolAttachments_protocolId_idx (protocolId)
+      )
+    `));
+  })().catch(error => {
+    protocolAttachmentSchemaPromise = null;
+    throw error;
+  });
+
+  return protocolAttachmentSchemaPromise;
+}
+
+export async function listProtocolAttachments(protocolId: number): Promise<ProtocolAttachment[]> {
+  const db = await getDb();
+  if (!db) {
+    if (!shouldUseLocalDevDb()) return [];
+    const data = await readLocalDevDb();
+    return data.protocolAttachments
+      .filter(item => item.protocolId === protocolId)
+      .sort((a, b) => a.id - b.id);
+  }
+  await ensureProtocolAttachmentStorage();
+  return db
+    .select()
+    .from(protocolAttachments)
+    .where(eq(protocolAttachments.protocolId, protocolId))
+    .orderBy(protocolAttachments.id);
+}
+
+export async function getProtocolAttachment(protocolId: number, id: number): Promise<ProtocolAttachment | undefined> {
+  const db = await getDb();
+  if (!db) {
+    if (!shouldUseLocalDevDb()) return undefined;
+    const data = await readLocalDevDb();
+    return data.protocolAttachments.find(item => item.protocolId === protocolId && item.id === id);
+  }
+  await ensureProtocolAttachmentStorage();
+  const rows = await db
+    .select()
+    .from(protocolAttachments)
+    .where(and(eq(protocolAttachments.protocolId, protocolId), eq(protocolAttachments.id, id)))
+    .limit(1);
+  return rows[0];
+}
+
+export async function createProtocolAttachment(
+  data: Omit<InsertProtocolAttachment, "id" | "createdAt" | "updatedAt">,
+): Promise<ProtocolAttachment> {
+  const db = await getDb();
+  if (!db) {
+    if (!shouldUseLocalDevDb()) throw new Error("DB unavailable");
+    return updateLocalDevDb(localData => {
+      const now = new Date().toISOString();
+      localData.counters.protocolAttachments += 1;
+      const row = {
+        id: localData.counters.protocolAttachments,
+        protocolId: data.protocolId,
+        kind: data.kind,
+        title: data.title,
+        comment: data.comment ?? null,
+        fileName: data.fileName,
+        fileKey: data.fileKey,
+        fileUrl: data.fileUrl,
+        contentType: data.contentType ?? null,
+        size: data.size ?? 0,
+        includeInPdf: data.includeInPdf ?? 1,
+        createdAt: now,
+        updatedAt: now,
+      } as ProtocolAttachment;
+      localData.protocolAttachments.push(row);
+      return row;
+    });
+  }
+  await ensureProtocolAttachmentStorage();
+  const [result] = await db.insert(protocolAttachments).values(data);
+  const [row] = await db
+    .select()
+    .from(protocolAttachments)
+    .where(eq(protocolAttachments.id, (result as any).insertId))
+    .limit(1);
+  return row;
+}
+
+export async function updateProtocolAttachment(
+  protocolId: number,
+  id: number,
+  data: Partial<Omit<InsertProtocolAttachment, "id" | "protocolId" | "fileKey" | "fileUrl" | "fileName" | "createdAt" | "updatedAt">>,
+): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    if (!shouldUseLocalDevDb()) throw new Error("DB unavailable");
+    await updateLocalDevDb(localData => {
+      const row = localData.protocolAttachments.find(item => item.protocolId === protocolId && item.id === id);
+      if (!row) return;
+      Object.assign(row, data, { updatedAt: new Date().toISOString() });
+    });
+    return;
+  }
+  await ensureProtocolAttachmentStorage();
+  await db
+    .update(protocolAttachments)
+    .set(data)
+    .where(and(eq(protocolAttachments.protocolId, protocolId), eq(protocolAttachments.id, id)));
+}
+
+export async function deleteProtocolAttachment(protocolId: number, id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    if (!shouldUseLocalDevDb()) throw new Error("DB unavailable");
+    await updateLocalDevDb(localData => {
+      localData.protocolAttachments = localData.protocolAttachments.filter(
+        item => !(item.protocolId === protocolId && item.id === id),
+      );
+    });
+    return;
+  }
+  await ensureProtocolAttachmentStorage();
+  await db
+    .delete(protocolAttachments)
+    .where(and(eq(protocolAttachments.protocolId, protocolId), eq(protocolAttachments.id, id)));
 }
 
 

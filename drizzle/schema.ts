@@ -162,6 +162,25 @@ export const protocols = mysqlTable("protocols", {
 	customEquipmentName: varchar({ length: 255 }),
 });
 
+export const protocolAttachments = mysqlTable("protocolAttachments", {
+	id: int().autoincrement().notNull(),
+	protocolId: int().notNull(),
+	kind: varchar({ length: 64 }).notNull(),
+	title: varchar({ length: 255 }).notNull(),
+	comment: text(),
+	fileName: varchar({ length: 255 }).notNull(),
+	fileKey: varchar({ length: 512 }).notNull(),
+	fileUrl: varchar({ length: 512 }).notNull(),
+	contentType: varchar({ length: 128 }),
+	size: int().default(0).notNull(),
+	includeInPdf: int().default(1).notNull(),
+	createdAt: timestamp({ mode: 'string' }).default('CURRENT_TIMESTAMP').notNull(),
+	updatedAt: timestamp({ mode: 'string' }).defaultNow().onUpdateNow().notNull(),
+},
+(table) => [
+	index("protocolAttachments_protocolId_idx").on(table.protocolId),
+]);
+
 export const pvLoggers = mysqlTable("pvLoggers", {
 	id: int().autoincrement().notNull(),
 	pvSessionId: int().notNull(),
@@ -287,6 +306,9 @@ export type InsertOrganization = InferInsertModel<typeof organizations>;
 
 export type Protocol = InferSelectModel<typeof protocols>;
 export type InsertProtocol = InferInsertModel<typeof protocols>;
+
+export type ProtocolAttachment = InferSelectModel<typeof protocolAttachments>;
+export type InsertProtocolAttachment = InferInsertModel<typeof protocolAttachments>;
 
 export type WarehouseEquipment = InferSelectModel<typeof warehouseEquipment>;
 export type InsertWarehouseEquipment = InferInsertModel<typeof warehouseEquipment>;

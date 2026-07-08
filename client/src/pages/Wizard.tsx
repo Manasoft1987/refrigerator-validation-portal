@@ -27,6 +27,7 @@ import {
   Trash2,
   Upload,
   Loader2,
+  Paperclip,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -38,6 +39,7 @@ import FinalReportStep from "./wizard/FinalReportStep";
 import ExcursionStudyStep from "./wizard/ExcursionStudyStep";
 import WarehouseProtocolStep from "./wizard/WarehouseProtocolStep";
 import WarehouseEquipmentStep from "./wizard/WarehouseEquipmentStep";
+import ProtocolAttachmentsStep from "./wizard/ProtocolAttachmentsStep";
 
 // Standard protocol: 6 steps (no sections step)
 const STANDARD_STEPS = [
@@ -69,6 +71,7 @@ export default function Wizard() {
   const p = protocolQ.data;
   const protocolEquipmentType = p?.customEquipmentName === "__equipmentType:chamber" ? "chamber" : p?.equipmentType;
   const isWarehouse = protocolEquipmentType === "warehouse";
+  const isAutoRefrigerator = protocolEquipmentType === "auto-refrigerator";
   const equipment = equipmentQ.data ?? [];
 
   // Build step list for warehouse
@@ -91,7 +94,21 @@ export default function Wizard() {
     ];
   }, []);
 
-  const activeSteps: WStep[] = isWarehouse ? warehouseSteps : (STANDARD_STEPS as unknown as WStep[]);
+  const autoRefrigeratorSteps = useMemo<WStep[]>(() => [
+    { id: 1, key: "general", label: "Общие сведения", icon: FileText },
+    { id: 2, key: "iq", label: "IQ · Квалификация монтажа", icon: ClipboardCheck },
+    { id: 3, key: "oq", label: "OQ · Квалификация функционирования", icon: ClipboardCheck },
+    { id: 4, key: "pv", label: "PV · Эксплуатационная квалификация", icon: Thermometer },
+    { id: 5, key: "excursion", label: "Испытания на отклонение", icon: Thermometer },
+    { id: 6, key: "attachments", label: "Приложения", icon: Paperclip },
+    { id: 7, key: "final", label: "Итоговый отчёт", icon: Download },
+  ], []);
+
+  const activeSteps: WStep[] = isWarehouse
+    ? warehouseSteps
+    : isAutoRefrigerator
+      ? autoRefrigeratorSteps
+      : (STANDARD_STEPS as unknown as WStep[]);
   const totalSteps = activeSteps.length;
   const requestedStep = useMemo(() => {
     if (typeof window === "undefined" || !Number.isFinite(id)) return null;
@@ -148,11 +165,12 @@ export default function Wizard() {
       if (s.key === "excursion") return p.pvVerdict === "pass" || p.pvVerdict === "fail";
       if (s.key === "final")     return p.pvVerdict === "pass" || p.pvVerdict === "fail";
     } else {
-      if (s.id === 2) return giReady;
-      if (s.id === 3) return p.iqVerdict === "pass";
-      if (s.id === 4) return p.oqVerdict === "pass";
-      if (s.id === 5) return p.pvVerdict === "pass" || p.pvVerdict === "fail";
-      if (s.id === 6) return p.pvVerdict === "pass" || p.pvVerdict === "fail";
+      if (s.key === "iq") return giReady;
+      if (s.key === "oq") return p.iqVerdict === "pass";
+      if (s.key === "pv") return p.oqVerdict === "pass";
+      if (s.key === "excursion") return p.pvVerdict === "pass" || p.pvVerdict === "fail";
+      if (s.key === "attachments") return isAutoRefrigerator && (p.pvVerdict === "pass" || p.pvVerdict === "fail");
+      if (s.key === "final") return p.pvVerdict === "pass" || p.pvVerdict === "fail";
     }
     return false;
   };
@@ -170,10 +188,10 @@ export default function Wizard() {
       if (s.key === "pv")        return verdict(p.pvVerdict);
       if (s.key === "excursion" || s.key === "final") return unlockStep(s) ? "ready" : "locked";
     } else {
-      if (s.id === 2) return verdict(p.iqVerdict);
-      if (s.id === 3) return verdict(p.oqVerdict);
-      if (s.id === 4) return verdict(p.pvVerdict);
-      if (s.id === 5 || s.id === 6) return unlockStep(s) ? "ready" : "locked";
+      if (s.key === "iq") return verdict(p.iqVerdict);
+      if (s.key === "oq") return verdict(p.oqVerdict);
+      if (s.key === "pv") return verdict(p.pvVerdict);
+      if (s.key === "excursion" || s.key === "attachments" || s.key === "final") return unlockStep(s) ? "ready" : "locked";
     }
     return "locked";
   };
@@ -361,32 +379,35 @@ export default function Wizard() {
         )}
 
         {/* ── STANDARD FLOW ──────────────────────────────────────────── */}
-        {!isWarehouse && step === 2 && (
+        {!isWarehouse && currentStepDef?.key === "iq" && (
           <ChecklistStep
             protocolId={id}
             stage="iq"
-            onPass={() => setStep(3)}
-            onBack={() => setStep(1)}
+            onPass={() => setStep(step + 1)}
+            onBack={() => setStep(step - 1)}
             equipmentType={protocolEquipmentType ?? undefined}
           />
         )}
-        {!isWarehouse && step === 3 && (
+        {!isWarehouse && currentStepDef?.key === "oq" && (
           <ChecklistStep
             protocolId={id}
             stage="oq"
-            onPass={() => setStep(4)}
-            onBack={() => setStep(2)}
+            onPass={() => setStep(step + 1)}
+            onBack={() => setStep(step - 1)}
             equipmentType={protocolEquipmentType ?? undefined}
           />
         )}
-        {!isWarehouse && step === 4 && (
-          <PVStep protocolId={id} onDone={() => setStep(5)} onBack={() => setStep(3)} />
+        {!isWarehouse && currentStepDef?.key === "pv" && (
+          <PVStep protocolId={id} onDone={() => setStep(step + 1)} onBack={() => setStep(step - 1)} />
         )}
-        {!isWarehouse && step === 5 && (
-          <ExcursionStudyStep protocolId={id} onDone={() => setStep(6)} onBack={() => setStep(4)} />
+        {!isWarehouse && currentStepDef?.key === "excursion" && (
+          <ExcursionStudyStep protocolId={id} onDone={() => setStep(step + 1)} onBack={() => setStep(step - 1)} />
         )}
-        {!isWarehouse && step === 6 && (
-          <FinalReportStep protocolId={id} onBack={() => setStep(5)} />
+        {!isWarehouse && currentStepDef?.key === "attachments" && (
+          <ProtocolAttachmentsStep protocolId={id} onDone={() => setStep(step + 1)} onBack={() => setStep(step - 1)} />
+        )}
+        {!isWarehouse && currentStepDef?.key === "final" && (
+          <FinalReportStep protocolId={id} onBack={() => setStep(step - 1)} />
         )}
       </div>
     </div>
@@ -401,6 +422,7 @@ export const _unused = {
   Plus,
   Trash2,
   Loader2,
+  Paperclip,
   ArrowRight,
   Button,
   Card,

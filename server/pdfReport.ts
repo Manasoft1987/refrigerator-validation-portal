@@ -191,6 +191,18 @@ export type ReportInput = {
     inventory?: string | null;
     purpose?: string | null;
   }>;
+  attachments?: Array<{
+    id?: number;
+    kind?: string | null;
+    title: string;
+    comment?: string | null;
+    fileName: string;
+    fileUrl?: string | null;
+    contentType?: string | null;
+    size?: number | null;
+    includeInPdf?: number | boolean | null;
+    imageBuffer?: Buffer | null;
+  }>;
   /** GMP пункт 6 — подписанты Протокола (Часть I) */
   signatoriesPart1?: Signatory[];
   /** GMP пункт 7 — подписанты Отчёта (Часть II) */
@@ -825,8 +837,16 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   drawSectionTitle(doc, input.excursion?.enabled ? "15. Срок действия документа" : "14. Срок действия документа");
   drawValiditySection(doc, input);
 
+  if (input.attachments?.some(item => item.includeInPdf !== false && item.includeInPdf !== 0)) {
+    doc.addPage();
+    drawSectionTitle(doc, input.excursion?.enabled ? "16. Приложения" : "15. Приложения");
+    drawAttachmentsSection(doc, input);
+  }
+
   doc.addPage();
-  drawCalibrationPage(doc);
+  drawCalibrationPage(doc, input.attachments?.some(item => item.includeInPdf !== false && item.includeInPdf !== 0)
+    ? (input.excursion?.enabled ? "17. Поверка средств измерений" : "16. Поверка средств измерений")
+    : undefined);
 
   /* ---------------- Footer / pagination ---------------- */
   addHeadersAndFooters(doc, input);
@@ -2317,6 +2337,77 @@ function drawValiditySection(doc: PDFKit.PDFDocument, input: ReportInput) {
   doc.moveDown(0.6);
 }
 
+const REPORT_ATTACHMENT_LABELS: Record<string, string> = {
+  vehicle_registration: "Техпаспорт / СРТС",
+  vehicle_photo: "Фото автомобиля",
+  cargo_body_photo: "Фото кузова / отсека",
+  refrigeration_unit_photo: "Фото холодильного агрегата",
+  unit_nameplate: "Фото шильдика агрегата",
+  operating_manual: "Инструкция / руководство",
+  other: "Прочее",
+};
+
+function formatAttachmentSize(size: number | null | undefined): string {
+  if (!size || !Number.isFinite(size) || size <= 0) return "—";
+  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} МБ`;
+  return `${Math.max(1, Math.round(size / 1024))} КБ`;
+}
+
+function drawAttachmentsSection(doc: PDFKit.PDFDocument, input: ReportInput) {
+  const attachments = (input.attachments ?? []).filter(item => item.includeInPdf !== false && item.includeInPdf !== 0);
+  if (attachments.length === 0) return;
+
+  const left = PAGE_MARGIN;
+  const right = doc.page.width - PAGE_MARGIN;
+  const contentW = right - left;
+
+  attachments.forEach((attachment, index) => {
+    const label = REPORT_ATTACHMENT_LABELS[String(attachment.kind ?? "")] || "Приложение";
+    const title = (attachment.title || label).trim();
+    const metaRows = [
+      ["Тип", label],
+      ["Файл", attachment.fileName || "—"],
+      ["Формат", attachment.contentType || "—"],
+      ["Размер", formatAttachmentSize(attachment.size)],
+    ];
+    if (attachment.comment?.trim()) metaRows.push(["Комментарий", attachment.comment.trim()]);
+
+    ensureSpace(doc, 130);
+    drawSubTitle(doc, `Приложение ${index + 1}. ${title}`);
+    drawSimpleTable(doc, ["Поле", "Значение"], metaRows, [0.24, 0.76]);
+
+    const isImage = (attachment.contentType ?? "").startsWith("image/") && attachment.imageBuffer;
+    if (!isImage || !attachment.imageBuffer) {
+      doc.moveDown(0.2);
+      return;
+    }
+
+    try {
+      const image = (doc as any).openImage(attachment.imageBuffer);
+      const maxW = contentW;
+      const maxH = 430;
+      const scale = Math.min(maxW / image.width, maxH / image.height, 1);
+      const imageW = image.width * scale;
+      const imageH = image.height * scale;
+      ensureSpace(doc, imageH + 22);
+      const x = left + (contentW - imageW) / 2;
+      const y = doc.y + 4;
+      doc.save();
+      doc.roundedRect(x - 8, y - 8, imageW + 16, imageH + 16, 8).fill("#ffffff").strokeColor(BORDER).stroke();
+      doc.restore();
+      doc.image(attachment.imageBuffer, x, y, { width: imageW, height: imageH });
+      doc.y = y + imageH + 14;
+    } catch {
+      doc
+        .fillColor(MUTED)
+        .font("body")
+        .fontSize(9)
+        .text("Изображение не удалось встроить в PDF, файл сохранён как приложение.", left, doc.y, { width: contentW });
+      doc.moveDown(0.6);
+    }
+  });
+}
+
 // HEADER_CONTENT_TOP: first safe y for content after the header line (38pt from top) + gap
 const HEADER_CONTENT_TOP = 60;
 
@@ -3085,13 +3176,13 @@ function drawChartExplanation(doc: PDFKit.PDFDocument, text: string) {
 /* -------------------------------------------------------------------------- */
 /* Calibration / Verification Page                                            */
 /* -------------------------------------------------------------------------- */
-function drawCalibrationPage(doc: PDFKit.PDFDocument) {
+function drawCalibrationPage(doc: PDFKit.PDFDocument, title = "16. Поверка средств измерений") {
   const left = PAGE_MARGIN;
   const right = doc.page.width - PAGE_MARGIN;
   const contentW = right - left;
 
   // Section title
-  drawSectionTitle(doc, "16. Поверка средств измерений");
+  drawSectionTitle(doc, title);
 
   const y0 = doc.y + 8;
 
