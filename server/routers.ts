@@ -555,11 +555,11 @@ export const appRouter = router({
           }
         }
         if (!org) throw new TRPCError({ code: "NOT_FOUND" });
-        const year = new Date().getFullYear();
-        const number = await nextProtocolNumber(input.organizationId, year);
         // Use org.companyId if not provided (org already linked to company)
         const companyId = input.companyId ?? org.companyId ?? 0;
         const requestedEquipmentType = input.equipmentType ?? "refrigerator";
+        const year = new Date().getFullYear();
+        const number = await nextProtocolNumber(input.organizationId, year, requestedEquipmentType);
         return insertProtocol({
           organizationId: input.organizationId,
           companyId,

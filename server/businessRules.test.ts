@@ -1,21 +1,18 @@
 import { describe, expect, it } from "vitest";
+import { formatProtocolNumber, protocolObjectCode } from "./db";
 
 /**
- * Protocol numbering format VAL-{YYYY}-{####} — replicates the rule enforced in
- * `nextProtocolNumber` so that the numeric format is guaranteed regardless of
- * database state. Keeping this as a pure helper makes the invariant verifiable.
+ * New protocol numbering format: VAL-{OBJECT}-{YYYY}-{###}.
+ * Already-issued legacy numbers such as VAL-2026-0001 remain untouched in the
+ * database; only newly generated protocols use the object code.
  */
-function formatProtocolNumber(year: number, seq: number): string {
-  const seqStr = seq.toString().padStart(4, "0");
-  return `VAL-${year}-${seqStr}`;
-}
 
 /**
  * Checklist verdict rule, extracted from the IQ/OQ router logic:
- *   - No items                           → "none"
- *   - Any answer "unset"                 → "none"
- *   - Any answer "no"                    → "fail"
- *   - Otherwise (only yes/na)            → "pass"
+ *   - No items                           -> "none"
+ *   - Any answer "unset"                 -> "none"
+ *   - Any answer "no"                    -> "fail"
+ *   - Otherwise (only yes/na)            -> "pass"
  */
 function computeChecklistVerdict(
   items: Array<{ answer: "yes" | "no" | "na" | "unset" }>,
@@ -27,25 +24,33 @@ function computeChecklistVerdict(
 }
 
 describe("protocol number format", () => {
-  it("matches VAL-{YYYY}-{####} exactly", () => {
-    const cases: Array<[number, number, string]> = [
-      [2024, 1, "VAL-2024-0001"],
-      [2024, 42, "VAL-2024-0042"],
-      [2025, 9999, "VAL-2025-9999"],
-      [2030, 123, "VAL-2030-0123"],
+  it("matches VAL-{OBJECT}-{YYYY}-{###} for new protocols", () => {
+    const cases: Array<[number, number, string, string]> = [
+      [2026, 1, "refrigerator", "VAL-REF-2026-001"],
+      [2026, 42, "warehouse", "VAL-STR-2026-042"],
+      [2026, 7, "auto-refrigerator", "VAL-TRK-2026-007"],
+      [2026, 3, "chamber", "VAL-CHB-2026-003"],
+      [2026, 5, "other", "VAL-EQP-2026-005"],
     ];
-    for (const [year, seq, expected] of cases) {
-      const produced = formatProtocolNumber(year, seq);
+    for (const [year, seq, equipmentType, expected] of cases) {
+      const produced = formatProtocolNumber(year, seq, equipmentType);
       expect(produced).toBe(expected);
-      expect(produced).toMatch(/^VAL-\d{4}-\d{4}$/);
+      expect(produced).toMatch(/^VAL-[A-Z]{3}-\d{4}-\d{3}$/);
     }
   });
 
-  it("pads single-digit sequence numbers with leading zeros", () => {
-    expect(formatProtocolNumber(2024, 1)).toBe("VAL-2024-0001");
-    expect(formatProtocolNumber(2024, 10)).toBe("VAL-2024-0010");
-    expect(formatProtocolNumber(2024, 100)).toBe("VAL-2024-0100");
-    expect(formatProtocolNumber(2024, 1000)).toBe("VAL-2024-1000");
+  it("uses GxP object codes for all supported equipment types", () => {
+    expect(protocolObjectCode("refrigerator")).toBe("REF");
+    expect(protocolObjectCode("warehouse")).toBe("STR");
+    expect(protocolObjectCode("auto-refrigerator")).toBe("TRK");
+    expect(protocolObjectCode("chamber")).toBe("CHB");
+    expect(protocolObjectCode("other")).toBe("EQP");
+  });
+
+  it("pads sequence numbers to three digits", () => {
+    expect(formatProtocolNumber(2026, 1, "warehouse")).toBe("VAL-STR-2026-001");
+    expect(formatProtocolNumber(2026, 10, "warehouse")).toBe("VAL-STR-2026-010");
+    expect(formatProtocolNumber(2026, 100, "warehouse")).toBe("VAL-STR-2026-100");
   });
 });
 

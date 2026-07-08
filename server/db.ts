@@ -652,9 +652,46 @@ export async function getProtocol(userId: number, protocolId: number) {
   return rows[0];
 }
 
-export async function nextProtocolNumber(orgId: number, year: number): Promise<string> {
+type ProtocolEquipmentTypeCode =
+  | "refrigerator"
+  | "auto-refrigerator"
+  | "chamber"
+  | "warehouse"
+  | "other"
+  | string
+  | null
+  | undefined;
+
+export function protocolObjectCode(equipmentType: ProtocolEquipmentTypeCode): string {
+  switch (equipmentType) {
+    case "auto-refrigerator":
+      return "TRK";
+    case "chamber":
+      return "CHB";
+    case "warehouse":
+      return "STR";
+    case "refrigerator":
+      return "REF";
+    default:
+      return "EQP";
+  }
+}
+
+export function protocolNumberPrefix(year: number, equipmentType: ProtocolEquipmentTypeCode): string {
+  return `VAL-${protocolObjectCode(equipmentType)}-${year}-`;
+}
+
+export function formatProtocolNumber(year: number, sequence: number, equipmentType: ProtocolEquipmentTypeCode): string {
+  return `${protocolNumberPrefix(year, equipmentType)}${sequence.toString().padStart(3, "0")}`;
+}
+
+function protocolNumberEquipmentType(protocol: { equipmentType?: string | null; customEquipmentName?: string | null }): string | null | undefined {
+  return protocol.customEquipmentName === "__equipmentType:chamber" ? "chamber" : protocol.equipmentType;
+}
+
+export async function nextProtocolNumber(orgId: number, year: number, equipmentType?: ProtocolEquipmentTypeCode): Promise<string> {
   const db = await getDb();
-  const prefix = `VAL-${year}-`;
+  const prefix = protocolNumberPrefix(year, equipmentType);
 
   if (!db) {
     if (!shouldUseLocalDevDb()) throw new Error("DB unavailable");
@@ -668,8 +705,7 @@ export async function nextProtocolNumber(orgId: number, year: number): Promise<s
         if (n > max) max = n;
       }
     }
-    const next = (max + 1).toString().padStart(4, "0");
-    return `${prefix}${next}`;
+    return formatProtocolNumber(year, max + 1, equipmentType);
   }
 
   const rows = await db
@@ -684,13 +720,12 @@ export async function nextProtocolNumber(orgId: number, year: number): Promise<s
       if (n > max) max = n;
     }
   }
-  const next = (max + 1).toString().padStart(4, "0");
-  return `${prefix}${next}`;
+  return formatProtocolNumber(year, max + 1, equipmentType);
 }
 
-export async function nextProtocolNumberForCompany(companyId: number, year: number): Promise<string> {
+export async function nextProtocolNumberForCompany(companyId: number, year: number, equipmentType?: ProtocolEquipmentTypeCode): Promise<string> {
   const db = await getDb();
-  const prefix = "VAL-" + year + "-";
+  const prefix = protocolNumberPrefix(year, equipmentType);
 
   if (!db) {
     if (!shouldUseLocalDevDb()) throw new Error("DB unavailable");
@@ -704,8 +739,7 @@ export async function nextProtocolNumberForCompany(companyId: number, year: numb
         if (n > max) max = n;
       }
     }
-    const next = (max + 1).toString().padStart(4, "0");
-    return prefix + next;
+    return formatProtocolNumber(year, max + 1, equipmentType);
   }
 
   const rows = await db
@@ -721,8 +755,7 @@ export async function nextProtocolNumberForCompany(companyId: number, year: numb
       if (n > max) max = n;
     }
   }
-  const next = (max + 1).toString().padStart(4, "0");
-  return prefix + next;
+  return formatProtocolNumber(year, max + 1, equipmentType);
 }
 
 export async function insertProtocol(data: InsertProtocol) {
@@ -1885,7 +1918,7 @@ export async function cloneProtocol(userId: number, sourceProtocolId: number, or
 
     const year = new Date().getFullYear();
     const targetCompanyId = targetOrg.companyId ?? sourceProto.companyId;
-    const number = await nextProtocolNumberForCompany(targetCompanyId, year);
+    const number = await nextProtocolNumberForCompany(targetCompanyId, year, protocolNumberEquipmentType(sourceProto));
     const newProto = await insertProtocol({
       organizationId,
       companyId: targetCompanyId,
@@ -1969,7 +2002,7 @@ export async function cloneProtocol(userId: number, sourceProtocolId: number, or
   // Create new protocol with same equipment type and organization
   const year = new Date().getFullYear();
   const targetCompanyId = targetOrg.companyId ?? sourceProto.companyId;
-  const number = await nextProtocolNumberForCompany(targetCompanyId, year);
+  const number = await nextProtocolNumberForCompany(targetCompanyId, year, protocolNumberEquipmentType(sourceProto));
   
   const newProto = await insertProtocol({
     organizationId,
