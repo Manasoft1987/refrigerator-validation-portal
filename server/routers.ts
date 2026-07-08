@@ -59,7 +59,7 @@ import {
   listProtocolsForOrg,
   getOrganizationByCompany,
   getProtocolByCompany,
-  nextProtocolNumber,
+  nextProtocolNumberForCompany,
   listSensors,
   getSensor,
   createSensor,
@@ -559,7 +559,7 @@ export const appRouter = router({
         const companyId = input.companyId ?? org.companyId ?? 0;
         const requestedEquipmentType = input.equipmentType ?? "refrigerator";
         const year = new Date().getFullYear();
-        const number = await nextProtocolNumber(input.organizationId, year, requestedEquipmentType);
+        const number = await nextProtocolNumberForCompany(companyId, year, requestedEquipmentType);
         return insertProtocol({
           organizationId: input.organizationId,
           companyId,

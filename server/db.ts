@@ -689,40 +689,6 @@ function protocolNumberEquipmentType(protocol: { equipmentType?: string | null; 
   return protocol.customEquipmentName === "__equipmentType:chamber" ? "chamber" : protocol.equipmentType;
 }
 
-export async function nextProtocolNumber(orgId: number, year: number, equipmentType?: ProtocolEquipmentTypeCode): Promise<string> {
-  const db = await getDb();
-  const prefix = protocolNumberPrefix(year, equipmentType);
-
-  if (!db) {
-    if (!shouldUseLocalDevDb()) throw new Error("DB unavailable");
-    const data = await readLocalDevDb();
-    let max = 0;
-    for (const protocol of data.protocols) {
-      if (protocol.organizationId !== orgId || !protocol.number.startsWith(prefix)) continue;
-      const m = protocol.number.match(/-(\d+)$/);
-      if (m) {
-        const n = parseInt(m[1], 10);
-        if (n > max) max = n;
-      }
-    }
-    return formatProtocolNumber(year, max + 1, equipmentType);
-  }
-
-  const rows = await db
-    .select({ number: protocols.number })
-    .from(protocols)
-    .where(and(eq(protocols.organizationId, orgId), sql`${protocols.number} LIKE ${prefix + "%"}`));
-  let max = 0;
-  for (const r of rows) {
-    const m = r.number.match(/-(\d+)$/);
-    if (m) {
-      const n = parseInt(m[1], 10);
-      if (n > max) max = n;
-    }
-  }
-  return formatProtocolNumber(year, max + 1, equipmentType);
-}
-
 export async function nextProtocolNumberForCompany(companyId: number, year: number, equipmentType?: ProtocolEquipmentTypeCode): Promise<string> {
   const db = await getDb();
   const prefix = protocolNumberPrefix(year, equipmentType);
