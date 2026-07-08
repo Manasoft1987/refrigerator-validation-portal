@@ -15,7 +15,7 @@
  *  - Size labels rendered on canvas (Д×Ш×В)
  *  - Zoom and pan controls (Ctrl+Scroll to zoom, Ctrl+Drag to pan)
  */
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useId } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -559,6 +559,7 @@ export interface FloorPlanEditorProps {
   sensorLoggers?: SensorLogger[];
   activeTier?: number;
   onAssignLogger?: (objId: string, loggerId: number) => void;
+  backgroundImageUrl?: string | null;
 }
 
 export function FloorPlanEditor({
@@ -572,6 +573,7 @@ export function FloorPlanEditor({
   sensorLoggers = [],
   activeTier,
   onAssignLogger,
+  backgroundImageUrl = null,
 }: FloorPlanEditorProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -586,6 +588,7 @@ export function FloorPlanEditor({
   const [draftRect, setDraftRect] = useState<{ xPct: number; yPct: number; wPct: number; hPct: number } | null>(null);
 
   const svgRef = useRef<SVGSVGElement>(null);
+  const roomClipId = useId().replace(/:/g, "");
   const panStartRef = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
   // Drag-to-draw state: start point + last pointer point (room %) + object type
   const drawStateRef = useRef<{ startXPct: number; startYPct: number; lastXPct: number; lastYPct: number; type: FloorObjectType } | null>(null);
@@ -959,17 +962,47 @@ export function FloorPlanEditor({
         >
           {/* Zoom and pan group */}
           <g transform={`translate(${panX}, ${panY}) scale(${zoomLevel})`}>
+            <defs>
+              <clipPath id={roomClipId}>
+                <rect x={planX} y={planY} width={drawW} height={drawH} />
+              </clipPath>
+            </defs>
             {/* Room outline */}
             <rect
               x={planX}
               y={planY}
               width={drawW}
               height={drawH}
-              fill="#f8fafc"
+              fill={backgroundImageUrl ? "#ffffff" : "#f8fafc"}
               stroke="#0f172a"
               strokeWidth={1.5}
               data-room-background="true"
             />
+            {backgroundImageUrl && (
+              <>
+                <image
+                  href={backgroundImageUrl}
+                  x={planX}
+                  y={planY}
+                  width={drawW}
+                  height={drawH}
+                  preserveAspectRatio="xMidYMid meet"
+                  clipPath={`url(#${roomClipId})`}
+                  opacity={0.88}
+                  style={{ pointerEvents: "none", userSelect: "none" }}
+                />
+                <rect
+                  x={planX}
+                  y={planY}
+                  width={drawW}
+                  height={drawH}
+                  fill="none"
+                  stroke="#0f172a"
+                  strokeWidth={1.5}
+                  data-room-background="true"
+                />
+              </>
+            )}
 
             {/* Optional dimension labels */}
             {showDimensions && roomLengthM > 0 && roomWidthM > 0 && (

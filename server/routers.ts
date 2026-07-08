@@ -870,11 +870,14 @@ export const appRouter = router({
           // Plan screenshot stored in S3
           planImageKey: z.string().nullable().optional(),
           planImageUrl: z.string().nullable().optional(),
+          // Uploaded warehouse plan background, used as editable underlay
+          planBackgroundImageKey: z.string().nullable().optional(),
+          planBackgroundImageUrl: z.string().nullable().optional(),
         }),
       )
       .mutation(async ({ ctx, input }) => {
         const protocol = await ownProtocol(ctx.user.id, input.protocolId);
-        const { protocolId, customMin, customMax, samplingStepMinutes, coolingUnitPos, doorPos, floorPlanObjects, roomLengthM, roomWidthM, roomHeightM, planImageKey, planImageUrl, ...rest } = input;
+        const { protocolId, customMin, customMax, samplingStepMinutes, coolingUnitPos, doorPos, floorPlanObjects, roomLengthM, roomWidthM, roomHeightM, planImageKey, planImageUrl, planBackgroundImageKey, planBackgroundImageUrl, ...rest } = input;
         const patch: any = { ...rest };
         if (protocol.equipmentType === "warehouse" && patch.minDurationHours !== undefined) {
           patch.minDurationHours = Math.max(72, patch.minDurationHours);
@@ -897,6 +900,8 @@ export const appRouter = router({
         if (cH !== undefined) patch.roomHeightM = cH;
         if (planImageKey !== undefined) patch.planImageKey = planImageKey;
         if (planImageUrl !== undefined) patch.planImageUrl = planImageUrl;
+        if (planBackgroundImageKey !== undefined) patch.planBackgroundImageKey = planBackgroundImageKey;
+        if (planBackgroundImageUrl !== undefined) patch.planBackgroundImageUrl = planBackgroundImageUrl;
         await updatePVSession(protocolId, patch);
         // After window/step change, recompute every logger’s displayed stats so
         // MIN/AVG/MAX/MKT reflect only the [startAt; endAt] window at the
@@ -952,6 +957,53 @@ export const appRouter = router({
         const fileKey = `protocol-${input.protocolId}/plan-${Date.now()}.${ext}`;
         const { key, url } = await storagePut(fileKey, buf, ct);
         await updatePVSession(input.protocolId, { planImageKey: key, planImageUrl: url } as any);
+        return { key, url };
+      }),
+    savePlanBackgroundImage: protectedProcedure
+      .input(
+        z.object({
+          protocolId: z.number(),
+          dataUrl: z.string(),
+          sourceName: z.string().optional(),
+        }),
+      )
+      .mutation(async ({ ctx, input }) => {
+        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
+        if (protocol.equipmentType !== "warehouse") {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Фоновая схема доступна только для помещения хранения",
+          });
+        }
+        const m = input.dataUrl.match(/^data:image\/(png|jpeg|jpg|webp);base64,(.+)$/);
+        if (!m) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Ожидалось изображение PNG/JPEG/WebP или PDF, преобразованный в изображение",
+          });
+        }
+        const ext = m[1] === "jpeg" || m[1] === "jpg" ? "jpg" : m[1];
+        const ct = ext === "jpg" ? "image/jpeg" : `image/${ext}`;
+        const buf = Buffer.from(m[2], "base64");
+        if (buf.length > 12 * 1024 * 1024) {
+          throw new TRPCError({
+            code: "PAYLOAD_TOO_LARGE",
+            message: "Файл фона больше 12 МБ после обработки",
+          });
+        }
+        const safeName = (input.sourceName || "background")
+          .replace(/\.[^.]+$/, "")
+          .replace(/[^a-zA-Z0-9._-]+/g, "_")
+          .slice(0, 80);
+        const { key, url } = await storagePut(
+          `protocol-${input.protocolId}/plan-background-${Date.now()}-${safeName}.${ext}`,
+          buf,
+          ct,
+        );
+        await updatePVSession(input.protocolId, {
+          planBackgroundImageKey: key,
+          planBackgroundImageUrl: url,
+        } as any);
         return { key, url };
       }),
     uploadLogger: protectedProcedure

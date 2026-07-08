@@ -16,7 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, Camera, Info, MapPin, Save } from "lucide-react";
+import { ArrowLeft, Camera, FileImage, Info, MapPin, Save, Trash2, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useParams, useLocation } from "wouter";
@@ -156,6 +156,46 @@ function tierLabel(tier: number, nV: number, heightM: number): string {
   return `Ярус ${tier}`;
 }
 
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error || new Error("File read failed"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function renderPdfFirstPageToPng(file: File): Promise<string> {
+  const pdfjs = await import("pdfjs-dist");
+  const worker = await import("pdfjs-dist/build/pdf.worker.min.mjs?url");
+  pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
+
+  const data = await file.arrayBuffer();
+  const pdf = await pdfjs.getDocument({ data }).promise;
+  const page = await pdf.getPage(1);
+  const baseViewport = page.getViewport({ scale: 1 });
+  const maxSide = 1800;
+  const scale = Math.min(2.5, Math.max(1, maxSide / Math.max(baseViewport.width, baseViewport.height)));
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Canvas is not available");
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  return canvas.toDataURL("image/png");
+}
+
+async function planBackgroundFileToDataUrl(file: File): Promise<string> {
+  if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+    return renderPdfFirstPageToPng(file);
+  }
+  if (file.type.startsWith("image/")) {
+    return readFileAsDataUrl(file);
+  }
+  throw new Error("Поддерживаются PDF, PNG, JPG и WebP");
+}
+
 // --- Main Page ----------------------------------------------------------------
 export default function SensorPlacementPage() {
   const params = useParams<{ id: string }>();
@@ -178,6 +218,9 @@ export default function SensorPlacementPage() {
     },
     onError: (e) => toast.error("Ошибка сохранения: " + e.message),
   });
+  const savePlanBackgroundImage = trpc.pv.savePlanBackgroundImage.useMutation({
+    onError: (e) => toast.error("Не удалось загрузить фон схемы: " + e.message),
+  });
 
   const session = pvQ.data?.session;
   const loggers = pvQ.data?.loggers ?? [];
@@ -198,6 +241,8 @@ export default function SensorPlacementPage() {
   const [floorPlanObjects, setFloorPlanObjects] = useState<FloorPlanObject[]>([]);
   const [activeTier, setActiveTier] = useState<number>(1);
   const [showDimensions, setShowDimensions] = useState(false);
+  const [planBackgroundImageUrl, setPlanBackgroundImageUrl] = useState<string | null>(null);
+  const [backgroundUploading, setBackgroundUploading] = useState(false);
   const [initialized, setInitialized] = useState(false);
 
   // Uncontrolled refs for room dimensions — immune to React re-renders
@@ -206,6 +251,7 @@ export default function SensorPlacementPage() {
   const heightRef = useRef<HTMLInputElement>(null);
   const [, setDimsTick] = useState(0);
   const planRef = useRef<HTMLDivElement>(null);
+  const backgroundFileRef = useRef<HTMLInputElement>(null);
   const dimsSeededRef = useRef(false);
   const readDim = (r: React.RefObject<HTMLInputElement | null>) => {
     const v = r.current?.value?.trim() ?? "";
@@ -220,6 +266,9 @@ export default function SensorPlacementPage() {
       setFloorPlanObjects((session as any).floorPlanObjects.map((obj: FloorPlanObject) =>
         obj.type === "cooling_unit" ? { ...obj, label: "Кондиционер" } : obj,
       ));
+    }
+    if ((session as any).planBackgroundImageUrl) {
+      setPlanBackgroundImageUrl((session as any).planBackgroundImageUrl);
     }
   }
 
@@ -257,6 +306,42 @@ export default function SensorPlacementPage() {
       return { ok: false };
     }
   }, [protocolId, savePlanImage]);
+
+  const handleBackgroundFile = useCallback(async (file: File) => {
+    if (!isWarehouse) return;
+    if (file.size > 25 * 1024 * 1024) {
+      toast.error("Файл фона больше 25 МБ");
+      return;
+    }
+    setBackgroundUploading(true);
+    try {
+      const dataUrl = await planBackgroundFileToDataUrl(file);
+      const res = await savePlanBackgroundImage.mutateAsync({
+        protocolId,
+        dataUrl,
+        sourceName: file.name,
+      });
+      setPlanBackgroundImageUrl(res.url);
+      await pvQ.refetch();
+      toast.success(file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
+        ? "PDF загружен как фон схемы (1-я страница)"
+        : "Фон схемы загружен");
+    } catch (err: any) {
+      toast.error(err?.message ? `Не удалось загрузить фон: ${err.message}` : "Не удалось загрузить фон");
+    } finally {
+      setBackgroundUploading(false);
+      if (backgroundFileRef.current) backgroundFileRef.current.value = "";
+    }
+  }, [isWarehouse, protocolId, pvQ, savePlanBackgroundImage]);
+
+  const clearBackground = useCallback(() => {
+    setPlanBackgroundImageUrl(null);
+    saveSession.mutate({
+      protocolId,
+      planBackgroundImageKey: null,
+      planBackgroundImageUrl: null,
+    } as any);
+  }, [protocolId, saveSession]);
 
   const handleSave = useCallback(async () => {
     const L = readDim(lengthRef);
@@ -346,7 +431,7 @@ export default function SensorPlacementPage() {
                     </p>
                   )}
                 </div>
-                <Button size="sm" onClick={handleSave} disabled={saveSession.isPending || savePlanImage.isPending}>
+                <Button size="sm" onClick={handleSave} disabled={saveSession.isPending || savePlanImage.isPending || backgroundUploading || savePlanBackgroundImage.isPending}>
                   <Save className="h-4 w-4 mr-1" /> Сохранить схему
                 </Button>
               </div>
@@ -416,6 +501,63 @@ export default function SensorPlacementPage() {
                 </p>
               </div>
 
+              <div className="mt-3 p-3 rounded-lg border bg-blue-50/60">
+                <input
+                  ref={backgroundFileRef}
+                  type="file"
+                  accept="application/pdf,image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void handleBackgroundFile(file);
+                  }}
+                />
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-start gap-2">
+                    <FileImage className="h-4 w-4 mt-0.5 text-blue-700" />
+                    <div>
+                      <p className="text-xs font-semibold text-blue-900">
+                        Фон схемы помещения
+                      </p>
+                      <p className="text-[11px] text-blue-800/80">
+                        Можно оставить ручную схему или загрузить PDF/фото плана и расставлять датчики поверх него.
+                        Для PDF используется первая страница.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="bg-background"
+                      disabled={backgroundUploading || savePlanBackgroundImage.isPending}
+                      onClick={() => backgroundFileRef.current?.click()}
+                    >
+                      <Upload className="h-3.5 w-3.5 mr-1" />
+                      {backgroundUploading || savePlanBackgroundImage.isPending ? "Загрузка..." : "Загрузить фон"}
+                    </Button>
+                    {planBackgroundImageUrl && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="bg-background text-destructive hover:text-destructive"
+                        onClick={clearBackground}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-1" />
+                        Убрать фон
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                {planBackgroundImageUrl && (
+                  <p className="mt-2 text-[11px] text-blue-900">
+                    Фон загружен. Все объекты и датчики будут сохранены поверх него и попадут в PDF-снимок схемы.
+                  </p>
+                )}
+              </div>
+
               {/* Tier tabs */}
               {ready && tiers.length > 1 && (
                 <div className="mt-3">
@@ -444,6 +586,7 @@ export default function SensorPlacementPage() {
                   sensorPositions={allSensorPositions}
                   sensorLoggers={loggers as SensorLogger[]}
                   activeTier={activeTier}
+                  backgroundImageUrl={planBackgroundImageUrl}
                   onAssignLogger={(objId: string, loggerId: number) => {
                     updateLogger.mutate({ protocolId, loggerId, position: objId ?? null });
                   }}

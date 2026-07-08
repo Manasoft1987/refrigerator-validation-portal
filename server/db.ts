@@ -774,6 +774,8 @@ export async function insertProtocol(data: InsertProtocol) {
         roomHeightM: null,
         planImageKey: null,
         planImageUrl: null,
+        planBackgroundImageKey: null,
+        planBackgroundImageUrl: null,
       } as typeof pvSessions.$inferSelect);
 
       return protocol;
@@ -1016,6 +1018,32 @@ export async function saveChecklist(
 /* PV                                                                  */
 /* ------------------------------------------------------------------ */
 
+let pvPlanBackgroundSchemaPromise: Promise<void> | null = null;
+
+async function ensurePVPlanBackgroundStorage() {
+  const db = await getDb();
+  if (!db) return;
+  if (pvPlanBackgroundSchemaPromise) return pvPlanBackgroundSchemaPromise;
+
+  pvPlanBackgroundSchemaPromise = (async () => {
+    for (const [column, definition] of [
+      ["planBackgroundImageKey", "varchar(512) NULL AFTER planImageUrl"],
+      ["planBackgroundImageUrl", "varchar(512) NULL AFTER planBackgroundImageKey"],
+    ] as const) {
+      const result = await db.execute(sql.raw(`SHOW COLUMNS FROM pvSessions LIKE '${column}'`));
+      const rows = (result as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
+      if (rows.length === 0) {
+        await db.execute(sql.raw(`ALTER TABLE pvSessions ADD COLUMN ${column} ${definition}`));
+      }
+    }
+  })().catch(error => {
+    pvPlanBackgroundSchemaPromise = null;
+    throw error;
+  });
+
+  return pvPlanBackgroundSchemaPromise;
+}
+
 export async function getPVSession(protocolId: number) {
   const db = await getDb();
   if (!db) {
@@ -1023,6 +1051,7 @@ export async function getPVSession(protocolId: number) {
     const data = await readLocalDevDb();
     return data.pvSessions.find(item => item.protocolId === protocolId);
   }
+  await ensurePVPlanBackgroundStorage();
   const rows = await db
     .select()
     .from(pvSessions)
@@ -1071,6 +1100,8 @@ export async function updatePVSession(
         roomHeightM: null,
         planImageKey: null,
         planImageUrl: null,
+        planBackgroundImageKey: null,
+        planBackgroundImageUrl: null,
         ...data,
       } as typeof pvSessions.$inferSelect);
       return localData.pvSessions[localData.pvSessions.length - 1];

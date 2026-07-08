@@ -159,6 +159,8 @@ const schemaSql = [
     roomHeightM decimal(6,2),
     planImageKey varchar(512),
     planImageUrl varchar(512),
+    planBackgroundImageKey varchar(512),
+    planBackgroundImageUrl varchar(512),
     PRIMARY KEY (id),
     UNIQUE KEY pvSessions_protocolId_unique (protocolId)
   )`,
