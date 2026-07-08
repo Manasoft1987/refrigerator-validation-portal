@@ -10,6 +10,28 @@ export type TempModeId = (typeof TEMP_MODES)[number]["id"];
 
 export const DEFAULT_SENSOR_ACCURACY_C = 0.2;
 
+export function normalizeSensorAccuracyC(
+  value: unknown,
+  fallback = DEFAULT_SENSOR_ACCURACY_C,
+): number {
+  const parsed = typeof value === "string"
+    ? Number(value.replace(",", "."))
+    : Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(0, Math.abs(parsed));
+}
+
+export function maxSensorAccuracyC(
+  values: unknown[],
+  fallback = DEFAULT_SENSOR_ACCURACY_C,
+): number {
+  const normalized = values
+    .map(value => normalizeSensorAccuracyC(value, Number.NaN))
+    .filter(Number.isFinite);
+  if (normalized.length === 0) return fallback;
+  return Math.max(...normalized);
+}
+
 export function applySensorAccuracyGuardBand(
   rawMin: number,
   rawMax: number,
@@ -17,7 +39,7 @@ export function applySensorAccuracyGuardBand(
 ) {
   const safeRawMin = Number.isFinite(rawMin) ? rawMin : 2;
   const safeRawMax = Number.isFinite(rawMax) ? rawMax : 8;
-  const safeAccuracy = Math.max(0, Math.abs(sensorAccuracy));
+  const safeAccuracy = normalizeSensorAccuracyC(sensorAccuracy);
   const min = Number((safeRawMin + safeAccuracy).toFixed(3));
   const max = Number((safeRawMax - safeAccuracy).toFixed(3));
 

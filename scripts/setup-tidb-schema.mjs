@@ -290,6 +290,7 @@ const schemaSql = [
     number varchar(128) NOT NULL,
     calibrationDate timestamp NOT NULL,
     nextCalibrationDate timestamp NOT NULL,
+    accuracy_c decimal(4,2) NOT NULL DEFAULT 0.20,
     status enum('active','expiring_soon','expired') NOT NULL DEFAULT 'active',
     createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

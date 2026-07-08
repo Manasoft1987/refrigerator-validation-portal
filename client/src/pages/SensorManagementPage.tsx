@@ -10,6 +10,8 @@ import { trpc } from "@/lib/trpc";
 import { Plus, Trash2, Edit2, AlertCircle, CheckCircle2, Clock } from "lucide-react";
 import { toast } from "sonner";
 
+const DEFAULT_SENSOR_ACCURACY_C = "0.2";
+
 export function SensorManagementPage() {
   const [isOpen, setIsOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -17,6 +19,7 @@ export function SensorManagementPage() {
     number: "",
     calibrationDate: "",
     nextCalibrationDate: "",
+    accuracyC: DEFAULT_SENSOR_ACCURACY_C,
   });
 
   const { data: sensors, isLoading, refetch } = trpc.sensors.list.useQuery();
@@ -27,7 +30,7 @@ export function SensorManagementPage() {
       toast.success("Датчик добавлен");
       refetch();
       setIsOpen(false);
-      setFormData({ number: "", calibrationDate: "", nextCalibrationDate: "" });
+      setFormData({ number: "", calibrationDate: "", nextCalibrationDate: "", accuracyC: DEFAULT_SENSOR_ACCURACY_C });
     },
     onError: (error) => {
       toast.error(error.message);
@@ -40,7 +43,7 @@ export function SensorManagementPage() {
       refetch();
       setIsOpen(false);
       setEditingId(null);
-      setFormData({ number: "", calibrationDate: "", nextCalibrationDate: "" });
+      setFormData({ number: "", calibrationDate: "", nextCalibrationDate: "", accuracyC: DEFAULT_SENSOR_ACCURACY_C });
     },
     onError: (error) => {
       toast.error(error.message);
@@ -70,12 +73,14 @@ export function SensorManagementPage() {
         number: formData.number,
         calibrationDate: formData.calibrationDate,
         nextCalibrationDate: formData.nextCalibrationDate,
+        accuracyC: formData.accuracyC,
       });
     } else {
       await createMutation.mutateAsync({
         number: formData.number,
         calibrationDate: formData.calibrationDate,
         nextCalibrationDate: formData.nextCalibrationDate,
+        accuracyC: formData.accuracyC,
       });
     }
   };
@@ -86,6 +91,7 @@ export function SensorManagementPage() {
       number: sensor.number,
       calibrationDate: sensor.calibrationDate.split("T")[0],
       nextCalibrationDate: sensor.nextCalibrationDate.split("T")[0],
+      accuracyC: String(sensor.accuracyC ?? DEFAULT_SENSOR_ACCURACY_C),
     });
     setIsOpen(true);
   };
@@ -120,7 +126,7 @@ export function SensorManagementPage() {
         </div>
         <Dialog open={isOpen} onOpenChange={setIsOpen}>
           <DialogTrigger asChild>
-            <Button onClick={() => { setEditingId(null); setFormData({ number: "", calibrationDate: "", nextCalibrationDate: "" }); }} className="gap-2">
+            <Button onClick={() => { setEditingId(null); setFormData({ number: "", calibrationDate: "", nextCalibrationDate: "", accuracyC: DEFAULT_SENSOR_ACCURACY_C }); }} className="gap-2">
               <Plus className="w-4 h-4" /> Добавить датчик
             </Button>
           </DialogTrigger>
@@ -157,6 +163,18 @@ export function SensorManagementPage() {
                   type="date"
                   value={formData.nextCalibrationDate}
                   onChange={(e) => setFormData({ ...formData, nextCalibrationDate: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="accuracyC">Погрешность датчика, ± °C</Label>
+                <Input
+                  id="accuracyC"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.2"
+                  value={formData.accuracyC}
+                  onChange={(e) => setFormData({ ...formData, accuracyC: e.target.value })}
                 />
               </div>
               <Button type="submit" className="w-full" disabled={createMutation.isPending || updateMutation.isPending}>
@@ -210,6 +228,7 @@ export function SensorManagementPage() {
                   <TableHead>Дата поверки</TableHead>
                   <TableHead>Следующая поверка</TableHead>
                   <TableHead>Статус</TableHead>
+                  <TableHead>Погрешность</TableHead>
                   <TableHead className="text-right">Действия</TableHead>
                 </TableRow>
               </TableHeader>
@@ -222,6 +241,7 @@ export function SensorManagementPage() {
                     <TableCell>{new Date(sensor.calibrationDate).toLocaleDateString("ru-RU")}</TableCell>
                     <TableCell>{new Date(sensor.nextCalibrationDate).toLocaleDateString("ru-RU")}</TableCell>
                     <TableCell>{getStatusBadge(sensor)}</TableCell>
+                    <TableCell>±{Number(sensor.accuracyC ?? DEFAULT_SENSOR_ACCURACY_C).toFixed(2)} °C</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button

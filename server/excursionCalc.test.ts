@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applySensorAccuracyGuardBand } from "../shared/validation";
+import { applySensorAccuracyGuardBand, maxSensorAccuracyC } from "../shared/validation";
 import { calcTest1, calcTest2, type SensorSeries } from "./excursionCalc";
 
 const minute = 60_000;
@@ -21,6 +21,18 @@ describe("sensor accuracy guard band", () => {
       sensorAccuracy: 0.2,
       min: 2.2,
       max: 7.8,
+    });
+  });
+
+  it("uses the maximum accuracy when several sensor types are present", () => {
+    const maxAccuracy = maxSensorAccuracyC(["0.20", 0.5, null]);
+    expect(maxAccuracy).toBe(0.5);
+    expect(applySensorAccuracyGuardBand(2, 8, maxAccuracy)).toEqual({
+      rawMin: 2,
+      rawMax: 8,
+      sensorAccuracy: 0.5,
+      min: 2.5,
+      max: 7.5,
     });
   });
 });

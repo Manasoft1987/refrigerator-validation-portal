@@ -16,6 +16,8 @@ import {
   TEMP_MODES,
   DEFAULT_SENSOR_ACCURACY_C,
   applySensorAccuracyGuardBand,
+  maxSensorAccuracyC,
+  normalizeSensorAccuracyC,
 } from "@shared/validation";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -237,6 +239,33 @@ function rangeFor(tempMode: string, customMin?: number | null, customMax?: numbe
   const rawMin = customMin ?? mode?.min ?? 2;
   const rawMax = customMax ?? mode?.max ?? 8;
   return applySensorAccuracyGuardBand(rawMin, rawMax, DEFAULT_SENSOR_ACCURACY_C);
+}
+
+function rangeForWithSensorAccuracy(
+  tempMode: string,
+  sensorAccuracy: number,
+  customMin?: number | null,
+  customMax?: number | null,
+) {
+  const mode = TEMP_MODES.find(m => m.id === tempMode);
+  const rawMin = customMin ?? mode?.min ?? 2;
+  const rawMax = customMax ?? mode?.max ?? 8;
+  return applySensorAccuracyGuardBand(rawMin, rawMax, sensorAccuracy);
+}
+
+function maxAccuracyForUsedInternalSensors(
+  protocolSensors: Array<{ number: string; accuracyC?: unknown }>,
+  loggers: Array<{ label: string | null; customName?: string | null; role?: string | null }>,
+): number {
+  const internalLoggers = loggers.filter(logger => logger.role !== "external");
+  const usedSensors = protocolSensors.filter(sensor =>
+    internalLoggers.some(logger =>
+      sensorNumberMatchesLabel(sensor.number, logger.label) ||
+      sensorNumberMatchesLabel(sensor.number, logger.customName),
+    ),
+  );
+  const source = internalLoggers.length > 0 ? usedSensors : protocolSensors;
+  return maxSensorAccuracyC(source.map(sensor => sensor.accuracyC), DEFAULT_SENSOR_ACCURACY_C);
 }
 
 function defaultQuestionsFor(stage: "iq" | "oq", equipmentType?: string | null): string[] {
@@ -1303,10 +1332,18 @@ export const appRouter = router({
         const oqItems = await listChecklist(input.protocolId, "oq");
         const session = await getPVSession(input.protocolId);
         const loggers = await listLoggers(input.protocolId);
+        let linkedProtocolSensors: Awaited<ReturnType<typeof getProtocolSensors>> = [];
+        try {
+          linkedProtocolSensors = await getProtocolSensors(input.protocolId);
+        } catch (err) {
+          linkedProtocolSensors = [];
+        }
 
         const tempMode = session?.tempMode || gi?.tempMode || "2-8";
-        const guardedRange = rangeFor(
+        const sensorAccuracyForProtocol = maxAccuracyForUsedInternalSensors(linkedProtocolSensors, loggers);
+        const guardedRange = rangeForWithSensorAccuracy(
           tempMode,
+          sensorAccuracyForProtocol,
           session?.customMin ? Number(session.customMin) : null,
           session?.customMax ? Number(session.customMax) : null,
         );
@@ -1619,19 +1656,15 @@ export const appRouter = router({
         };
         
         // Load protocol sensors if any are linked
-        try {
-          const protocolSensors = await getProtocolSensors(input.protocolId);
-          if (protocolSensors && protocolSensors.length > 0) {
-            reportInput.protocolSensors = protocolSensors.map(ps => ({
-              id: ps.id,
-              number: ps.number,
-              calibrationDate: ps.calibrationDate,
-              nextCalibrationDate: ps.nextCalibrationDate,
-              status: ps.status,
-            }));
-          }
-        } catch (err) {
-          // Silently fail if sensors not found
+        if (linkedProtocolSensors.length > 0) {
+          reportInput.protocolSensors = linkedProtocolSensors.map(ps => ({
+            id: ps.id,
+            number: ps.number,
+            calibrationDate: ps.calibrationDate,
+            nextCalibrationDate: ps.nextCalibrationDate,
+            accuracyC: (ps as any).accuracyC,
+            status: ps.status,
+          }));
         }
         
         const buffer = await generateProtocolPdf(reportInput);
@@ -2316,12 +2349,14 @@ export const appRouter = router({
         number: z.string().min(1),
         calibrationDate: z.string(),
         nextCalibrationDate: z.string(),
+        accuracyC: z.union([z.string(), z.number()]).nullable().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         return createSensor({
           number: input.number,
           calibrationDate: input.calibrationDate,
           nextCalibrationDate: input.nextCalibrationDate,
+          accuracyC: normalizeSensorAccuracyC(input.accuracyC, DEFAULT_SENSOR_ACCURACY_C).toFixed(2),
           status: "active",
         });
       }),
@@ -2332,6 +2367,7 @@ export const appRouter = router({
         number: z.string().optional(),
         calibrationDate: z.string().optional(),
         nextCalibrationDate: z.string().optional(),
+        accuracyC: z.union([z.string(), z.number()]).nullable().optional(),
         status: z.enum(["active", "expiring_soon", "expired"]).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
@@ -2341,6 +2377,9 @@ export const appRouter = router({
           number: input.number,
           calibrationDate: input.calibrationDate,
           nextCalibrationDate: input.nextCalibrationDate,
+          accuracyC: input.accuracyC === undefined
+            ? undefined
+            : normalizeSensorAccuracyC(input.accuracyC, DEFAULT_SENSOR_ACCURACY_C).toFixed(2),
           status: input.status,
         });
       }),
@@ -2364,6 +2403,7 @@ export const appRouter = router({
         number: z.string().min(1),
         calibrationDate: z.string(),
         nextCalibrationDate: z.string(),
+        accuracyC: z.union([z.string(), z.number()]).nullable().optional(),
       })))
       .mutation(async ({ ctx, input }) => {
         return bulkCreateSensors(input);

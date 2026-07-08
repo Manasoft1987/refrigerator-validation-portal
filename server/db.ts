@@ -37,6 +37,7 @@ import {
   type InsertWarehouseEquipment,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { DEFAULT_SENSOR_ACCURACY_C, normalizeSensorAccuracyC } from "../shared/validation";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -2108,13 +2109,47 @@ export async function deleteWarehouseEquipment(id: number): Promise<void> {
 
 // ─── Sensors ──────────────────────────────────────────────────────────────────
 
+let sensorAccuracySchemaPromise: Promise<void> | null = null;
+
+async function ensureSensorAccuracyStorage() {
+  const db = await getDb();
+  if (!db) return;
+  if (sensorAccuracySchemaPromise) return sensorAccuracySchemaPromise;
+
+  sensorAccuracySchemaPromise = (async () => {
+    const result = await db.execute(sql.raw("SHOW COLUMNS FROM sensors LIKE 'accuracy_c'"));
+    const rows = (result as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
+    if (rows.length > 0) return;
+    await db.execute(sql.raw(
+      "ALTER TABLE sensors ADD COLUMN accuracy_c decimal(4,2) NOT NULL DEFAULT 0.20 AFTER nextCalibrationDate",
+    ));
+  })().catch(error => {
+    sensorAccuracySchemaPromise = null;
+    throw error;
+  });
+
+  return sensorAccuracySchemaPromise;
+}
+
+function sensorAccuracyForDb(value: unknown): string {
+  return normalizeSensorAccuracyC(value, DEFAULT_SENSOR_ACCURACY_C).toFixed(2);
+}
+
+function withDefaultSensorAccuracy<T extends Partial<Sensor>>(sensor: T): T & { accuracyC: string } {
+  return {
+    ...sensor,
+    accuracyC: sensorAccuracyForDb((sensor as any).accuracyC),
+  };
+}
+
 export async function listSensors(): Promise<Sensor[]> {
   const db = await getDb();
   if (!db) {
     if (!shouldUseLocalDevDb()) throw new Error("DB unavailable");
     const data = await readLocalDevDb();
-    return [...data.sensors].sort((a, b) => a.number.localeCompare(b.number));
+    return data.sensors.map(withDefaultSensorAccuracy).sort((a, b) => a.number.localeCompare(b.number));
   }
+  await ensureSensorAccuracyStorage();
   return db.select().from(sensors);
 }
 
@@ -2123,8 +2158,10 @@ export async function getSensor(sensorId: number): Promise<Sensor | undefined> {
   if (!db) {
     if (!shouldUseLocalDevDb()) throw new Error("DB unavailable");
     const data = await readLocalDevDb();
-    return data.sensors.find(sensor => sensor.id === sensorId);
+    const sensor = data.sensors.find(sensor => sensor.id === sensorId);
+    return sensor ? withDefaultSensorAccuracy(sensor) : undefined;
   }
+  await ensureSensorAccuracyStorage();
   const result = await db.select().from(sensors).where(eq(sensors.id, sensorId));
   return result[0];
 }
@@ -2143,6 +2180,7 @@ export async function createSensor(data: InsertSensor): Promise<Sensor> {
         number: data.number,
         calibrationDate: data.calibrationDate,
         nextCalibrationDate: data.nextCalibrationDate,
+        accuracyC: sensorAccuracyForDb((data as any).accuracyC),
         status: data.status ?? "active",
         createdAt: now,
         updatedAt: now,
@@ -2151,7 +2189,11 @@ export async function createSensor(data: InsertSensor): Promise<Sensor> {
       return sensor;
     });
   }
-  await db.insert(sensors).values(data);
+  await ensureSensorAccuracyStorage();
+  await db.insert(sensors).values({
+    ...data,
+    accuracyC: sensorAccuracyForDb((data as any).accuracyC),
+  });
   const result = await db.select().from(sensors).where(eq(sensors.number, data.number));
   return result[0];
 }
@@ -2166,12 +2208,19 @@ export async function updateSensor(sensorId: number, data: Partial<InsertSensor>
       if (data.number !== undefined) sensor.number = data.number;
       if (data.calibrationDate !== undefined) sensor.calibrationDate = data.calibrationDate;
       if (data.nextCalibrationDate !== undefined) sensor.nextCalibrationDate = data.nextCalibrationDate;
+      if ((data as any).accuracyC !== undefined) (sensor as any).accuracyC = sensorAccuracyForDb((data as any).accuracyC);
       if (data.status !== undefined) sensor.status = data.status;
       sensor.updatedAt = new Date().toISOString();
-      return sensor;
+      return withDefaultSensorAccuracy(sensor);
     });
   }
-  await db.update(sensors).set({ ...data, updatedAt: new Date().toISOString() }).where(eq(sensors.id, sensorId));
+  await ensureSensorAccuracyStorage();
+  const patch = {
+    ...data,
+    ...((data as any).accuracyC !== undefined ? { accuracyC: sensorAccuracyForDb((data as any).accuracyC) } : {}),
+    updatedAt: new Date().toISOString(),
+  };
+  await db.update(sensors).set(patch).where(eq(sensors.id, sensorId));
   const result = await db.select().from(sensors).where(eq(sensors.id, sensorId));
   return result[0];
 }
@@ -2199,8 +2248,9 @@ export async function getSensorsExpiringIn30Days(): Promise<Sensor[]> {
     return data.sensors.filter(sensor => {
       const next = new Date(sensor.nextCalibrationDate);
       return sensor.status === "active" && next >= now && next <= in30Days;
-    });
+    }).map(withDefaultSensorAccuracy);
   }
+  await ensureSensorAccuracyStorage();
   return db
     .select()
     .from(sensors)
@@ -2213,7 +2263,7 @@ export async function getSensorsExpiringIn30Days(): Promise<Sensor[]> {
     );
 }
 
-export async function bulkCreateSensors(sensorsData: Array<{ number: string; calibrationDate: string; nextCalibrationDate: string }>): Promise<Sensor[]> {
+export async function bulkCreateSensors(sensorsData: Array<{ number: string; calibrationDate: string; nextCalibrationDate: string; accuracyC?: string | number | null }>): Promise<Sensor[]> {
   const db = await getDb();
   if (!db) {
     if (!shouldUseLocalDevDb()) throw new Error("DB unavailable");
@@ -2224,6 +2274,7 @@ export async function bulkCreateSensors(sensorsData: Array<{ number: string; cal
         if (existing) {
           existing.calibrationDate = item.calibrationDate;
           existing.nextCalibrationDate = item.nextCalibrationDate;
+          (existing as any).accuracyC = sensorAccuracyForDb(item.accuracyC);
           existing.status = "active";
           existing.updatedAt = now;
           continue;
@@ -2234,14 +2285,16 @@ export async function bulkCreateSensors(sensorsData: Array<{ number: string; cal
           number: item.number,
           calibrationDate: item.calibrationDate,
           nextCalibrationDate: item.nextCalibrationDate,
+          accuracyC: sensorAccuracyForDb(item.accuracyC),
           status: "active",
           createdAt: now,
           updatedAt: now,
         } as Sensor);
       }
-      return [...localData.sensors].sort((a, b) => a.number.localeCompare(b.number));
+      return localData.sensors.map(withDefaultSensorAccuracy).sort((a, b) => a.number.localeCompare(b.number));
     });
   }
+  await ensureSensorAccuracyStorage();
   
   for (const data of sensorsData) {
     try {
@@ -2249,10 +2302,19 @@ export async function bulkCreateSensors(sensorsData: Array<{ number: string; cal
         number: data.number,
         calibrationDate: data.calibrationDate,
         nextCalibrationDate: data.nextCalibrationDate,
+        accuracyC: sensorAccuracyForDb(data.accuracyC),
         status: 'active',
       });
     } catch (err: any) {
-      if (err.code !== 'ER_DUP_ENTRY') {
+      if (err.code === 'ER_DUP_ENTRY') {
+        await db.update(sensors).set({
+          calibrationDate: data.calibrationDate,
+          nextCalibrationDate: data.nextCalibrationDate,
+          accuracyC: sensorAccuracyForDb(data.accuracyC),
+          status: 'active',
+          updatedAt: new Date().toISOString(),
+        }).where(eq(sensors.number, data.number));
+      } else {
         console.warn(`Failed to insert sensor ${data.number}:`, err.message);
       }
     }
@@ -2329,10 +2391,11 @@ export async function getProtocolSensors(protocolId: number): Promise<Array<Sens
       .filter(link => link.protocolId === protocolId)
       .map(link => {
         const sensor = data.sensors.find(item => item.id === link.sensorId);
-        return sensor ? ({ ...sensor, protocolSensorId: link.id } as Sensor & { protocolSensorId: number }) : null;
+        return sensor ? ({ ...withDefaultSensorAccuracy(sensor), protocolSensorId: link.id } as Sensor & { protocolSensorId: number }) : null;
       })
       .filter((item): item is Sensor & { protocolSensorId: number } => Boolean(item)));
   }
+  await ensureSensorAccuracyStorage();
   
   const result = await db
     .select({
@@ -2340,6 +2403,7 @@ export async function getProtocolSensors(protocolId: number): Promise<Array<Sens
       number: sensors.number,
       calibrationDate: sensors.calibrationDate,
       nextCalibrationDate: sensors.nextCalibrationDate,
+      accuracyC: sensors.accuracyC,
       status: sensors.status,
       createdAt: sensors.createdAt,
       updatedAt: sensors.updatedAt,

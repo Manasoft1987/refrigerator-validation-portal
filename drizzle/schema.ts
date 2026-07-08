@@ -295,6 +295,7 @@ export const sensors = mysqlTable("sensors", {
 		number: varchar({ length: 128 }).notNull(),
 	calibrationDate: timestamp({ mode: 'string' }).notNull(),
 	nextCalibrationDate: timestamp({ mode: 'string' }).notNull(),
+	accuracyC: decimal("accuracy_c", { precision: 4, scale: 2 }).default('0.20').notNull(),
 	status: mysqlEnum(['active', 'expiring_soon', 'expired']).default('active').notNull(),
 	createdAt: timestamp({ mode: 'string' }).default('CURRENT_TIMESTAMP').notNull(),
 	updatedAt: timestamp({ mode: 'string' }).defaultNow().onUpdateNow().notNull(),

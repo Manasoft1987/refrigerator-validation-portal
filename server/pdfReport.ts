@@ -24,6 +24,7 @@ import {
 import { calculateAllOperationalMetrics } from "./operationalMetrics";
 import {
   computeWarehouseSensorCount,
+  normalizeSensorAccuracyC,
   WAREHOUSE_MAPPING_METHOD_NOTE,
 } from "../shared/validation";
 import type { OperationalMetrics } from "./operationalMetrics";
@@ -218,6 +219,7 @@ export type ReportInput = {
     number: string;
     calibrationDate: string | Date | null;
     nextCalibrationDate: string | Date | null;
+    accuracyC?: string | number | null;
     status?: string;
   }>;
   /** Позиция кондиционера на интерактивной схеме помещения */
@@ -4514,6 +4516,7 @@ function drawSensorTable(
     number: string;
     calibrationDate: string | Date | null;
     nextCalibrationDate: string | Date | null;
+    accuracyC?: string | number | null;
     status?: string;
   }>,
   sensorAccuracy = 0.2,
@@ -4559,7 +4562,6 @@ function drawSensorTable(
   
   // Draw data rows
   doc.font("body").fontSize(9).fillColor(ACCENT);
-  const accuracyText = `±${sensorAccuracy.toFixed(2)}`;
   uniqueSensors.forEach((sensor) => {
     ensureSpace(doc, 28);
     const rowY = doc.y;
@@ -4582,7 +4584,9 @@ function drawSensorTable(
       statusText = "Действительна";
       statusColor = "#388e3c"; // Green
     }
-    
+    const rowAccuracy = normalizeSensorAccuracyC(sensor.accuracyC, sensorAccuracy);
+    const accuracyText = `±${rowAccuracy.toFixed(2)}`;
+
     const rowData = [sensor.number, calibDate, nextDate, statusText, accuracyText];
     
     // Draw cells
