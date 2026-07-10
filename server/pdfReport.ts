@@ -3366,95 +3366,50 @@ function fitTextToLines(doc: PDFKit.PDFDocument, text: string, maxWidth: number,
 function addHeadersAndFooters(doc: PDFKit.PDFDocument, input: ReportInput) {
   const range = doc.bufferedPageRange();
   const total = range.count;
-
-  // Set font once to ensure _font is loaded with correct glyph map
-  doc.switchToPage(range.start + total - 1);
-  doc.font("body").fontSize(8);
   const protocolLabel = `Протокол ${input.protocol.number}`;
-
-  /**
-   * Encode text using PDFKit's internal glyph mapping so that Cyrillic
-   * characters render correctly when written via page.write().
-   * doc._font.encode(str)[0] returns an array of hex glyph-ID strings.
-   */
-  const encodeForPage = (text: string): string => {
-    const glyphs: string[] = (doc as any)._font.encode(text)[0] as string[];
-    return "<" + glyphs.join("") + ">";
-  };
 
   for (let i = 0; i < total; i++) {
     doc.switchToPage(range.start + i);
-    // CRITICAL: call doc.font() AFTER switchToPage so _font glyph map is correct
     doc.font("body").fontSize(8);
-    const page = doc.page as any;
     const left = PAGE_MARGIN;
     const right = doc.page.width - PAGE_MARGIN;
     const pageH = doc.page.height;
 
-    // doc.font("body") above registers the font on this page and sets doc._font.
-    // Use doc._font.id as the PDF resource name (e.g. "F2") — this is guaranteed
-    // to match the glyph map used by encodeForPage().
-    const fontName: string = (doc as any)._font.id;
-
-    // Helper to write raw PDF text at absolute position without moving doc.y.
-    // PDFKit applies a flip matrix (1 0 0 -1 0 pageH) to the content stream,
-    // so we use Tm with (1 0 0 -1 x y) to render text upright at the correct position.
-    // pdfY is distance from the BOTTOM of the page (PDF native coords).
-    const writeText = (text: string, x: number, pdfY: number) => {
-      if (!fontName) return;
-      page.write("BT");
-      page.write("/" + fontName + " 8 Tf");
-      page.write("0.392 0.455 0.545 rg"); // MUTED color
-      page.write("1 0 0 -1 " + x.toFixed(2) + " " + pdfY.toFixed(2) + " Tm");
-      page.write(encodeForPage(text) + " Tj");
-      page.write("ET");
-    };
-
-    // ─── COORDINATE SYSTEM NOTES ───────────────────────────────────────────
-    // writeText uses Tm (1 0 0 -1 x y). PDFKit applies flip matrix (1 0 0 -1 0 pageH).
-    // Combined: text renders at PDFKit position y from TOP of page.
-    // So writeText(text, x, y) → text appears at y pts from TOP.
-    // For header (top): y = 24  (24pt from top)
-    // For footer (bottom): y = pageH - 24  (24pt from bottom)
-    //
-    // page.write() path operators use PDF NATIVE coords (y from BOTTOM).
-    // Header line at 38pt from top → PDF native y = pageH - 38
-    // Footer line at 36pt from bottom → PDF native y = 36
-    // ────────────────────────────────────────────────────────────────────────
-
     if (i > 0) {
-      // Header line at 38pt from top → PDF native y = pageH - 38
-      const headerLineY = pageH - 38;
-      page.write("q");
-      page.write("0.886 0.910 0.941 RG");
-      page.write("0.4 w");
-      page.write(left.toFixed(2) + " " + headerLineY.toFixed(2) + " m");
-      page.write(right.toFixed(2) + " " + headerLineY.toFixed(2) + " l");
-      page.write("S");
-      page.write("Q");
-      // Header text at 24pt from TOP -> writeText y = 24.
-      // Keep a fixed gap between the long organization name and the protocol number.
+      doc.save();
+      doc.strokeColor(BORDER).lineWidth(0.4).moveTo(left, 38).lineTo(right, 38).stroke();
+      doc.restore();
       const protoW = doc.widthOfString(protocolLabel);
       const headerGap = 18;
       const orgHeaderW = Math.max(120, right - left - protoW - headerGap);
-      writeText(fitTextToWidth(doc, input.org.name, orgHeaderW), left, 24);
-      writeText(protocolLabel, right - protoW, 24);
+      doc
+        .fillColor(MUTED)
+        .font("body")
+        .fontSize(8)
+        .text(fitTextToWidth(doc, input.org.name, orgHeaderW), left, 22, {
+          width: orgHeaderW,
+          lineBreak: false,
+        })
+        .text(protocolLabel, right - protoW, 22, {
+          width: protoW,
+          lineBreak: false,
+        });
     }
 
-    // Footer line at 36pt from BOTTOM → PDF native y = 36
-    page.write("q");
-    page.write("0.886 0.910 0.941 RG");
-    page.write("0.4 w");
-    page.write(left.toFixed(2) + " 36 m");
-    page.write(right.toFixed(2) + " 36 l");
-    page.write("S");
-    page.write("Q");
-
-    // Footer text at 24pt from BOTTOM → writeText y = pageH - 24
+    doc.save();
+    doc.strokeColor(BORDER).lineWidth(0.4).moveTo(left, pageH - 36).lineTo(right, pageH - 36).stroke();
+    doc.restore();
     const pageLabel = `Стр. ${i + 1} из ${total}`;
     const pageLabelW = doc.widthOfString(pageLabel);
     const centerX = left + (right - left) / 2 - pageLabelW / 2;
-    writeText(pageLabel, centerX, pageH - 24);
+    doc
+      .fillColor(MUTED)
+      .font("body")
+      .fontSize(8)
+      .text(pageLabel, centerX, pageH - 26, {
+        width: pageLabelW,
+        lineBreak: false,
+      });
   }
 }
 
