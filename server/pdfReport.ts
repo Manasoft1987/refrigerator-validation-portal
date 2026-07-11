@@ -141,6 +141,26 @@ export type ReportInput = {
     fillStatus?: "empty" | "loaded" | null;
     loadPercent?: string | number | null;
   } | null;
+  thermalTrials?: Array<{
+    trialKey: string;
+    tempMode: string;
+    verdict: "pass" | "fail" | "none";
+    startAt: number | null;
+    endAt: number | null;
+    durationHours: number | null;
+    targetDurationHours: number;
+    internalSensorCount: number;
+    failureReasons: string[];
+    loggers: Array<{
+      label: string;
+      customName: string | null;
+      role: "internal" | "external";
+      min: number | null;
+      avg: number | null;
+      max: number | null;
+      mkt: number | null;
+    }>;
+  }>;
   iq: {
     purpose: string;
     description: string;
@@ -792,7 +812,10 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   drawStageVerdict(doc, "OQ", input.oq.verdict, input.oq.items);
 
   doc.addPage();
-  drawSectionTitle(doc, "9. Результаты PV — Эксплуатационная квалификация");
+    drawSectionTitle(doc, "9. Результаты PV — Эксплуатационная квалификация");
+    if ((input.generalInfo?.equipmentType || input.protocol?.equipmentType) === "thermal-container") {
+      drawThermalTrialsSummary(doc, input);
+    }
   drawStageDataEntryTable(doc, input, "PV");
   drawPVParams(doc, input.pv, input);
 
@@ -804,7 +827,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     } else {
       // Non-warehouse: Schema 1 (reference positions)
       if (isReeferLike(eqType)) {
-        drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, true, "Схема 1. Эталонные позиции ISPE (C1–C8, W1–W4, V1–V3)", null, null, eqType === "chamber" ? "chamber" : "truck");
+        drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, true, "Схема 1. Эталонные позиции ISPE (C1–C8, W1–W4, V1–V3)", null, null, eqType === "chamber" || eqType === "thermal-container" ? "chamber" : "truck");
       } else {
         drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, "Схема 1. Эталонные позиции ISPE (C1–C8, W1–W4, V1–V3)", "position");
       }
@@ -814,7 +837,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
         // Get sensor labels for critical points
         const hotLabel = input.pv.hotIdx !== null && input.pv.loggers[input.pv.hotIdx] ? input.pv.loggers[input.pv.hotIdx].label : null;
         const coldLabel = input.pv.coldIdx !== null && input.pv.loggers[input.pv.coldIdx] ? input.pv.loggers[input.pv.coldIdx].label : null;
-        drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, false, "Схема 2. Расстановка датчиков (с серийными номерами)", hotLabel, coldLabel, eqType === "chamber" ? "chamber" : "truck");
+        drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, false, "Схема 2. Расстановка датчиков (с серийными номерами)", hotLabel, coldLabel, eqType === "chamber" || eqType === "thermal-container" ? "chamber" : "truck");
       } else {
         drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, "Схема 2. Расстановка датчиков (с серийными номерами)", "serial");
       }
@@ -1118,6 +1141,42 @@ function formatLoadPercent(value: string | number | null | undefined): string {
   if (!Number.isFinite(numeric)) return raw.endsWith("%") ? raw : `${raw}%`;
   const rounded = Math.round(numeric * 10) / 10;
   return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)}%`;
+}
+
+function drawThermalTrialsSummary(doc: PDFKit.PDFDocument, input: ReportInput) {
+  const trials = input.thermalTrials || [];
+  drawSubTitle(doc, "9.1. Сводные результаты испытаний температурных режимов");
+  if (trials.length === 0) {
+    doc.font("body").fontSize(10).fillColor(MUTED).text("Испытания не зарегистрированы.");
+    return;
+  }
+
+  const verdictLabel = (value: string) => value === "pass"
+    ? "Пройдено"
+    : value === "fail"
+      ? "Не пройдено"
+      : "Не завершено";
+  const rows: Array<[string, string]> = [];
+  for (const trial of trials) {
+    const mode = TEMP_MODE_LABEL[trial.tempMode] || trial.tempMode;
+    const duration = trial.durationHours === null ? "—" : `${trial.durationHours.toFixed(1)} ч`;
+    rows.push([
+      `Режим ${mode}`,
+      `${verdictLabel(trial.verdict)}; фактически ${duration}; требование ${trial.targetDurationHours} ч; внутренних датчиков: ${trial.internalSensorCount}`,
+    ]);
+    if (trial.failureReasons.length > 0) {
+      rows.push([`Замечания (${mode})`, trial.failureReasons.join("; ")]);
+    }
+    for (const logger of trial.loggers) {
+      const role = logger.role === "external" ? "внешний" : "внутренний";
+      const fmt = (value: number | null) => value === null || !Number.isFinite(value) ? "—" : `${value.toFixed(2)} °C`;
+      rows.push([
+        `${logger.label}${logger.customName ? ` (${logger.customName})` : ""}`,
+        `${role}; Min ${fmt(logger.min)}; Avg ${fmt(logger.avg)}; Max ${fmt(logger.max)}; MKT ${fmt(logger.mkt)}`,
+      ]);
+    }
+  }
+  drawKVTable(doc, rows, 145);
 }
 
 function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatProtocolNumber, protocolObjectCode } from "./db";
+import { aggregateTrialVerdicts } from "../shared/validation";
 
 /**
  * New protocol numbering format: VAL-{OBJECT}-{YYYY}-{###}.
@@ -53,6 +54,20 @@ describe("protocol number format", () => {
     expect(formatProtocolNumber(2026, 1, "warehouse")).toBe("VAL-STR-2026-001");
     expect(formatProtocolNumber(2026, 10, "warehouse")).toBe("VAL-STR-2026-010");
     expect(formatProtocolNumber(2026, 100, "warehouse")).toBe("VAL-STR-2026-100");
+  });
+});
+
+describe("thermal-container trial verdict", () => {
+  it("waits until every selected temperature mode is analyzed", () => {
+    expect(aggregateTrialVerdicts(["pass", "none", "pass"])).toBe("none");
+  });
+
+  it("fails after all trials finish if any mode failed", () => {
+    expect(aggregateTrialVerdicts(["pass", "fail", "pass"])).toBe("fail");
+  });
+
+  it("passes only when every mode passed", () => {
+    expect(aggregateTrialVerdicts(["pass", "pass", "pass"])).toBe("pass");
   });
 });
 

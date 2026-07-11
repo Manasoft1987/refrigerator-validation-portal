@@ -157,6 +157,7 @@ const schemaSql = [
   `CREATE TABLE IF NOT EXISTS pvSessions (
     id int AUTO_INCREMENT NOT NULL,
     protocolId int NOT NULL,
+    trialKey varchar(32) NOT NULL DEFAULT 'default',
     tempMode varchar(16),
     startAt bigint,
     endAt bigint,
@@ -181,12 +182,13 @@ const schemaSql = [
     planBackgroundImageKey varchar(512),
     planBackgroundImageUrl varchar(512),
     PRIMARY KEY (id),
-    UNIQUE KEY pvSessions_protocolId_unique (protocolId)
+    UNIQUE KEY pvSessions_protocolId_trialKey_unique (protocolId, trialKey)
   )`,
   `CREATE TABLE IF NOT EXISTS pvLoggers (
     id int AUTO_INCREMENT NOT NULL,
     pvSessionId int NOT NULL,
     protocolId int NOT NULL,
+    trialKey varchar(32) NOT NULL DEFAULT 'default',
     fileKey varchar(512) NOT NULL,
     fileUrl varchar(512) NOT NULL,
     fileName varchar(255) NOT NULL,

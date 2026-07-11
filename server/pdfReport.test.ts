@@ -112,11 +112,29 @@ describe("generateProtocolPdf", () => {
         protocol: { number: "VAL-2024-0001", createdAt: new Date(now) },
         generalInfo: {
           ...BASE_GI,
+          equipmentType: "thermal-container",
+          thermalContainerConfig: {
+            selectedModes: ["2-8", "8-15", "15-25"],
+            targetDurationHours: 24,
+          },
           commissionMembers: [
             { name: "Иванова А. И.", role: "Председатель" },
             { name: "Петров Н. С.", role: "Член комиссии" },
           ],
         },
+        thermalTrials: [
+          {
+            trialKey: "2-8", tempMode: "2-8", verdict: "pass",
+            startAt: now, endAt: now + 24 * 3600_000, durationHours: 24,
+            targetDurationHours: 24, internalSensorCount: 1, failureReasons: [],
+            loggers: [{ label: "D1", customName: null, role: "internal", min: 4.6, avg: 5, max: 5.4, mkt: 5 }],
+          },
+          {
+            trialKey: "8-15", tempMode: "8-15", verdict: "none",
+            startAt: null, endAt: null, durationHours: null,
+            targetDurationHours: 24, internalSensorCount: 0, failureReasons: [], loggers: [],
+          },
+        ],
         iq: {
           purpose: "Проверка корректности монтажа",
           description: "Монтаж проведён подрядчиком в соответствии с проектом.",

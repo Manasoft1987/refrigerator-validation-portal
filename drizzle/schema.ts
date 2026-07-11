@@ -186,6 +186,7 @@ export const pvLoggers = mysqlTable("pvLoggers", {
 	id: int().autoincrement().notNull(),
 	pvSessionId: int().notNull(),
 	protocolId: int().notNull(),
+	trialKey: varchar({ length: 32 }).default('default').notNull(),
 	fileKey: varchar({ length: 512 }).notNull(),
 	fileUrl: varchar({ length: 512 }).notNull(),
 	fileName: varchar({ length: 255 }).notNull(),
@@ -210,6 +211,7 @@ export const pvLoggers = mysqlTable("pvLoggers", {
 export const pvSessions = mysqlTable("pvSessions", {
 	id: int().autoincrement().notNull(),
 	protocolId: int().notNull(),
+	trialKey: varchar({ length: 32 }).default('default').notNull(),
 	tempMode: varchar({ length: 16 }),
 	startAt: bigint({ mode: "number" }),
 	endAt: bigint({ mode: "number" }),
@@ -235,7 +237,7 @@ export const pvSessions = mysqlTable("pvSessions", {
 	planBackgroundImageUrl: varchar({ length: 512 }),
 },
 (table) => [
-	index("pvSessions_protocolId_unique").on(table.protocolId),
+	index("pvSessions_protocolId_trialKey_idx").on(table.protocolId, table.trialKey),
 ]);
 
 export const questionTemplates = mysqlTable("questionTemplates", {

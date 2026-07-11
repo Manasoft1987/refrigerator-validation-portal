@@ -8,6 +8,13 @@ export const TEMP_MODES = [
 
 export type TempModeId = (typeof TEMP_MODES)[number]["id"];
 
+export function aggregateTrialVerdicts(
+  verdicts: Array<"pass" | "fail" | "none" | null | undefined>,
+): "pass" | "fail" | "none" {
+  if (verdicts.length === 0 || verdicts.some(value => !value || value === "none")) return "none";
+  return verdicts.some(value => value === "fail") ? "fail" : "pass";
+}
+
 export const DEFAULT_SENSOR_ACCURACY_C = 0.2;
 
 export function normalizeSensorAccuracyC(

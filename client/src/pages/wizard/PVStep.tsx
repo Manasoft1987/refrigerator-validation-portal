@@ -63,11 +63,19 @@ export default function PVStep({
   onBack: () => void;
 }) {
   const utils = trpc.useUtils();
-  const pvQ = trpc.pv.get.useQuery({ protocolId });
   const giQ = trpc.generalInfo.get.useQuery({ protocolId });
   const protocolQ = trpc.protocols.get.useQuery({ id: protocolId });
   const equipmentType = protocolQ.data?.equipmentType ?? "refrigerator";
   const isWarehouse = equipmentType === "warehouse";
+  const isThermalContainer = equipmentType === "thermal-container";
+  const thermalModes = ((giQ.data?.thermalContainerConfig as any)?.selectedModes || [giQ.data?.tempMode || "2-8"]) as string[];
+  const [activeTrialKey, setActiveTrialKey] = useState("default");
+  useEffect(() => {
+    if (isThermalContainer && thermalModes.length > 0 && activeTrialKey === "default") {
+      setActiveTrialKey(thermalModes[0]);
+    }
+  }, [isThermalContainer, thermalModes.join("|"), activeTrialKey]);
+  const pvQ = trpc.pv.get.useQuery({ protocolId, trialKey: activeTrialKey });
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [selectedLogger, setSelectedLogger] = useState<number | null>(null);
@@ -77,12 +85,14 @@ export default function PVStep({
 
   // local editable session state
   const [form, setForm] = useState<any>(null);
+  const seededTrialRef = useRef<string | null>(null);
   // Local state for custom name inputs (keyed by logger id) so typing works
   const [customNames, setCustomNames] = useState<Record<number, string>>({});
   useEffect(() => {
-    if (session && !form) {
+    if (session && seededTrialRef.current !== activeTrialKey) {
+      seededTrialRef.current = activeTrialKey;
       setForm({
-        tempMode: session.tempMode || giQ.data?.tempMode || "2-8",
+        tempMode: session.tempMode || (isThermalContainer ? activeTrialKey : giQ.data?.tempMode) || "2-8",
         startAt: localInputFromUtcMs(session.startAt as any),
         endAt: localInputFromUtcMs(session.endAt as any),
         minDurationHours: session.minDurationHours || 72,
@@ -92,7 +102,7 @@ export default function PVStep({
         customMax: session.customMax ?? "",
       });
     }
-  }, [session, giQ.data, form]);
+  }, [session, giQ.data, activeTrialKey, isThermalContainer]);
 
   // auto-infer start/end from uploaded data (only if not already set)
   useEffect(() => {
@@ -105,26 +115,26 @@ export default function PVStep({
 
   const saveSession = trpc.pv.saveSession.useMutation({
     onSuccess: () => {
-      utils.pv.get.invalidate({ protocolId });
+      utils.pv.get.invalidate({ protocolId, trialKey: activeTrialKey });
       toast.success("Параметры PV сохранены");
     },
     onError: e => toast.error(e.message),
   });
   const uploadLogger = trpc.pv.uploadLogger.useMutation();
   const updateLogger = trpc.pv.updateLogger.useMutation({
-    onSuccess: () => utils.pv.get.invalidate({ protocolId }),
+    onSuccess: () => utils.pv.get.invalidate({ protocolId, trialKey: activeTrialKey }),
     onError: e => toast.error(e.message),
   });
   const deleteLogger = trpc.pv.deleteLogger.useMutation({
     onSuccess: () => {
-      utils.pv.get.invalidate({ protocolId });
+      utils.pv.get.invalidate({ protocolId, trialKey: activeTrialKey });
       toast.success("Датчик удалён");
     },
     onError: e => toast.error(e.message),
   });
   const autoDetect = trpc.pv.autoDetectExternal.useMutation({
     onSuccess: ({ externals }) => {
-      utils.pv.get.invalidate({ protocolId });
+      utils.pv.get.invalidate({ protocolId, trialKey: activeTrialKey });
       toast.success(
         externals.length
           ? `Найдено внешних датчиков: ${externals.length}`
@@ -135,11 +145,11 @@ export default function PVStep({
   });
   const analyze = trpc.pv.analyze.useMutation({
     onSuccess: res => {
-      utils.pv.get.invalidate({ protocolId });
+      utils.pv.get.invalidate({ protocolId, trialKey: activeTrialKey });
       utils.protocols.get.invalidate({ id: protocolId });
       if (res.verdict === "pass") toast.success("PV пройден. Можно формировать итоговый отчёт.");
       else toast.warning(`PV не пройден: ${res.failureReasons[0] || "см. замечания"}`);
-      onDone();
+      if (!isThermalContainer) onDone();
     },
     onError: e => toast.error(e.message),
   });
@@ -173,6 +183,7 @@ export default function PVStep({
         try {
           await uploadLogger.mutateAsync({
             protocolId,
+            trialKey: activeTrialKey,
             fileName: f.name,
             contentType: f.type,
             base64: b64,
@@ -182,7 +193,7 @@ export default function PVStep({
           toast.error(`${f.name}: ${e.message}`);
         }
       }
-      utils.pv.get.invalidate({ protocolId });
+      utils.pv.get.invalidate({ protocolId, trialKey: activeTrialKey });
     } finally {
       setUploading(false);
     }
@@ -204,6 +215,11 @@ export default function PVStep({
   }, [form, session]);
 
   const internals = loggers.filter(l => l.role === "internal");
+  const trialSessions = pvQ.data?.sessions || [];
+  const allThermalTrialsAnalyzed = !isThermalContainer || thermalModes.every(mode => {
+    const trial = trialSessions.find(item => (item.trialKey || "default") === mode);
+    return trial?.verdict === "pass" || trial?.verdict === "fail";
+  });
   const normalizedDurationHours = (value: unknown) => {
     const parsed = Number(value);
     const fallback = Number.isFinite(parsed) && parsed > 0 ? parsed : 72;
@@ -218,6 +234,7 @@ export default function PVStep({
     const step = Number(form.samplingStepMinutes);
     saveSession.mutate({
       protocolId,
+      trialKey: activeTrialKey,
       tempMode: form.tempMode,
       startAt: utcMsFromLocalInput(form.startAt),
       endAt: utcMsFromLocalInput(form.endAt),
@@ -231,6 +248,42 @@ export default function PVStep({
 
   return (
     <div className="space-y-6">
+      {isThermalContainer && (
+        <Card className="border-orange-200 bg-orange-50/40">
+          <CardContent className="p-5 space-y-3">
+            <div>
+              <h3 className="font-semibold">Испытания температурных режимов</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                Для каждого режима используются отдельные файлы датчиков, период анализа и заключение.
+              </p>
+            </div>
+            <div className="grid sm:grid-cols-3 gap-2">
+              {thermalModes.map(mode => {
+                const definition = TEMP_MODES.find(item => item.id === mode);
+                const trial = trialSessions.find(item => (item.trialKey || "default") === mode);
+                const active = activeTrialKey === mode;
+                return (
+                  <button
+                    type="button"
+                    key={mode}
+                    onClick={() => {
+                      setActiveTrialKey(mode);
+                      setSelectedLogger(null);
+                      setWindowSuggestion(null);
+                    }}
+                    className={`rounded-lg border-2 p-3 text-left transition-colors ${active ? "border-orange-500 bg-white" : "border-border bg-background hover:border-orange-300"}`}
+                  >
+                    <div className="font-semibold">{definition?.label || mode}</div>
+                    <div className={`text-xs mt-1 ${trial?.verdict === "pass" ? "text-emerald-700" : trial?.verdict === "fail" ? "text-rose-700" : "text-muted-foreground"}`}>
+                      {trial?.verdict === "pass" ? "Испытание пройдено" : trial?.verdict === "fail" ? "Испытание не пройдено" : "Ожидает данных"}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <Card className="border">
         <CardContent className="p-6 md:p-8 space-y-5">
           <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -250,6 +303,7 @@ export default function PVStep({
               <Select
                 value={form.tempMode}
                 onValueChange={v => setForm({ ...form, tempMode: v })}
+                disabled={isThermalContainer}
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -324,6 +378,7 @@ export default function PVStep({
                   setWindowSuggestion(null);
                   findOptimalWindow.mutate({
                     protocolId,
+                    trialKey: activeTrialKey,
                     durationHours: normalizedDurationHours(form.minDurationHours),
                   });
                 }}
@@ -456,7 +511,7 @@ export default function PVStep({
               <Button
                 variant="outline"
                 className="bg-background"
-                onClick={() => autoDetect.mutate({ protocolId })}
+                onClick={() => autoDetect.mutate({ protocolId, trialKey: activeTrialKey })}
                 disabled={autoDetect.isPending || loggers.length === 0}
               >
                 <Sparkles className="h-4 w-4" /> Авто‑определить внешние
@@ -623,6 +678,7 @@ export default function PVStep({
       {loggers.length > 0 && (
         <SensorPlacementCard
           protocolId={protocolId}
+          trialKey={activeTrialKey}
           loggers={loggers as any}
         />
       )}
@@ -672,6 +728,7 @@ export default function PVStep({
               const step = Number(form.samplingStepMinutes);
               await saveSession.mutateAsync({
                 protocolId,
+                trialKey: activeTrialKey,
                 tempMode: form.tempMode,
                 startAt: utcMsFromLocalInput(form.startAt),
                 endAt: utcMsFromLocalInput(form.endAt),
@@ -681,7 +738,7 @@ export default function PVStep({
                 customMin: form.customMin !== "" ? Number(form.customMin) : null,
                 customMax: form.customMax !== "" ? Number(form.customMax) : null,
               });
-              analyze.mutate({ protocolId });
+              analyze.mutate({ protocolId, trialKey: activeTrialKey });
             }}
           >
             {analyze.isPending ? (
@@ -692,7 +749,7 @@ export default function PVStep({
             Провести анализ PV
           </Button>
           <Button
-            disabled={!session?.verdict || session.verdict === "none"}
+            disabled={!allThermalTrialsAnalyzed || !session?.verdict || session.verdict === "none"}
             onClick={onDone}
           >
             К итоговому отчёту <ArrowRight className="h-4 w-4" />
@@ -742,9 +799,11 @@ function fmt(v: any) {
 
 function SensorPlacementCard({
   protocolId,
+  trialKey,
   loggers,
 }: {
   protocolId: number;
+  trialKey: string;
   loggers: Array<{ id: number; label: string; customName?: string | null; role: string; position?: string | null }>;
 }) {
   const [, setLocation] = useLocation();
@@ -773,7 +832,8 @@ function SensorPlacementCard({
               } catch {
                 // Session storage is optional; the query param below is the main return path.
               }
-              setLocation(`/protocols/${protocolId}/sensor-placement?from=pv`);
+              const trialParam = new URLSearchParams({ from: "pv", trial: trialKey });
+              setLocation(`/protocols/${protocolId}/sensor-placement?${trialParam.toString()}`);
             }}
           >
             <MapPin className="h-4 w-4 mr-1" />

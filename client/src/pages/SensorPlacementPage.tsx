@@ -200,6 +200,9 @@ async function planBackgroundFileToDataUrl(file: File): Promise<string> {
 export default function SensorPlacementPage() {
   const params = useParams<{ id: string }>();
   const protocolId = parseInt(params.id ?? "0", 10);
+  const trialKey = typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search).get("trial") || "default"
+    : "default";
   const [, navigate] = useLocation();
   const returnToProtocol = useCallback(() => {
     try {
@@ -210,7 +213,7 @@ export default function SensorPlacementPage() {
     navigate(`/protocols/${protocolId}?step=pv`);
   }, [navigate, protocolId]);
 
-  const pvQ = trpc.pv.get.useQuery({ protocolId });
+  const pvQ = trpc.pv.get.useQuery({ protocolId, trialKey });
   const saveSession = trpc.pv.saveSession.useMutation({
     onSuccess: () => {
       toast.success("Схема сохранена");
@@ -298,7 +301,7 @@ export default function SensorPlacementPage() {
         pixelRatio: 2,
         backgroundColor: "#ffffff",
       });
-      const res = await savePlanImage.mutateAsync({ protocolId, dataUrl });
+      const res = await savePlanImage.mutateAsync({ protocolId, trialKey, dataUrl });
       return { ok: true, url: res.url };
     } catch (err: any) {
       console.error("plan capture failed:", err);
@@ -338,6 +341,7 @@ export default function SensorPlacementPage() {
     setPlanBackgroundImageUrl(null);
     saveSession.mutate({
       protocolId,
+      trialKey,
       planBackgroundImageKey: null,
       planBackgroundImageUrl: null,
     } as any);
@@ -353,6 +357,7 @@ export default function SensorPlacementPage() {
     }
     saveSession.mutate({
       protocolId,
+      trialKey,
       coolingUnitPos: coolingUnitPos ?? undefined,
       doorPos: doorPos ?? undefined,
       floorPlanObjects: floorPlanObjects,

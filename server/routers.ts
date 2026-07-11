@@ -21,6 +21,7 @@ import {
   applySensorAccuracyGuardBand,
   maxSensorAccuracyC,
   normalizeSensorAccuracyC,
+  aggregateTrialVerdicts,
 } from "@shared/validation";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -57,6 +58,7 @@ import {
   insertProtocol,
   listChecklist,
   listLoggers,
+  listPVSessions,
   listOrganizations,
   listOrganizationsByCompany,
   listAllProtocols,
@@ -873,11 +875,22 @@ export const appRouter = router({
   /* -------------------------------------------------------------- */
   pv: router({
     get: protectedProcedure
-      .input(z.object({ protocolId: z.number() }))
+      .input(z.object({ protocolId: z.number(), trialKey: z.string().max(32).optional() }))
       .query(async ({ ctx, input }) => {
         await ownProtocol(ctx.user.id, input.protocolId);
-        const session = await getPVSession(input.protocolId);
-        const loggers = await listLoggers(input.protocolId);
+        const trialKey = input.trialKey ?? "default";
+        let session = await getPVSession(input.protocolId, trialKey);
+        if (!session && trialKey !== "default") {
+          const gi = await getGeneralInfo(input.protocolId);
+          const targetDuration = Number((gi?.thermalContainerConfig as any)?.targetDurationHours || 24);
+          session = await updatePVSession(input.protocolId, {
+            tempMode: trialKey,
+            minDurationHours: Number.isFinite(targetDuration) && targetDuration > 0 ? Math.ceil(targetDuration) : 24,
+            minSensorCount: 5,
+          }, trialKey);
+        }
+        const loggers = await listLoggers(input.protocolId, trialKey);
+        const sessions = await listPVSessions(input.protocolId);
         // Strip series payload to keep response small. Series is reloaded in detail view if needed.
         // Compute earliest sensor recording start time across all loggers
         const earliestSensorTs = loggers.reduce<number | null>((min, l) => {
@@ -887,15 +900,16 @@ export const appRouter = router({
         }, null);
         return {
           session,
+          sessions,
           loggers: loggers.map(l => ({ ...l, series: undefined })),
           earliestSensorTs,
         };
       }),
     getLoggerSeries: protectedProcedure
-      .input(z.object({ protocolId: z.number(), loggerId: z.number() }))
+      .input(z.object({ protocolId: z.number(), loggerId: z.number(), trialKey: z.string().max(32).optional() }))
       .query(async ({ ctx, input }) => {
         await ownProtocol(ctx.user.id, input.protocolId);
-        const all = await listLoggers(input.protocolId);
+        const all = await listLoggers(input.protocolId, input.trialKey);
         const l = all.find(x => x.id === input.loggerId);
         if (!l) throw new TRPCError({ code: "NOT_FOUND" });
         return l.series as { ts: number[]; temp: number[] } | null;
@@ -904,6 +918,7 @@ export const appRouter = router({
       .input(
         z.object({
           protocolId: z.number(),
+          trialKey: z.string().max(32).optional(),
           tempMode: TEMP_MODE_SCHEMA.optional(),
           startAt: z.number().nullable().optional(),
           endAt: z.number().nullable().optional(),
@@ -944,7 +959,9 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         const protocol = await ownProtocol(ctx.user.id, input.protocolId);
         const { protocolId, customMin, customMax, samplingStepMinutes, coolingUnitPos, doorPos, floorPlanObjects, roomLengthM, roomWidthM, roomHeightM, planImageKey, planImageUrl, planBackgroundImageKey, planBackgroundImageUrl, ...rest } = input;
+        const trialKey = input.trialKey ?? "default";
         const patch: any = { ...rest };
+        delete patch.trialKey;
         if (protocol.equipmentType === "warehouse" && patch.minDurationHours !== undefined) {
           patch.minDurationHours = Math.max(72, patch.minDurationHours);
         }
@@ -968,11 +985,11 @@ export const appRouter = router({
         if (planImageUrl !== undefined) patch.planImageUrl = planImageUrl;
         if (planBackgroundImageKey !== undefined) patch.planBackgroundImageKey = planBackgroundImageKey;
         if (planBackgroundImageUrl !== undefined) patch.planBackgroundImageUrl = planBackgroundImageUrl;
-        await updatePVSession(protocolId, patch);
+        await updatePVSession(protocolId, patch, trialKey);
         // After window/step change, recompute every logger’s displayed stats so
         // MIN/AVG/MAX/MKT reflect only the [startAt; endAt] window at the
         // chosen sampling step.
-        const session = await getPVSession(protocolId);
+        const session = await getPVSession(protocolId, trialKey);
         if (session) {
           const gi = await getGeneralInfo(protocolId);
           const { min, max } = rangeFor(
@@ -980,7 +997,7 @@ export const appRouter = router({
             session.customMin ? Number(session.customMin) : null,
             session.customMax ? Number(session.customMax) : null,
           );
-          const loggers = await listLoggers(protocolId);
+          const loggers = await listLoggers(protocolId, trialKey);
           for (const l of loggers) {
             const series = (l.series as any) as { ts: number[]; temp: number[] } | null;
             if (!series || !series.ts) continue;
@@ -1007,13 +1024,15 @@ export const appRouter = router({
       .input(
         z.object({
           protocolId: z.number(),
+          trialKey: z.string().max(32).optional(),
           // PNG data URL (data:image/png;base64,...) or raw base64 string
           dataUrl: z.string(),
         }),
       )
       .mutation(async ({ ctx, input }) => {
         await ownProtocol(ctx.user.id, input.protocolId);
-        const session = await getPVSession(input.protocolId);
+        const trialKey = input.trialKey ?? "default";
+        const session = await getPVSession(input.protocolId, trialKey);
         if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "PV session missing" });
         const m = input.dataUrl.match(/^data:image\/(png|jpeg|jpg);base64,(.+)$/);
         const base64 = m ? m[2] : input.dataUrl;
@@ -1022,7 +1041,7 @@ export const appRouter = router({
         const buf = Buffer.from(base64, "base64");
         const fileKey = `protocol-${input.protocolId}/plan-${Date.now()}.${ext}`;
         const { key, url } = await storagePut(fileKey, buf, ct);
-        await updatePVSession(input.protocolId, { planImageKey: key, planImageUrl: url } as any);
+        await updatePVSession(input.protocolId, { planImageKey: key, planImageUrl: url } as any, trialKey);
         return { key, url };
       }),
     savePlanBackgroundImage: protectedProcedure
@@ -1076,6 +1095,7 @@ export const appRouter = router({
       .input(
         z.object({
           protocolId: z.number(),
+          trialKey: z.string().max(32).optional(),
           fileName: z.string(),
           contentType: z.string().optional(),
           base64: z.string(),
@@ -1083,7 +1103,8 @@ export const appRouter = router({
       )
       .mutation(async ({ ctx, input }) => {
         await ownProtocol(ctx.user.id, input.protocolId);
-        const session = await getPVSession(input.protocolId);
+        const trialKey = input.trialKey ?? "default";
+        const session = await getPVSession(input.protocolId, trialKey);
         if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "PV session missing" });
         const buf = Buffer.from(input.base64, "base64");
         const series = parseLoggerBuffer(buf, input.fileName);
@@ -1100,7 +1121,7 @@ export const appRouter = router({
           buf,
           input.contentType || "application/octet-stream",
         );
-        const existing = await listLoggers(input.protocolId);
+        const existing = await listLoggers(input.protocolId, trialKey);
         // Use sensor name from file metadata if available, otherwise fall back to D1/D2/D3
         const fallbackLabel = `D${existing.length + 1}`;
         const label = series.sensorName
@@ -1116,6 +1137,7 @@ export const appRouter = router({
         const logger = await insertLogger({
           pvSessionId: session.id,
           protocolId: input.protocolId,
+          trialKey,
           fileKey: key,
           fileUrl: url,
           fileName: input.fileName,
@@ -1181,12 +1203,13 @@ export const appRouter = router({
         return { success: true };
       }),
     autoDetectExternal: protectedProcedure
-      .input(z.object({ protocolId: z.number() }))
+      .input(z.object({ protocolId: z.number(), trialKey: z.string().max(32).optional() }))
       .mutation(async ({ ctx, input }) => {
         await ownProtocol(ctx.user.id, input.protocolId);
-        const session = await getPVSession(input.protocolId);
+        const trialKey = input.trialKey ?? "default";
+        const session = await getPVSession(input.protocolId, trialKey);
         if (!session) throw new TRPCError({ code: "NOT_FOUND" });
-        const loggers = await listLoggers(input.protocolId);
+        const loggers = await listLoggers(input.protocolId, trialKey);
         const gi0 = await getGeneralInfo(input.protocolId);
         const { min, max } = rangeFor(
           session.tempMode || gi0?.tempMode || "2-8",
@@ -1207,12 +1230,13 @@ export const appRouter = router({
         return { externals };
       }),
     analyze: protectedProcedure
-      .input(z.object({ protocolId: z.number() }))
+      .input(z.object({ protocolId: z.number(), trialKey: z.string().max(32).optional() }))
       .mutation(async ({ ctx, input }) => {
         await ownProtocol(ctx.user.id, input.protocolId);
-        const session = await getPVSession(input.protocolId);
+        const trialKey = input.trialKey ?? "default";
+        const session = await getPVSession(input.protocolId, trialKey);
         if (!session) throw new TRPCError({ code: "NOT_FOUND" });
-        const loggers = await listLoggers(input.protocolId);
+        const loggers = await listLoggers(input.protocolId, trialKey);
         const gi1 = await getGeneralInfo(input.protocolId);
         const { min, max } = rangeFor(
           session.tempMode || gi1?.tempMode || "2-8",
@@ -1242,7 +1266,7 @@ export const appRouter = router({
         }
 
         // Re-fetch updated loggers
-        const updated = await listLoggers(input.protocolId);
+        const updated = await listLoggers(input.protocolId, trialKey);
         const internals = updated.filter(l => l.role === "internal");
         const failureReasons: string[] = [];
 
@@ -1283,10 +1307,20 @@ export const appRouter = router({
           verdict,
           stats: { min, max, internalCount: internals.length, durationHours } as any,
           deviations: failureReasons as any,
-        });
+        }, trialKey);
+        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
+        const gi = await getGeneralInfo(input.protocolId);
+        const requiredTrialKeys = protocol.equipmentType === "thermal-container"
+          ? (((gi?.thermalContainerConfig as any)?.selectedModes || [gi?.tempMode || "2-8"]) as string[])
+          : ["default"];
+        const allSessions = await listPVSessions(input.protocolId);
+        const requiredVerdicts = requiredTrialKeys.map(key =>
+          allSessions.find(item => (item.trialKey || "default") === key)?.verdict || "none",
+        );
+        const overallVerdict = aggregateTrialVerdicts(requiredVerdicts);
         await updateProtocolStatus(ctx.user.id, input.protocolId, {
-          pvVerdict: verdict,
-          status: verdict === "pass" ? "completed" : "pv_done",
+          pvVerdict: overallVerdict,
+          status: overallVerdict === "pass" ? "completed" : "pv_done",
         });
 
         return { verdict, failureReasons };
@@ -1305,18 +1339,20 @@ export const appRouter = router({
       .input(
         z.object({
           protocolId: z.number(),
+          trialKey: z.string().max(32).optional(),
           durationHours: z.number().positive(),
         }),
       )
       .mutation(async ({ ctx, input }) => {
         await ownProtocol(ctx.user.id, input.protocolId);
-        const loggers = await listLoggers(input.protocolId);
+        const trialKey = input.trialKey ?? "default";
+        const loggers = await listLoggers(input.protocolId, trialKey);
         const internals = loggers.filter(l => l.role === "internal");
         if (internals.length === 0) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Нет загруженных внутренних датчиков" });
         }
 
-        const session = await getPVSession(input.protocolId);
+        const session = await getPVSession(input.protocolId, trialKey);
         const gi = await getGeneralInfo(input.protocolId);
         const { min: rangeMin, max: rangeMax } = rangeFor(
           session?.tempMode || gi?.tempMode || "2-8",
@@ -1541,8 +1577,11 @@ export const appRouter = router({
         const gi = await getGeneralInfo(input.protocolId);
         const iqItems = await listChecklist(input.protocolId, "iq");
         const oqItems = await listChecklist(input.protocolId, "oq");
-        const session = await getPVSession(input.protocolId);
-        const loggers = await listLoggers(input.protocolId);
+        const reportTrialKey = protocol.equipmentType === "thermal-container"
+          ? String((gi?.thermalContainerConfig as any)?.selectedModes?.[0] || gi?.tempMode || "2-8")
+          : "default";
+        const session = await getPVSession(input.protocolId, reportTrialKey);
+        const loggers = await listLoggers(input.protocolId, reportTrialKey);
         let linkedProtocolSensors: Awaited<ReturnType<typeof getProtocolSensors>> = [];
         try {
           linkedProtocolSensors = await getProtocolSensors(input.protocolId);
@@ -1730,6 +1769,40 @@ export const appRouter = router({
             )
           : [];
 
+        const thermalTrials: NonNullable<ReportInput["thermalTrials"]> = [];
+        if (protocol.equipmentType === "thermal-container") {
+          const selectedModes = (((gi?.thermalContainerConfig as any)?.selectedModes || [gi?.tempMode || "2-8"]) as string[]);
+          const sessions = await listPVSessions(input.protocolId);
+          for (const mode of selectedModes) {
+            const trial = sessions.find(item => (item.trialKey || "default") === mode);
+            const trialLoggers = await listLoggers(input.protocolId, mode);
+            const internalLoggers = trialLoggers.filter(item => item.role === "internal");
+            const durationHours = trial?.startAt && trial?.endAt
+              ? (trial.endAt - trial.startAt) / 3600000
+              : null;
+            thermalTrials.push({
+              trialKey: mode,
+              tempMode: trial?.tempMode || mode,
+              verdict: trial?.verdict || "none",
+              startAt: trial?.startAt ?? null,
+              endAt: trial?.endAt ?? null,
+              durationHours,
+              targetDurationHours: trial?.minDurationHours ?? Number((gi?.thermalContainerConfig as any)?.targetDurationHours || 24),
+              internalSensorCount: internalLoggers.length,
+              failureReasons: Array.isArray(trial?.deviations) ? trial.deviations as string[] : [],
+              loggers: trialLoggers.map(logger => ({
+                label: logger.label,
+                customName: logger.customName,
+                role: logger.role,
+                min: logger.minVal === null ? null : Number(logger.minVal),
+                avg: logger.avgVal === null ? null : Number(logger.avgVal),
+                max: logger.maxVal === null ? null : Number(logger.maxVal),
+                mkt: logger.mktVal === null ? null : Number(logger.mktVal),
+              })),
+            });
+          }
+        }
+
         const reportInput: ReportInput = {
           org: {
             name: org.name,
@@ -1760,6 +1833,7 @@ export const appRouter = router({
           recommendations: (gi?.recommendations as string | undefined) || undefined,
           reportDate: (gi?.reportDate as string | undefined) || null,
           documentValidityPeriod: (gi?.documentValidityPeriod as string | undefined) || null,
+          thermalTrials,
           dataIntegrity: {
             revision: "01",
             preparedBy: reportActor,

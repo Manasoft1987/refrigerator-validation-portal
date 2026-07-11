@@ -1074,6 +1074,43 @@ export async function saveChecklist(
 /* ------------------------------------------------------------------ */
 
 let pvPlanBackgroundSchemaPromise: Promise<void> | null = null;
+let pvTrialSchemaPromise: Promise<void> | null = null;
+
+async function ensurePVTrialStorage() {
+  const db = await getDb();
+  if (!db) return;
+  if (pvTrialSchemaPromise) return pvTrialSchemaPromise;
+
+  pvTrialSchemaPromise = (async () => {
+    for (const [table, column, definition] of [
+      ["pvSessions", "trialKey", "varchar(32) NOT NULL DEFAULT 'default' AFTER protocolId"],
+      ["pvLoggers", "trialKey", "varchar(32) NOT NULL DEFAULT 'default' AFTER protocolId"],
+    ] as const) {
+      const result = await db.execute(sql.raw(`SHOW COLUMNS FROM ${table} LIKE '${column}'`));
+      const rows = (result as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
+      if (rows.length === 0) {
+        await db.execute(sql.raw(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`));
+      }
+    }
+
+    const indexResult = await db.execute(sql.raw("SHOW INDEX FROM pvSessions"));
+    const indexes = (indexResult as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
+    const names = new Set(indexes.map(row => String(row.Key_name ?? row.key_name ?? "")));
+    if (names.has("pvSessions_protocolId_unique")) {
+      await db.execute(sql.raw("ALTER TABLE pvSessions DROP INDEX pvSessions_protocolId_unique"));
+    }
+    if (!names.has("pvSessions_protocolId_trialKey_unique")) {
+      await db.execute(sql.raw(
+        "ALTER TABLE pvSessions ADD UNIQUE INDEX pvSessions_protocolId_trialKey_unique (protocolId, trialKey)",
+      ));
+    }
+  })().catch(error => {
+    pvTrialSchemaPromise = null;
+    throw error;
+  });
+
+  return pvTrialSchemaPromise;
+}
 
 async function ensurePVPlanBackgroundStorage() {
   const db = await getDb();
@@ -1099,18 +1136,19 @@ async function ensurePVPlanBackgroundStorage() {
   return pvPlanBackgroundSchemaPromise;
 }
 
-export async function getPVSession(protocolId: number) {
+export async function getPVSession(protocolId: number, trialKey = "default") {
   const db = await getDb();
   if (!db) {
     if (!shouldUseLocalDevDb()) return undefined;
     const data = await readLocalDevDb();
-    return data.pvSessions.find(item => item.protocolId === protocolId);
+    return data.pvSessions.find(item => item.protocolId === protocolId && (item.trialKey || "default") === trialKey);
   }
+  await ensurePVTrialStorage();
   await ensurePVPlanBackgroundStorage();
   const rows = await db
     .select()
     .from(pvSessions)
-    .where(eq(pvSessions.protocolId, protocolId))
+    .where(and(eq(pvSessions.protocolId, protocolId), eq(pvSessions.trialKey, trialKey)))
     .limit(1);
   return rows[0];
 }
@@ -1118,12 +1156,13 @@ export async function getPVSession(protocolId: number) {
 export async function updatePVSession(
   protocolId: number,
   data: Partial<typeof pvSessions.$inferInsert>,
+  trialKey = "default",
 ) {
   const db = await getDb();
   if (!db) {
     if (!shouldUseLocalDevDb()) throw new Error("DB unavailable");
     return updateLocalDevDb(localData => {
-      const existing = localData.pvSessions.find(item => item.protocolId === protocolId);
+      const existing = localData.pvSessions.find(item => item.protocolId === protocolId && (item.trialKey || "default") === trialKey);
       const now = new Date().toISOString();
       if (existing) {
         Object.assign(existing, data, { updatedAt: now });
@@ -1134,6 +1173,7 @@ export async function updatePVSession(
       localData.pvSessions.push({
         id: localData.counters.pvSessions,
         protocolId,
+        trialKey,
         tempMode: null,
         startAt: null,
         endAt: null,
@@ -1162,29 +1202,34 @@ export async function updatePVSession(
       return localData.pvSessions[localData.pvSessions.length - 1];
     });
   }
-  const existing = await getPVSession(protocolId);
+  await ensurePVTrialStorage();
+  const existing = await getPVSession(protocolId, trialKey);
   if (existing) {
-    await db.update(pvSessions).set(data).where(eq(pvSessions.protocolId, protocolId));
+    await db.update(pvSessions).set(data).where(and(eq(pvSessions.protocolId, protocolId), eq(pvSessions.trialKey, trialKey)));
   } else {
-    await db.insert(pvSessions).values({ ...data, protocolId });
+    await db.insert(pvSessions).values({ ...data, protocolId, trialKey });
   }
-  return getPVSession(protocolId);
+  return getPVSession(protocolId, trialKey);
 }
 
-export async function listLoggers(protocolId: number) {
+export async function listLoggers(protocolId: number, trialKey?: string) {
   const db = await getDb();
   if (!db) {
     if (!shouldUseLocalDevDb()) return [];
     const data = await readLocalDevDb();
     return data.pvLoggers
-      .filter(logger => logger.protocolId === protocolId)
+      .filter(logger => logger.protocolId === protocolId && (!trialKey || (logger.trialKey || "default") === trialKey))
       .sort((a, b) => a.id - b.id);
   }
-  return db
+  await ensurePVTrialStorage();
+  const query = db
     .select()
     .from(pvLoggers)
-    .where(eq(pvLoggers.protocolId, protocolId))
+    .where(trialKey
+      ? and(eq(pvLoggers.protocolId, protocolId), eq(pvLoggers.trialKey, trialKey))
+      : eq(pvLoggers.protocolId, protocolId))
     .orderBy(pvLoggers.id);
+  return query;
 }
 
 export async function insertLogger(data: typeof pvLoggers.$inferInsert) {
@@ -1197,6 +1242,7 @@ export async function insertLogger(data: typeof pvLoggers.$inferInsert) {
         id: localData.counters.pvLoggers,
         pvSessionId: data.pvSessionId,
         protocolId: data.protocolId,
+        trialKey: data.trialKey ?? "default",
         fileKey: data.fileKey,
         fileUrl: data.fileUrl,
         fileName: data.fileName,
@@ -2262,6 +2308,23 @@ export async function getProtocolAttachment(protocolId: number, id: number): Pro
     .where(and(eq(protocolAttachments.protocolId, protocolId), eq(protocolAttachments.id, id)))
     .limit(1);
   return rows[0];
+}
+
+export async function listPVSessions(protocolId: number) {
+  const db = await getDb();
+  if (!db) {
+    if (!shouldUseLocalDevDb()) return [];
+    const data = await readLocalDevDb();
+    return data.pvSessions
+      .filter(item => item.protocolId === protocolId)
+      .sort((a, b) => a.id - b.id);
+  }
+  await ensurePVTrialStorage();
+  return db
+    .select()
+    .from(pvSessions)
+    .where(eq(pvSessions.protocolId, protocolId))
+    .orderBy(pvSessions.id);
 }
 
 export async function createProtocolAttachment(
