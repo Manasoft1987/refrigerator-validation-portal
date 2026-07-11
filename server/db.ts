@@ -666,6 +666,7 @@ type ProtocolEquipmentTypeCode =
   | "refrigerator"
   | "auto-refrigerator"
   | "chamber"
+  | "thermal-container"
   | "warehouse"
   | "other"
   | string
@@ -678,6 +679,8 @@ export function protocolObjectCode(equipmentType: ProtocolEquipmentTypeCode): st
       return "TRK";
     case "chamber":
       return "CHB";
+    case "thermal-container":
+      return "TC";
     case "warehouse":
       return "STR";
     case "refrigerator":
@@ -858,6 +861,44 @@ export async function deleteProtocolCascade(userId: number, protocolId: number) 
 /* General Info                                                        */
 /* ------------------------------------------------------------------ */
 
+let thermalContainerStoragePromise: Promise<void> | null = null;
+
+export async function ensureThermalContainerStorage() {
+  const db = await getDb();
+  if (!db) return;
+  if (thermalContainerStoragePromise) return thermalContainerStoragePromise;
+
+  thermalContainerStoragePromise = (async () => {
+    const protocolColumnResult = await db.execute(sql.raw(
+      "SHOW COLUMNS FROM protocols LIKE 'equipmentType'",
+    ));
+    const protocolRows = (protocolColumnResult as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
+    const protocolType = String(protocolRows?.[0]?.Type ?? protocolRows?.[0]?.type ?? "");
+    if (!protocolType.includes("'thermal-container'")) {
+      await db.execute(sql.raw(
+        "ALTER TABLE protocols MODIFY COLUMN equipmentType " +
+        "enum('refrigerator','auto-refrigerator','thermal-container','warehouse','other') " +
+        "NOT NULL DEFAULT 'refrigerator'",
+      ));
+    }
+
+    const configColumnResult = await db.execute(sql.raw(
+      "SHOW COLUMNS FROM generalInfo LIKE 'thermalContainerConfig'",
+    ));
+    const configRows = (configColumnResult as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
+    if (configRows.length === 0) {
+      await db.execute(sql.raw(
+        "ALTER TABLE generalInfo ADD COLUMN thermalContainerConfig JSON NULL AFTER tempMode",
+      ));
+    }
+  })().catch(error => {
+    thermalContainerStoragePromise = null;
+    throw error;
+  });
+
+  return thermalContainerStoragePromise;
+}
+
 export async function getGeneralInfo(protocolId: number) {
   const db = await getDb();
   if (!db) {
@@ -865,6 +906,7 @@ export async function getGeneralInfo(protocolId: number) {
     const data = await readLocalDevDb();
     return data.generalInfo.find(item => item.protocolId === protocolId);
   }
+  await ensureThermalContainerStorage();
   const rows = await db
     .select()
     .from(generalInfo)
@@ -929,6 +971,7 @@ export async function upsertGeneralInfo(
       return localData.generalInfo[localData.generalInfo.length - 1];
     });
   }
+  await ensureThermalContainerStorage();
   const existing = await getGeneralInfo(protocolId);
   if (existing) {
     await db.update(generalInfo).set(data).where(eq(generalInfo.protocolId, protocolId));
@@ -1238,11 +1281,11 @@ export async function ensureChamberQuestionTemplateStorage(
     ));
     const rows = (result as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
     const columnType = String(rows?.[0]?.Type ?? rows?.[0]?.type ?? "");
-    if (columnType.includes("'chamber'")) return;
+    if (columnType.includes("'chamber'") && columnType.includes("'thermal-container'")) return;
 
     await db.execute(sql.raw(
       "ALTER TABLE questionTemplates MODIFY COLUMN equipmentType " +
-      "enum('refrigerator','auto-refrigerator','chamber','warehouse','other') " +
+      "enum('refrigerator','auto-refrigerator','chamber','thermal-container','warehouse','other') " +
       "NOT NULL DEFAULT 'refrigerator'",
     ));
 

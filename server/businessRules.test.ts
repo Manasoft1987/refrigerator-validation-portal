@@ -30,12 +30,13 @@ describe("protocol number format", () => {
       [2026, 42, "warehouse", "VAL-STR-2026-042"],
       [2026, 7, "auto-refrigerator", "VAL-TRK-2026-007"],
       [2026, 3, "chamber", "VAL-CHB-2026-003"],
+      [2026, 4, "thermal-container", "VAL-TC-2026-004"],
       [2026, 5, "other", "VAL-EQP-2026-005"],
     ];
     for (const [year, seq, equipmentType, expected] of cases) {
       const produced = formatProtocolNumber(year, seq, equipmentType);
       expect(produced).toBe(expected);
-      expect(produced).toMatch(/^VAL-[A-Z]{3}-\d{4}-\d{3}$/);
+      expect(produced).toMatch(/^VAL-[A-Z]{2,3}-\d{4}-\d{3}$/);
     }
   });
 
@@ -44,6 +45,7 @@ describe("protocol number format", () => {
     expect(protocolObjectCode("warehouse")).toBe("STR");
     expect(protocolObjectCode("auto-refrigerator")).toBe("TRK");
     expect(protocolObjectCode("chamber")).toBe("CHB");
+    expect(protocolObjectCode("thermal-container")).toBe("TC");
     expect(protocolObjectCode("other")).toBe("EQP");
   });
 

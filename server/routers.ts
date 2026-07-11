@@ -7,11 +7,14 @@ import {
   DEFAULT_OQ_QUESTIONS_AUTO_REFRIGERATOR,
   DEFAULT_IQ_QUESTIONS_CHAMBER,
   DEFAULT_OQ_QUESTIONS_CHAMBER,
+  DEFAULT_IQ_QUESTIONS_THERMAL_CONTAINER,
+  DEFAULT_OQ_QUESTIONS_THERMAL_CONTAINER,
   DEFAULT_IQ_QUESTIONS_WAREHOUSE,
   DEFAULT_OQ_QUESTIONS_WAREHOUSE,
   STAGE_TEMPLATES,
   AUTO_REFRIGERATOR_STAGE_TEMPLATES,
   CHAMBER_STAGE_TEMPLATES,
+  THERMAL_CONTAINER_STAGE_TEMPLATES,
   WAREHOUSE_STAGE_TEMPLATES,
   TEMP_MODES,
   DEFAULT_SENSOR_ACCURACY_C,
@@ -85,6 +88,7 @@ import {
   updateQuestionTemplate,
   deleteQuestionTemplate,
   ensureChamberQuestionTemplateStorage,
+  ensureThermalContainerStorage,
   getExcursionSession,
   upsertExcursionSession,
   listExcursionLoggers,
@@ -319,6 +323,11 @@ function defaultQuestionsFor(stage: "iq" | "oq", equipmentType?: string | null):
   }
   if (equipmentType === "chamber") {
     return stage === "iq" ? DEFAULT_IQ_QUESTIONS_CHAMBER : DEFAULT_OQ_QUESTIONS_CHAMBER;
+  }
+  if (equipmentType === "thermal-container") {
+    return stage === "iq"
+      ? DEFAULT_IQ_QUESTIONS_THERMAL_CONTAINER
+      : DEFAULT_OQ_QUESTIONS_THERMAL_CONTAINER;
   }
   return stage === "iq" ? DEFAULT_IQ_QUESTIONS : DEFAULT_OQ_QUESTIONS;
 }
@@ -596,7 +605,7 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .query(({ ctx, input }) => ownProtocol(ctx.user.id, input.id)),
     create: protectedProcedure
-      .input(z.object({ organizationId: z.number(), companyId: z.number().optional(), equipmentType: z.enum(["refrigerator", "auto-refrigerator", "chamber", "warehouse", "other"]).optional(), customEquipmentName: z.string().optional() }))
+      .input(z.object({ organizationId: z.number(), companyId: z.number().optional(), equipmentType: z.enum(["refrigerator", "auto-refrigerator", "chamber", "thermal-container", "warehouse", "other"]).optional(), customEquipmentName: z.string().optional() }))
       .mutation(async ({ ctx, input }) => {
         // Admins can always create; regular users must belong to an approved company
         if (ctx.user.role !== "admin") {
@@ -627,6 +636,7 @@ export const appRouter = router({
         // Use org.companyId if not provided (org already linked to company)
         const companyId = input.companyId ?? org.companyId ?? 0;
         const requestedEquipmentType = input.equipmentType ?? "refrigerator";
+        if (requestedEquipmentType === "thermal-container") await ensureThermalContainerStorage();
         const year = new Date().getFullYear();
         const number = await nextProtocolNumberForCompany(companyId, year, requestedEquipmentType);
         return insertProtocol({
@@ -678,6 +688,20 @@ export const appRouter = router({
           inventory: z.string().optional().nullable(),
           year: z.number().int().optional().nullable(),
           tempMode: z.string().optional().nullable(),
+          thermalContainerConfig: z.object({
+            selectedModes: z.array(z.enum(["2-8", "8-15", "15-25"])).min(1),
+            volumeLiters: z.union([z.number(), z.string()]).optional().nullable(),
+            innerLengthCm: z.union([z.number(), z.string()]).optional().nullable(),
+            innerWidthCm: z.union([z.number(), z.string()]).optional().nullable(),
+            innerHeightCm: z.union([z.number(), z.string()]).optional().nullable(),
+            insulationType: z.string().optional().nullable(),
+            thermalElementType: z.string().optional().nullable(),
+            thermalElementCount: z.union([z.number(), z.string()]).optional().nullable(),
+            conditioningTemperature: z.union([z.number(), z.string()]).optional().nullable(),
+            targetDurationHours: z.union([z.number(), z.string()]).optional().nullable(),
+            loadProfile: z.enum(["empty", "partial", "full"]).optional().nullable(),
+            packingNotes: z.string().optional().nullable(),
+          }).optional().nullable(),
           location: z.string().optional().nullable(),
           purpose: z.string().optional().nullable(),
           validationDate: z.string().optional().nullable(),
@@ -756,14 +780,14 @@ export const appRouter = router({
     questions: publicProcedure
       .input(z.object({ stage: z.enum(["iq", "oq"]), equipmentType: z.string().optional() }))
       .query(async ({ input }) => {
-        if (input.equipmentType === "chamber") await ensureChamberQuestionsReady();
+        if (input.equipmentType === "chamber" || input.equipmentType === "thermal-container") await ensureChamberQuestionsReady();
         // Try to get DB templates for this equipment type first
         if (input.equipmentType) {
           const dbTemplates = await listQuestionTemplates(input.stage, input.equipmentType);
           if (dbTemplates.length > 0) {
             return dbTemplates.map(t => t.text);
           }
-          if (input.equipmentType === "warehouse" || input.equipmentType === "auto-refrigerator" || input.equipmentType === "chamber") {
+          if (input.equipmentType === "warehouse" || input.equipmentType === "auto-refrigerator" || input.equipmentType === "chamber" || input.equipmentType === "thermal-container") {
             return defaultQuestionsFor(input.stage, input.equipmentType);
           }
           // If no equipment-specific templates, fall back to generic DB templates
@@ -784,6 +808,8 @@ export const appRouter = router({
       .input(z.object({ stage: z.enum(["iq", "oq", "pv"]), equipmentType: z.string().optional() }))
       .query(({ input }) => input.equipmentType === "chamber"
         ? CHAMBER_STAGE_TEMPLATES[input.stage]
+        : input.equipmentType === "thermal-container"
+          ? THERMAL_CONTAINER_STAGE_TEMPLATES[input.stage]
         : input.equipmentType === "auto-refrigerator"
           ? AUTO_REFRIGERATOR_STAGE_TEMPLATES[input.stage]
           : STAGE_TEMPLATES[input.stage]),
@@ -1580,13 +1606,17 @@ export const appRouter = router({
           protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || gi?.equipmentType === "chamber";
         const isAutoRefrigeratorProtocol =
           (protocol.equipmentType ?? gi?.equipmentType) === "auto-refrigerator";
+        const isThermalContainerProtocol =
+          (protocol.equipmentType ?? gi?.equipmentType) === "thermal-container";
         const reportStageTemplates = isWarehouseProtocol
           ? WAREHOUSE_STAGE_TEMPLATES
           : isChamberProtocol
             ? CHAMBER_STAGE_TEMPLATES
             : isAutoRefrigeratorProtocol
               ? AUTO_REFRIGERATOR_STAGE_TEMPLATES
-              : STAGE_TEMPLATES;
+              : isThermalContainerProtocol
+                ? THERMAL_CONTAINER_STAGE_TEMPLATES
+                : STAGE_TEMPLATES;
         if (hasPVData) {
           for (const item of reportInternalLoggers) {
             const l = item.logger;
@@ -1721,6 +1751,7 @@ export const appRouter = router({
             ? {
                 ...gi,
                 commissionMembers: (gi.commissionMembers as any) || null,
+                thermalContainerConfig: (gi.thermalContainerConfig as any) || null,
               }
             : null,
           signatoriesPart1: (gi?.signatoriesPart1 as any) || null,
@@ -1902,7 +1933,7 @@ export const appRouter = router({
         equipmentKind: z.string().nullable().optional(),
       }).optional())
       .query(async ({ input }) => {
-        if (input?.equipmentType === "chamber") await ensureChamberQuestionsReady();
+        if (input?.equipmentType === "chamber" || input?.equipmentType === "thermal-container") await ensureChamberQuestionsReady();
         return listAllQuestionTemplates(input?.equipmentType, input?.equipmentKind);
       }),
     create: protectedProcedure
@@ -1910,7 +1941,7 @@ export const appRouter = router({
         z.object({
           stage: z.enum(["iq", "oq"]),
           text: z.string().min(1),
-          equipmentType: z.enum(["refrigerator", "auto-refrigerator", "chamber", "warehouse", "other"]).optional(),
+          equipmentType: z.enum(["refrigerator", "auto-refrigerator", "chamber", "thermal-container", "warehouse", "other"]).optional(),
           /** For warehouse: which equipment kind these questions apply to */
           equipmentKind: z.enum(["conditioner", "ventilation", "heat_curtain", "chiller", "fan_coil", "other"]).nullable().optional(),
         }),
@@ -1958,11 +1989,11 @@ export const appRouter = router({
       }),
     seedDefaults: protectedProcedure
       .input(z.object({
-        equipmentType: z.enum(["refrigerator", "auto-refrigerator", "chamber", "warehouse", "other"]),
+        equipmentType: z.enum(["refrigerator", "auto-refrigerator", "chamber", "thermal-container", "warehouse", "other"]),
         overwrite: z.boolean().optional(),
       }))
       .mutation(async ({ input }) => {
-        if (input.equipmentType === "chamber") await ensureChamberQuestionsReady();
+        if (input.equipmentType === "chamber" || input.equipmentType === "thermal-container") await ensureChamberQuestionsReady();
         const existing = await listAllQuestionTemplates(input.equipmentType);
         if (existing.length > 0 && !input.overwrite) {
           return { inserted: 0, skipped: existing.length };

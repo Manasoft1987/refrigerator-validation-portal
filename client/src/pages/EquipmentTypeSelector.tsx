@@ -6,7 +6,7 @@ import { Snowflake, Truck, Package, Warehouse } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
 
-type EquipmentType = "refrigerator" | "auto-refrigerator" | "chamber" | "warehouse" | "other";
+type EquipmentType = "refrigerator" | "auto-refrigerator" | "chamber" | "thermal-container" | "warehouse" | "other";
 
 export default function EquipmentTypeSelector() {
   const [, setLocation] = useLocation();
@@ -48,7 +48,7 @@ export default function EquipmentTypeSelector() {
         </div>
 
         {/* Equipment Type Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Refrigerator Card */}
           <Card
             className={`relative overflow-hidden hover:shadow-lg transition-all cursor-pointer border-2 ${
@@ -88,6 +88,35 @@ export default function EquipmentTypeSelector() {
                 size="lg"
               >
                 Выбрать холодильник
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card
+            className={`relative overflow-hidden hover:shadow-lg transition-all cursor-pointer border-2 ${
+              selectedType === "thermal-container" ? "border-primary shadow-md" : "hover:border-primary/50"
+            }`}
+            onClick={() => handleSelectEquipment("thermal-container")}
+          >
+            <CardHeader>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-3 bg-orange-100 rounded-lg">
+                  <Package className="h-6 w-6 text-orange-600" />
+                </div>
+                <CardTitle className="text-xl">Термоконтейнер</CardTitle>
+              </div>
+              <CardDescription>
+                Пассивный изотермический контейнер с квалифицированной конфигурацией упаковки
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li>✓ Режимы +2…+8, +8…+15 и +15…+25 °C</li>
+                <li>✓ Термоэлементы и профиль загрузки</li>
+                <li>✓ Контроль времени удержания температуры</li>
+              </ul>
+              <Button className="w-full mt-6" size="lg" variant="outline">
+                Выбрать термоконтейнер
               </Button>
             </CardContent>
           </Card>

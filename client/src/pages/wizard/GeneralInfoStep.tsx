@@ -65,6 +65,20 @@ export default function GeneralInfoStep({
     whLayoutNotes: "",
     fillStatus: undefined, // empty | loaded
     loadPercent: "",
+    thermalContainerConfig: {
+      selectedModes: ["2-8"],
+      volumeLiters: "",
+      innerLengthCm: "",
+      innerWidthCm: "",
+      innerHeightCm: "",
+      insulationType: "",
+      thermalElementType: "",
+      thermalElementCount: "",
+      conditioningTemperature: "",
+      targetDurationHours: "24",
+      loadProfile: "full",
+      packingNotes: "",
+    },
   });
 
   // Seed the form from server data ONLY ONCE on initial load.
@@ -79,6 +93,10 @@ export default function GeneralInfoStep({
         ...giQ.data,
         equipmentType: giQ.data?.equipmentType || initialEquipmentType || prev.equipmentType,
         commissionMembers: (giQ.data?.commissionMembers as CM[] | null) || [],
+        thermalContainerConfig: {
+          ...prev.thermalContainerConfig,
+          ...((giQ.data as any)?.thermalContainerConfig || {}),
+        },
       }));
       // Seed uncontrolled warehouse dim inputs directly from server data.
       const L = (giQ.data as any)?.whLengthM;
@@ -112,6 +130,7 @@ export default function GeneralInfoStep({
   });
 
   const isWarehouse = form.equipmentType === "warehouse";
+  const isThermalContainer = form.equipmentType === "thermal-container";
   const tempModesForEquipment = form.equipmentType === "chamber"
     ? TEMP_MODES.filter(m => m.id !== "15-25")
     : TEMP_MODES;
@@ -172,6 +191,7 @@ export default function GeneralInfoStep({
       model: form.model ?? null,
       serial: form.serial ?? null,
       tempMode: form.tempMode ?? null,
+      thermalContainerConfig: isThermalContainer ? form.thermalContainerConfig : null,
       location: form.location ?? null,
       purpose: form.purpose ?? null,
       validationDate: form.validationDate || null,
@@ -223,6 +243,29 @@ export default function GeneralInfoStep({
     const next = [...(form.commissionMembers || [])];
     next.splice(i, 1);
     setForm({ ...form, commissionMembers: next });
+  };
+
+  const updateThermalConfig = (patch: Record<string, unknown>) => {
+    setForm((prev: any) => ({
+      ...prev,
+      thermalContainerConfig: { ...(prev.thermalContainerConfig || {}), ...patch },
+    }));
+  };
+
+  const toggleThermalMode = (mode: string) => {
+    const current = (form.thermalContainerConfig?.selectedModes || [form.tempMode || "2-8"]) as string[];
+    const selectedModes = current.includes(mode)
+      ? current.filter(item => item !== mode)
+      : [...current, mode];
+    if (selectedModes.length === 0) return;
+    updateThermalConfig({ selectedModes });
+    if (!selectedModes.includes(form.tempMode)) {
+      setForm((prev: any) => ({
+        ...prev,
+        tempMode: selectedModes[0],
+        thermalContainerConfig: { ...(prev.thermalContainerConfig || {}), selectedModes },
+      }));
+    }
   };
 
   return (
@@ -446,6 +489,7 @@ export default function GeneralInfoStep({
           </div>
         ) : (
           /* ── STANDARD EQUIPMENT: all fields ─────────────────────── */
+          <div className="space-y-6">
           <div className="grid md:grid-cols-2 gap-x-6 gap-y-4">
             <Field label="Тип оборудования">
               <Select
@@ -460,14 +504,16 @@ export default function GeneralInfoStep({
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Температурный режим *">
+            <Field label={isThermalContainer ? "Режим текущего испытания *" : "Температурный режим *"}>
               <Select
                 value={form.tempMode || undefined}
                 onValueChange={v => setForm({ ...form, tempMode: v })}
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {(isWarehouse ? TEMP_MODES : tempModesForEquipment).map(m => (
+                  {(isThermalContainer
+                    ? TEMP_MODES.filter(m => (form.thermalContainerConfig?.selectedModes || ["2-8"]).includes(m.id))
+                    : isWarehouse ? TEMP_MODES : tempModesForEquipment).map(m => (
                     <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
                   ))}
                 </SelectContent>
@@ -552,6 +598,93 @@ export default function GeneralInfoStep({
                 placeholder={getPurposePlaceholder(form.equipmentType)}
               />
             </Field>
+          </div>
+          {isThermalContainer && (
+            <div className="rounded-xl border border-orange-200 bg-orange-50/50 p-5 space-y-5">
+              <div>
+                <h3 className="font-semibold">Конфигурация термоконтейнера</h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Выберите все заявленные режимы. Один из них назначается режимом текущего испытания и используется в расчетах PV.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Заявленные температурные режимы *</Label>
+                <div className="flex flex-wrap gap-2">
+                  {TEMP_MODES.map(mode => {
+                    const selected = (form.thermalContainerConfig?.selectedModes || []).includes(mode.id);
+                    return (
+                      <Button
+                        key={mode.id}
+                        type="button"
+                        variant={selected ? "default" : "outline"}
+                        onClick={() => toggleThermalMode(mode.id)}
+                      >
+                        {mode.label}
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="grid md:grid-cols-3 gap-4">
+                <Field label="Полезный объем, л">
+                  <Input type="number" min="0" value={form.thermalContainerConfig?.volumeLiters || ""}
+                    onChange={e => updateThermalConfig({ volumeLiters: e.target.value })} />
+                </Field>
+                <Field label="Внутренняя длина, см">
+                  <Input type="number" min="0" value={form.thermalContainerConfig?.innerLengthCm || ""}
+                    onChange={e => updateThermalConfig({ innerLengthCm: e.target.value })} />
+                </Field>
+                <Field label="Внутренняя ширина, см">
+                  <Input type="number" min="0" value={form.thermalContainerConfig?.innerWidthCm || ""}
+                    onChange={e => updateThermalConfig({ innerWidthCm: e.target.value })} />
+                </Field>
+                <Field label="Внутренняя высота, см">
+                  <Input type="number" min="0" value={form.thermalContainerConfig?.innerHeightCm || ""}
+                    onChange={e => updateThermalConfig({ innerHeightCm: e.target.value })} />
+                </Field>
+                <Field label="Тип теплоизоляции">
+                  <Input value={form.thermalContainerConfig?.insulationType || ""}
+                    onChange={e => updateThermalConfig({ insulationType: e.target.value })}
+                    placeholder="ППУ, вакуумные панели…" />
+                </Field>
+                <Field label="Заявленное время удержания, ч">
+                  <Input type="number" min="1" value={form.thermalContainerConfig?.targetDurationHours || ""}
+                    onChange={e => updateThermalConfig({ targetDurationHours: e.target.value })} />
+                </Field>
+                <Field label="Тип термоэлементов">
+                  <Input value={form.thermalContainerConfig?.thermalElementType || ""}
+                    onChange={e => updateThermalConfig({ thermalElementType: e.target.value })}
+                    placeholder="Аккумулятор холода / тепла" />
+                </Field>
+                <Field label="Количество термоэлементов">
+                  <Input type="number" min="0" value={form.thermalContainerConfig?.thermalElementCount || ""}
+                    onChange={e => updateThermalConfig({ thermalElementCount: e.target.value })} />
+                </Field>
+                <Field label="Температура кондиционирования, °C">
+                  <Input type="number" step="0.1" value={form.thermalContainerConfig?.conditioningTemperature || ""}
+                    onChange={e => updateThermalConfig({ conditioningTemperature: e.target.value })} />
+                </Field>
+                <Field label="Профиль загрузки">
+                  <Select value={form.thermalContainerConfig?.loadProfile || "full"}
+                    onValueChange={value => updateThermalConfig({ loadProfile: value })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="empty">Пустой</SelectItem>
+                      <SelectItem value="partial">Частично загруженный</SelectItem>
+                      <SelectItem value="full">Полностью загруженный</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Схема упаковки и примечания" className="md:col-span-2">
+                  <Textarea rows={3} value={form.thermalContainerConfig?.packingNotes || ""}
+                    onChange={e => updateThermalConfig({ packingNotes: e.target.value })}
+                    placeholder="Расположение термоэлементов, прокладок, имитатора груза и датчиков" />
+                </Field>
+              </div>
+            </div>
+          )}
           </div>
         )}
 

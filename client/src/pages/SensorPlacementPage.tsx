@@ -229,7 +229,7 @@ export default function SensorPlacementPage() {
   const protocolEquipmentType = protocolQ.data?.customEquipmentName === "__equipmentType:chamber" ? "chamber" : protocolQ.data?.equipmentType;
   const equipmentType = (giQ.data?.equipmentType || protocolEquipmentType || "refrigerator") as string;
   const isWarehouse = equipmentType === "warehouse";
-  const isAutoRefrigerator = equipmentType === "auto-refrigerator" || equipmentType === "chamber";
+  const isAutoRefrigerator = equipmentType === "auto-refrigerator" || equipmentType === "chamber" || equipmentType === "thermal-container";
 
   const updateLogger = trpc.pv.updateLogger.useMutation({
     onSuccess: () => pvQ.refetch(),
@@ -734,7 +734,7 @@ export default function SensorPlacementPage() {
                 doorPos={doorPos ?? (session as any)?.doorPos}
                 onCoolingUnitPosChange={setCoolingUnitPos}
                 onDoorPosChange={setDoorPos}
-                objectType={equipmentType === "auto-refrigerator" ? "truck" : "chamber"}
+                objectType={equipmentType === "auto-refrigerator" ? "truck" : equipmentType === "thermal-container" ? "thermal-container" : "chamber"}
               />
             </CardContent>
           </Card>

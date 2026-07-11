@@ -98,6 +98,7 @@ export const generalInfo = mysqlTable("generalInfo", {
 	inventory: varchar({ length: 128 }),
 	year: int(),
 	tempMode: varchar({ length: 16 }),
+	thermalContainerConfig: json(),
 	location: text(),
 	purpose: text(),
 	validationDate: varchar({ length: 32 }),
@@ -158,7 +159,7 @@ export const protocols = mysqlTable("protocols", {
 	createdAt: timestamp({ mode: 'string' }).default('CURRENT_TIMESTAMP').notNull(),
 	updatedAt: timestamp({ mode: 'string' }).defaultNow().onUpdateNow().notNull(),
 	companyId: int().default(0).notNull(),
-	equipmentType: mysqlEnum(['refrigerator','auto-refrigerator','warehouse','other']).default('refrigerator').notNull(),
+	equipmentType: mysqlEnum(['refrigerator','auto-refrigerator','thermal-container','warehouse','other']).default('refrigerator').notNull(),
 	customEquipmentName: varchar({ length: 255 }),
 });
 
@@ -244,7 +245,7 @@ export const questionTemplates = mysqlTable("questionTemplates", {
 	text: text().notNull(),
 	isDefault: int().default(1).notNull(),
 	companyId: int(),
-	equipmentType: mysqlEnum(['refrigerator','auto-refrigerator','chamber','warehouse','other']).default('refrigerator').notNull(),
+	equipmentType: mysqlEnum(['refrigerator','auto-refrigerator','chamber','thermal-container','warehouse','other']).default('refrigerator').notNull(),
 	equipmentKind: mysqlEnum(['conditioner','ventilation','heat_curtain','chiller','fan_coil','other']),
 });
 

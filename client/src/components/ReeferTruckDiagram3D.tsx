@@ -37,7 +37,7 @@ type Props = {
   doorPos?: DragPos | null;
   onCoolingUnitPosChange?: (pos: DragPos) => void;
   onDoorPosChange?: (pos: DragPos) => void;
-  objectType?: "truck" | "chamber";
+  objectType?: "truck" | "chamber" | "thermal-container";
 };
 
 // ─── Isometric projection ─────────────────────────────────────────────────────
@@ -396,13 +396,13 @@ export default function ReeferTruckDiagram3D({
           return <line x1={dh1[0]} y1={dh1[1]} x2={dh2[0]} y2={dh2[1]} stroke="#64748b" strokeWidth={2.5} strokeLinecap="round" />;
         })()}
 
-        {/* ── Refrigeration unit ── */}
-        {/* front face */}
-        <polygon points={pts([ru_bl, ru_br, ru_tr, ru_tl])} fill="#bfdbfe" stroke="#93c5fd" strokeWidth={0.8} />
-        {/* top face */}
-        <polygon points={pts([ru_tl, ru_tr, ru_trb, ru_tlb])} fill="#dbeafe" stroke="#93c5fd" strokeWidth={0.8} />
-        {/* back face */}
-        <polygon points={pts([ru_blb, ru_brb, ru_trb, ru_tlb])} fill="#eff6ff" stroke="#93c5fd" strokeWidth={0.8} />
+        {objectType !== "thermal-container" && (
+          <g>
+            <polygon points={pts([ru_bl, ru_br, ru_tr, ru_tl])} fill="#bfdbfe" stroke="#93c5fd" strokeWidth={0.8} />
+            <polygon points={pts([ru_tl, ru_tr, ru_trb, ru_tlb])} fill="#dbeafe" stroke="#93c5fd" strokeWidth={0.8} />
+            <polygon points={pts([ru_blb, ru_brb, ru_trb, ru_tlb])} fill="#eff6ff" stroke="#93c5fd" strokeWidth={0.8} />
+          </g>
+        )}
 
         {/* ── Strong outline edges ── */}
         {/* Bottom rectangle */}
@@ -418,7 +418,7 @@ export default function ReeferTruckDiagram3D({
         {showDraggables && (
           <>
             {/* Cooling unit */}
-            <g
+            {objectType !== "thermal-container" && <g
               style={{ cursor: readOnly ? "default" : "grab" }}
               onMouseDown={e => handleDragStart(e, "coolingUnit")}
               onTouchStart={e => handleDragStart(e, "coolingUnit")}
@@ -441,7 +441,7 @@ export default function ReeferTruckDiagram3D({
                   ↕ перетащить
                 </text>
               )}
-            </g>
+            </g>}
             {/* Door */}
             <g
               style={{ cursor: readOnly ? "default" : "grab" }}

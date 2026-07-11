@@ -93,7 +93,7 @@ const schemaSql = [
     createdAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updatedAt timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     companyId int NOT NULL DEFAULT 0,
-    equipmentType enum('refrigerator','auto-refrigerator','warehouse','other') NOT NULL DEFAULT 'refrigerator',
+    equipmentType enum('refrigerator','auto-refrigerator','thermal-container','warehouse','other') NOT NULL DEFAULT 'refrigerator',
     customEquipmentName varchar(255),
     PRIMARY KEY (id)
   )`,
@@ -124,6 +124,7 @@ const schemaSql = [
     inventory varchar(128),
     year int,
     tempMode varchar(16),
+    thermalContainerConfig json,
     location text,
     purpose text,
     validationDate varchar(32),
@@ -277,7 +278,7 @@ const schemaSql = [
     text text NOT NULL,
     isDefault int NOT NULL DEFAULT 1,
     companyId int,
-    equipmentType enum('refrigerator','auto-refrigerator','warehouse','other') NOT NULL DEFAULT 'refrigerator',
+    equipmentType enum('refrigerator','auto-refrigerator','chamber','thermal-container','warehouse','other') NOT NULL DEFAULT 'refrigerator',
     equipmentKind enum('conditioner','ventilation','heat_curtain','chiller','fan_coil','other'),
     PRIMARY KEY (id)
   )`,

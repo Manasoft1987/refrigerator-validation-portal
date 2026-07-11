@@ -106,6 +106,20 @@ export type ReportInput = {
     inventory: string | null;
     year: number | null;
     tempMode: string | null;
+    thermalContainerConfig?: {
+      selectedModes?: string[];
+      volumeLiters?: string | number | null;
+      innerLengthCm?: string | number | null;
+      innerWidthCm?: string | number | null;
+      innerHeightCm?: string | number | null;
+      insulationType?: string | null;
+      thermalElementType?: string | null;
+      thermalElementCount?: string | number | null;
+      conditioningTemperature?: string | number | null;
+      targetDurationHours?: string | number | null;
+      loadProfile?: "empty" | "partial" | "full" | null;
+      packingNotes?: string | null;
+    } | null;
     location: string | null;
     purpose: string | null;
     validationDate: string | null;
@@ -302,6 +316,7 @@ const TEMP_MODE_LABEL: Record<string, string> = {
 const EQUIPMENT_LABEL: Record<string, string> = {
   refrigerator: "Холодильник",
   "auto-refrigerator": "Авторефрижератор", // Note: for warehouse protocols, use getEquipmentName() which returns "помещение (зона) хранения"
+  "thermal-container": "Термоконтейнер",
   freezer: "Морозильник",
   chamber: "Холодильная камера",
   warehouse: "Помещение (зона) хранения", // Note: use getEquipmentName() for proper display
@@ -359,10 +374,11 @@ function getEquipmentNameWithCase(input: ReportInput, gramCase: "nominative" | "
 }
 
 function isReeferLike(type: string | null | undefined): boolean {
-  return type === "auto-refrigerator" || type === "chamber";
+  return type === "auto-refrigerator" || type === "chamber" || type === "thermal-container";
 }
 
 function reeferSubject(type: string | null | undefined): string {
+  if (type === "thermal-container") return "Термоконтейнер";
   if (type === "chamber") return "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430";
   if (type === "refrigerator") return "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a";
   if (type === "freezer") return "\u041c\u043e\u0440\u043e\u0437\u0438\u043b\u044c\u043d\u0438\u043a";
@@ -370,6 +386,7 @@ function reeferSubject(type: string | null | undefined): string {
 }
 
 function reeferArea(type: string | null | undefined): string {
+  if (type === "thermal-container") return "термоконтейнер";
   if (type === "chamber") return "\u043a\u0430\u043c\u0435\u0440\u0430";
   if (type === "refrigerator") return "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a";
   if (type === "freezer") return "\u043c\u043e\u0440\u043e\u0437\u0438\u043b\u044c\u043d\u0438\u043a";
@@ -377,6 +394,7 @@ function reeferArea(type: string | null | undefined): string {
 }
 
 function reeferAreaGenitive(type: string | null | undefined): string {
+  if (type === "thermal-container") return "термоконтейнера";
   if (type === "chamber") return "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0439 \u043a\u0430\u043c\u0435\u0440\u044b";
   if (type === "refrigerator") return "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a\u0430";
   if (type === "freezer") return "\u043c\u043e\u0440\u043e\u0437\u0438\u043b\u044c\u043d\u0438\u043a\u0430";
@@ -384,6 +402,7 @@ function reeferAreaGenitive(type: string | null | undefined): string {
 }
 
 function reeferInsideVolume(type: string | null | undefined): string {
+  if (type === "thermal-container") return "термоконтейнера";
   if (type === "chamber") return "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0439 \u043a\u0430\u043c\u0435\u0440\u044b";
   if (type === "refrigerator") return "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a\u0430";
   if (type === "freezer") return "\u043c\u043e\u0440\u043e\u0437\u0438\u043b\u044c\u043d\u0438\u043a\u0430";
@@ -391,6 +410,7 @@ function reeferInsideVolume(type: string | null | undefined): string {
 }
 
 function reeferAreaAfterIn(type: string | null | undefined): string {
+  if (type === "thermal-container") return "термоконтейнере";
   if (type === "chamber") return "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0439 \u043a\u0430\u043c\u0435\u0440\u0435";
   if (type === "refrigerator") return "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a\u0435";
   if (type === "freezer") return "\u043c\u043e\u0440\u043e\u0437\u0438\u043b\u044c\u043d\u0438\u043a\u0435";
@@ -398,10 +418,12 @@ function reeferAreaAfterIn(type: string | null | undefined): string {
 }
 
 function reeferLocationLabel(type: string | null | undefined): string {
+  if (type === "thermal-container") return "Место подготовки и эксплуатации";
   return type === "chamber" ? "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430 / \u043c\u0435\u0441\u0442\u043e \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0438" : "\u0422\u0440\u0430\u043d\u0441\u043f\u043e\u0440\u0442\u043d\u043e\u0435 \u0441\u0440\u0435\u0434\u0441\u0442\u0432\u043e / \u0433\u043e\u0441. \u043d\u043e\u043c\u0435\u0440";
 }
 
 function reeferUnitLabel(type: string | null | undefined): string {
+  if (type === "thermal-container") return "Производитель / модель";
   return type === "chamber" ? "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430 / \u0430\u0433\u0440\u0435\u0433\u0430\u0442" : "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430";
 }
 
@@ -413,6 +435,7 @@ function reeferConclusionObject(input: ReportInput): string {
   if (type === "chamber") return withUnit("\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0443\u044e \u043a\u0430\u043c\u0435\u0440\u0443");
   if (type === "refrigerator") return withUnit("\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a");
   if (type === "freezer") return withUnit("\u043c\u043e\u0440\u043e\u0437\u0438\u043b\u044c\u043d\u0438\u043a");
+  if (type === "thermal-container") return withUnit("термоконтейнер");
   return withUnit("\u0430\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440");
 }
 
@@ -918,6 +941,8 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
   const eqType = input.generalInfo?.equipmentType || input.protocol?.equipmentType || "";
   const equipmentTypeLabel = eqType === "chamber"
     ? "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430"
+    : eqType === "thermal-container"
+      ? "\u0422\u0435\u0440\u043c\u043e\u043a\u043e\u043d\u0442\u0435\u0439\u043d\u0435\u0440"
     : eqType === "auto-refrigerator"
       ? "\u0422\u0440\u0430\u043d\u0441\u043f\u043e\u0440\u0442\u043d\u043e\u0435 \u0441\u0440\u0435\u0434\u0441\u0442\u0432\u043e"
       : eqType === "warehouse"
@@ -940,6 +965,10 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
     ? getEquipmentName(input)
     : EQUIPMENT_LABEL[gi?.equipmentType || ""] || "—";
   const refrigerationUnit = `${gi?.manufacturer || ""} ${gi?.model || ""}`.trim() || "—";
+  const selectedThermalModes = gi?.thermalContainerConfig?.selectedModes || [];
+  const temperatureModeLabel = selectedThermalModes.length > 0
+    ? selectedThermalModes.map(mode => TEMP_MODE_LABEL[mode] || mode).join(", ")
+    : TEMP_MODE_LABEL[gi?.tempMode || ""] || "—";
   const baseRows: Array<[string, string]> = [
     ["Номер протокола", input.protocol.number],
     ["Редакция", input.dataIntegrity?.revision || "01"],
@@ -955,7 +984,7 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
       : [
           ["Адрес объекта", gi?.location || "—"],
         ] as Array<[string, string]>),
-    ["Температурный режим", TEMP_MODE_LABEL[gi?.tempMode || ""] || "—"],
+    ["Температурный режим", temperatureModeLabel],
     ["Сезон", gi?.season ? { warm: "Теплый период", cold: "Холодный период", interseasonal: "Межсезонье", none: "Не применимо" }[gi.season] || "—" : "—"],
     ["Тип квалификации", gi?.qualificationType ? { primary: "Первичная", periodic: "Периодическая", repeat: "Повторная" }[gi.qualificationType] || "—" : "—"],
   ];
@@ -1145,6 +1174,38 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
       ["Ответственное лицо", input.org.responsible || "—"],
       ["Контакты", input.org.phone || "—"],
       ["Процент загруженности объекта", loadPercentLabel],
+    ];
+  }
+  if (gi?.equipmentType === "thermal-container") {
+    const config = gi.thermalContainerConfig;
+    const modeLabels = (config?.selectedModes || [gi.tempMode].filter(Boolean) as string[])
+      .map(mode => TEMP_MODE_LABEL[mode] || mode)
+      .join(", ") || "—";
+    const dimensions = [config?.innerLengthCm, config?.innerWidthCm, config?.innerHeightCm]
+      .map(value => value || "—")
+      .join(" × ");
+    const loadProfile = config?.loadProfile
+      ? { empty: "Пустой", partial: "Частично загруженный", full: "Полностью загруженный" }[config.loadProfile]
+      : "—";
+
+    rows = [
+      ["Тип оборудования", "Термоконтейнер"],
+      ["Производитель", gi.manufacturer || "—"],
+      ["Модель", gi.model || "—"],
+      ["Серийный / инвентарный номер", gi.serial || gi.inventory || "—"],
+      ["Заявленные температурные режимы", modeLabels],
+      ["Режим текущего испытания", TEMP_MODE_LABEL[gi.tempMode || ""] || "—"],
+      ["Полезный объем", config?.volumeLiters ? `${config.volumeLiters} л` : "—"],
+      ["Внутренние размеры (Д × Ш × В)", `${dimensions} см`],
+      ["Тип теплоизоляции", config?.insulationType || "—"],
+      ["Тип и количество термоэлементов", `${config?.thermalElementType || "—"}; ${config?.thermalElementCount || "—"} шт.`],
+      ["Температура кондиционирования", config?.conditioningTemperature !== null && config?.conditioningTemperature !== undefined && config?.conditioningTemperature !== "" ? `${config.conditioningTemperature} °C` : "—"],
+      ["Заявленное время удержания", config?.targetDurationHours ? `${config.targetDurationHours} ч` : "—"],
+      ["Профиль загрузки", loadProfile || "—"],
+      ["Схема упаковки / примечания", config?.packingNotes || "—"],
+      ["Место подготовки и эксплуатации", gi.location || "—"],
+      ["Назначение", gi.purpose || "—"],
+      ["Организация", input.org.name],
     ];
   }
   drawKVTable(doc, rows);

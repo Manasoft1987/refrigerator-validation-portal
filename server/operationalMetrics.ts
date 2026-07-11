@@ -225,11 +225,13 @@ export function calculateAllOperationalMetrics(
 
   const subject =
     equipmentType === "chamber" ? "Холодильная камера"
+    : equipmentType === "thermal-container" ? "Термоконтейнер"
     : equipmentType === "refrigerator" ? "Холодильник"
     : equipmentType === "freezer" ? "Морозильник"
     : "Авторефрижератор";
   const retentionSubject =
     equipmentType === "chamber" ? "камера способна"
+    : equipmentType === "thermal-container" ? "термоконтейнер способен"
     : equipmentType === "refrigerator" ? "холодильник способен"
     : equipmentType === "freezer" ? "морозильник способен"
     : "кузов способен";
