@@ -11,7 +11,7 @@ describe("computerized system GAMP report", () => {
         riskLevel: "Высокий", screening: { gxpRecords: true, electronicSignatures: true },
         requirements: [{ id: "URS-001", text: "Система ведёт audit trail", criticality: "high" }],
         supplierAssessment: { sla: true, documentation: true, backup: true, security: true },
-        tests: [{ id: "TEST-001", requirementId: "URS-001", steps: "Изменить запись", expected: "Событие записано", actual: "Событие записано", result: "pass" }],
+        tests: [{ id: "TEST-001", requirementId: "URS-001", steps: "Изменить запись", expected: "Событие записано", actual: "Событие записано", evidence: "Скриншот 1", result: "pass" }],
         releaseDecision: "approved", periodicReviewMonths: "12",
       },
     });

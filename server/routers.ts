@@ -127,6 +127,7 @@ import {
 } from "./loggerParser";
 import { generateProtocolPdf, type ReportInput } from "./pdfReport";
 import { generateComputerizedSystemPdf } from "./computerizedSystemPdf";
+import { getComputerizedSystemReleaseReadiness } from "@shared/computerizedSystem";
 import { storagePut, storageReadBuffer } from "./storage";
 import { buildWarehouseQuestions } from "./warehouseQuestions";
 
@@ -774,9 +775,21 @@ export const appRouter = router({
             });
           }
         }
+        if (coerced.equipmentType === "computerized-system" && coerced.computerizedSystemConfig) {
+          const computerizedSystemConfig = coerced.computerizedSystemConfig as any;
+          const decision = computerizedSystemConfig.releaseDecision;
+          if (computerizedSystemConfig.lastSavedSection === "release" && (decision === "approved" || decision === "conditional") && !getComputerizedSystemReleaseReadiness(computerizedSystemConfig).ready) {
+            const readiness = getComputerizedSystemReleaseReadiness(computerizedSystemConfig);
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Выпуск системы заблокирован: ${readiness.blockers.join("; ")}.`,
+            });
+          }
+        }
         const saved = await upsertGeneralInfo(protocolId, coerced);
         if (coerced.equipmentType === "computerized-system" && coerced.computerizedSystemConfig) {
-          const decision = (coerced.computerizedSystemConfig as any).releaseDecision;
+          const computerizedSystemConfig = coerced.computerizedSystemConfig as any;
+          const decision = computerizedSystemConfig.releaseDecision;
           if (decision && decision !== "pending") {
             const verdict = decision === "rejected" ? "fail" : "pass";
             await updateProtocolStatus(ctx.user.id, protocolId, {

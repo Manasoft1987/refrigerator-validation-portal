@@ -1,6 +1,7 @@
 import PDFDocument from "pdfkit";
 import path from "path";
 import { fileURLToPath } from "url";
+import { getComputerizedSystemReleaseReadiness } from "@shared/computerizedSystem";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const M = 52;
@@ -26,19 +27,18 @@ export async function generateComputerizedSystemPdf(input: { protocol: any; org:
   const screeningLabels:any={productQuality:"Влияние на качество продукции",patientSafety:"Влияние на безопасность пациента",gxpRecords:"Создание/изменение GxP-записей",releaseDecision:"Использование при выпуске",calculations:"Критичные расчёты",electronicSignatures:"Электронные подписи",editableRecords:"Изменение электронных записей",integrations:"GxP-интерфейсы"};
   kv(Object.entries(screeningLabels).map(([k,v])=>[String(v),c.screening?.[k]?"Да":"Нет"]));
   section("3. Требования пользователя (URS)");
-  table(["ID","Требование","Критичность"],(c.requirements||[]).map((r:any)=>[r.id,r.text,r.criticality]),[75,330,85]);
+  table(["ID","Требование","Критерий приёмки","Критичность"],(c.requirements||[]).map((r:any)=>[r.id,r.text,r.acceptanceCriteria||"—",r.criticality]),[60,190,165,75]);
   section("4. Оценка поставщика и средств контроля");
   const sa=c.supplierAssessment||{}; kv([["Договор / SLA",yes(sa.sla)],["Документация",yes(sa.documentation)],["Уведомление об изменениях",yes(sa.changeNotification)],["Управление инцидентами",yes(sa.incidentManagement)],["Резервное копирование",yes(sa.backup)],["Информационная безопасность",yes(sa.security)],["Вывод",sa.notes||"—"]]);
   section("5. Матрица прослеживаемости и результаты тестирования");
   table(["Тест","URS","Результат"],(c.tests||[]).map((t:any)=>[t.id,t.requirementId,t.result==="pass"?"Пройден":t.result==="fail"?"Не пройден":"Не выполнен"]),[100,230,160]);
-  for(const t of c.tests||[]){sub(`${t.id} / ${t.requirementId||"без связи"}`);kv([["Шаги",t.steps||"—"],["Ожидаемый результат",t.expected||"—"],["Фактический результат",t.actual||"—"]]);}
+  for(const t of c.tests||[]){sub(`${t.id} / ${t.requirementId||"без связи"}`);kv([["Шаги",t.steps||"—"],["Ожидаемый результат",t.expected||"—"],["Фактический результат",t.actual||"—"],["Объективное доказательство",t.evidence||"—"],["Отклонение / решение",t.deviation||"—"]]);}
   section("6. Отклонения и решение о выпуске");
   const decision:any={approved:"Разрешить эксплуатацию",conditional:"Разрешить с ограничениями",rejected:"Не разрешать эксплуатацию",pending:"Решение не принято"};
   kv([["Отклонения",c.deviations||"Отсутствуют"],["Решение",decision[c.releaseDecision]||"—"],["Ограничения",c.releaseRestrictions||"—"],["Периодический обзор",`${c.periodicReviewMonths||12} мес.`]]);
   doc.addPage(); section("7. Заключение");
-  const allCritical=(c.requirements||[]).filter((r:any)=>r.criticality==="high"); const passed=new Set((c.tests||[]).filter((t:any)=>t.result==="pass").map((t:any)=>t.requirementId));
-  const traceable=allCritical.every((r:any)=>passed.has(r.id));
-  doc.font("body").fontSize(11).fillColor("#0f172a").text(traceable&&c.releaseDecision==="approved"?"Критичные требования прослежены до успешно выполненных тестов. Система признана пригодной для заявленного использования.":"До выпуска необходимо закрыть непройденные проверки, обеспечить прослеживаемость критичных требований и документировать итоговое решение.",{lineGap:4});
+  const readiness=getComputerizedSystemReleaseReadiness(c);
+  doc.font("body").fontSize(11).fillColor("#0f172a").text(readiness.ready&&c.releaseDecision==="approved"?"Критичные требования прослежены до успешно выполненных тестов. Система признана пригодной для заявленного использования.":`До выпуска необходимо: ${readiness.blockers.length?readiness.blockers.join("; "):"документировать итоговое решение"}.`,{lineGap:4});
   const range=doc.bufferedPageRange(); for(let i=range.start;i<range.start+range.count;i++){doc.switchToPage(i);doc.font("body").fontSize(8).fillColor("#64748b").text(`${input.protocol.number}  •  Стр. ${i+1} из ${range.count}`,M,doc.page.height-36,{width:doc.page.width-M*2,align:"center",lineBreak:false});}
   doc.end(); return done;
 
