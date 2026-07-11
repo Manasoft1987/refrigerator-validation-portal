@@ -667,6 +667,7 @@ type ProtocolEquipmentTypeCode =
   | "auto-refrigerator"
   | "chamber"
   | "thermal-container"
+  | "computerized-system"
   | "warehouse"
   | "other"
   | string
@@ -681,6 +682,8 @@ export function protocolObjectCode(equipmentType: ProtocolEquipmentTypeCode): st
       return "CHB";
     case "thermal-container":
       return "TC";
+    case "computerized-system":
+      return "CS";
     case "warehouse":
       return "STR";
     case "refrigerator":
@@ -874,10 +877,10 @@ export async function ensureThermalContainerStorage() {
     ));
     const protocolRows = (protocolColumnResult as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
     const protocolType = String(protocolRows?.[0]?.Type ?? protocolRows?.[0]?.type ?? "");
-    if (!protocolType.includes("'thermal-container'")) {
+    if (!protocolType.includes("'thermal-container'") || !protocolType.includes("'computerized-system'")) {
       await db.execute(sql.raw(
         "ALTER TABLE protocols MODIFY COLUMN equipmentType " +
-        "enum('refrigerator','auto-refrigerator','thermal-container','warehouse','other') " +
+        "enum('refrigerator','auto-refrigerator','thermal-container','computerized-system','warehouse','other') " +
         "NOT NULL DEFAULT 'refrigerator'",
       ));
     }
@@ -889,6 +892,15 @@ export async function ensureThermalContainerStorage() {
     if (configRows.length === 0) {
       await db.execute(sql.raw(
         "ALTER TABLE generalInfo ADD COLUMN thermalContainerConfig JSON NULL AFTER tempMode",
+      ));
+    }
+    const csResult = await db.execute(sql.raw(
+      "SHOW COLUMNS FROM generalInfo LIKE 'computerizedSystemConfig'",
+    ));
+    const csRows = (csResult as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
+    if (csRows.length === 0) {
+      await db.execute(sql.raw(
+        "ALTER TABLE generalInfo ADD COLUMN computerizedSystemConfig JSON NULL AFTER thermalContainerConfig",
       ));
     }
   })().catch(error => {

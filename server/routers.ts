@@ -126,6 +126,7 @@ import {
   resampleSeries,
 } from "./loggerParser";
 import { generateProtocolPdf, type ReportInput } from "./pdfReport";
+import { generateComputerizedSystemPdf } from "./computerizedSystemPdf";
 import { storagePut, storageReadBuffer } from "./storage";
 import { buildWarehouseQuestions } from "./warehouseQuestions";
 
@@ -607,7 +608,7 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .query(({ ctx, input }) => ownProtocol(ctx.user.id, input.id)),
     create: protectedProcedure
-      .input(z.object({ organizationId: z.number(), companyId: z.number().optional(), equipmentType: z.enum(["refrigerator", "auto-refrigerator", "chamber", "thermal-container", "warehouse", "other"]).optional(), customEquipmentName: z.string().optional() }))
+      .input(z.object({ organizationId: z.number(), companyId: z.number().optional(), equipmentType: z.enum(["refrigerator", "auto-refrigerator", "chamber", "thermal-container", "computerized-system", "warehouse", "other"]).optional(), customEquipmentName: z.string().optional() }))
       .mutation(async ({ ctx, input }) => {
         // Admins can always create; regular users must belong to an approved company
         if (ctx.user.role !== "admin") {
@@ -638,7 +639,7 @@ export const appRouter = router({
         // Use org.companyId if not provided (org already linked to company)
         const companyId = input.companyId ?? org.companyId ?? 0;
         const requestedEquipmentType = input.equipmentType ?? "refrigerator";
-        if (requestedEquipmentType === "thermal-container") await ensureThermalContainerStorage();
+        if (requestedEquipmentType === "thermal-container" || requestedEquipmentType === "computerized-system") await ensureThermalContainerStorage();
         const year = new Date().getFullYear();
         const number = await nextProtocolNumberForCompany(companyId, year, requestedEquipmentType);
         return insertProtocol({
@@ -704,6 +705,7 @@ export const appRouter = router({
             loadProfile: z.enum(["empty", "partial", "full"]).optional().nullable(),
             packingNotes: z.string().optional().nullable(),
           }).optional().nullable(),
+          computerizedSystemConfig: z.record(z.string(), z.unknown()).optional().nullable(),
           location: z.string().optional().nullable(),
           purpose: z.string().optional().nullable(),
           validationDate: z.string().optional().nullable(),
@@ -772,7 +774,20 @@ export const appRouter = router({
             });
           }
         }
-        return upsertGeneralInfo(protocolId, coerced);
+        const saved = await upsertGeneralInfo(protocolId, coerced);
+        if (coerced.equipmentType === "computerized-system" && coerced.computerizedSystemConfig) {
+          const decision = (coerced.computerizedSystemConfig as any).releaseDecision;
+          if (decision && decision !== "pending") {
+            const verdict = decision === "rejected" ? "fail" : "pass";
+            await updateProtocolStatus(ctx.user.id, protocolId, {
+              iqVerdict: verdict,
+              oqVerdict: verdict,
+              pvVerdict: verdict,
+              status: decision === "approved" || decision === "conditional" ? "completed" : "pv_done",
+            });
+          }
+        }
+        return saved;
       }),
   }),
   /* -------------------------------------------------------------- */
@@ -1575,6 +1590,19 @@ export const appRouter = router({
         }
         if (!org) throw new TRPCError({ code: "NOT_FOUND" });
         const gi = await getGeneralInfo(input.protocolId);
+        if (protocol.equipmentType === "computerized-system") {
+          const buffer = await generateComputerizedSystemPdf({
+            protocol,
+            org,
+            config: (gi?.computerizedSystemConfig as any) || {},
+          });
+          const { key, url } = await storagePut(
+            `protocol-${input.protocolId}/gamp-report-${protocol.number}-${Date.now()}.pdf`,
+            buffer,
+            "application/pdf",
+          );
+          return { key, url, size: buffer.length };
+        }
         const iqItems = await listChecklist(input.protocolId, "iq");
         const oqItems = await listChecklist(input.protocolId, "oq");
         const reportTrialKey = protocol.equipmentType === "thermal-container"

@@ -99,6 +99,7 @@ export const generalInfo = mysqlTable("generalInfo", {
 	year: int(),
 	tempMode: varchar({ length: 16 }),
 	thermalContainerConfig: json(),
+	computerizedSystemConfig: json(),
 	location: text(),
 	purpose: text(),
 	validationDate: varchar({ length: 32 }),
@@ -159,7 +160,7 @@ export const protocols = mysqlTable("protocols", {
 	createdAt: timestamp({ mode: 'string' }).default('CURRENT_TIMESTAMP').notNull(),
 	updatedAt: timestamp({ mode: 'string' }).defaultNow().onUpdateNow().notNull(),
 	companyId: int().default(0).notNull(),
-	equipmentType: mysqlEnum(['refrigerator','auto-refrigerator','thermal-container','warehouse','other']).default('refrigerator').notNull(),
+	equipmentType: mysqlEnum(['refrigerator','auto-refrigerator','thermal-container','computerized-system','warehouse','other']).default('refrigerator').notNull(),
 	customEquipmentName: varchar({ length: 255 }),
 });
 

@@ -32,6 +32,7 @@ describe("protocol number format", () => {
       [2026, 7, "auto-refrigerator", "VAL-TRK-2026-007"],
       [2026, 3, "chamber", "VAL-CHB-2026-003"],
       [2026, 4, "thermal-container", "VAL-TC-2026-004"],
+      [2026, 6, "computerized-system", "VAL-CS-2026-006"],
       [2026, 5, "other", "VAL-EQP-2026-005"],
     ];
     for (const [year, seq, equipmentType, expected] of cases) {
@@ -47,6 +48,7 @@ describe("protocol number format", () => {
     expect(protocolObjectCode("auto-refrigerator")).toBe("TRK");
     expect(protocolObjectCode("chamber")).toBe("CHB");
     expect(protocolObjectCode("thermal-container")).toBe("TC");
+    expect(protocolObjectCode("computerized-system")).toBe("CS");
     expect(protocolObjectCode("other")).toBe("EQP");
   });
 

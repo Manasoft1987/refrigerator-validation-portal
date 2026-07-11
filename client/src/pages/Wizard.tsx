@@ -40,6 +40,7 @@ import ExcursionStudyStep from "./wizard/ExcursionStudyStep";
 import WarehouseProtocolStep from "./wizard/WarehouseProtocolStep";
 import WarehouseEquipmentStep from "./wizard/WarehouseEquipmentStep";
 import ProtocolAttachmentsStep from "./wizard/ProtocolAttachmentsStep";
+import ComputerizedSystemStep from "./wizard/ComputerizedSystemStep";
 
 // Standard protocol: 6 steps (no sections step)
 const STANDARD_STEPS = [
@@ -72,6 +73,7 @@ export default function Wizard() {
   const protocolEquipmentType = p?.customEquipmentName === "__equipmentType:chamber" ? "chamber" : p?.equipmentType;
   const isWarehouse = protocolEquipmentType === "warehouse";
   const isAutoRefrigerator = protocolEquipmentType === "auto-refrigerator";
+  const isComputerizedSystem = protocolEquipmentType === "computerized-system";
   const equipment = equipmentQ.data ?? [];
 
   // Build step list for warehouse
@@ -103,9 +105,19 @@ export default function Wizard() {
     { id: 6, key: "attachments", label: "Приложения", icon: Paperclip },
     { id: 7, key: "final", label: "Итоговый отчёт", icon: Download },
   ], []);
+  const computerizedSystemSteps = useMemo<WStep[]>(() => [
+    { id: 1, key: "profile", label: "Система", icon: FileText },
+    { id: 2, key: "screening", label: "GxP и риски", icon: AlertTriangle },
+    { id: 3, key: "requirements", label: "Требования URS", icon: ClipboardCheck },
+    { id: 4, key: "supplier", label: "Поставщик и контроль", icon: Lock },
+    { id: 5, key: "testing", label: "Верификация и UAT", icon: ClipboardCheck },
+    { id: 6, key: "release", label: "Отчёт и выпуск", icon: Download },
+  ], []);
 
   const activeSteps: WStep[] = isWarehouse
     ? warehouseSteps
+    : isComputerizedSystem
+      ? computerizedSystemSteps
     : isAutoRefrigerator
       ? autoRefrigeratorSteps
       : (STANDARD_STEPS as unknown as WStep[]);
@@ -139,6 +151,13 @@ export default function Wizard() {
       setInitialized(true);
       return;
     }
+    if (isComputerizedSystem) {
+      const completed = ((giQ.data?.computerizedSystemConfig as any)?.completedSections || []) as string[];
+      const firstIncomplete = activeSteps.find(item => !completed.includes(item.key));
+      setStep(firstIncomplete?.id || activeSteps.length);
+      setInitialized(true);
+      return;
+    }
     if (isWarehouse) {
       if (p.iqVerdict === "pass" && p.oqVerdict !== "pass") setStep(5);
       else if (p.iqVerdict !== "pass" && giQ.data) setStep(4);
@@ -149,11 +168,12 @@ export default function Wizard() {
       else setStep(1);
     }
     setInitialized(true);
-  }, [p, initialized, giQ.data, isWarehouse, requestedStep, activeSteps, id]);
+  }, [p, initialized, giQ.data, isWarehouse, isComputerizedSystem, requestedStep, activeSteps, id]);
 
   const unlockStep = (s: WStep): boolean => {
     if (!p) return false;
     if (s.id === 1) return true;
+    if (isComputerizedSystem) return true;
     const giReady = !!(giQ.data?.tempMode);
     if (isWarehouse) {
       // Warehouse: fixed 8 steps
@@ -178,6 +198,10 @@ export default function Wizard() {
   const stepStatus = (s: WStep): "done" | "issue" | "current" | "locked" | "ready" => {
     if (!p) return "locked";
     if (s.id === step) return "current";
+    if (isComputerizedSystem) {
+      const completed = ((giQ.data?.computerizedSystemConfig as any)?.completedSections || []) as string[];
+      return completed.includes(s.key) ? "done" : "ready";
+    }
     if (s.id === 1) return !!(giQ.data?.tempMode) ? "done" : "ready";
     const verdict = (v: string | null | undefined) =>
       v === "pass" ? "done" : v === "fail" ? "issue" : unlockStep(s) ? "ready" : "locked";
@@ -197,6 +221,10 @@ export default function Wizard() {
   };
 
   const progressPct = useMemo(() => {
+    if (isComputerizedSystem) {
+      const completed = ((giQ.data?.computerizedSystemConfig as any)?.completedSections || []) as string[];
+      return Math.round((completed.length / computerizedSystemSteps.length) * 100);
+    }
     let pct = 0;
     if (giQ.data?.tempMode) pct += 20;
     if (p?.iqVerdict === "pass") pct += 20;
@@ -204,7 +232,7 @@ export default function Wizard() {
     if (p?.pvVerdict === "pass" || p?.pvVerdict === "fail") pct += 30;
     if (p?.status === "completed") pct += 10;
     return Math.min(pct, 100);
-  }, [p, giQ.data]);
+  }, [p, giQ.data, isComputerizedSystem, computerizedSystemSteps]);
 
   if (protocolQ.isLoading || !p) {
     return (
@@ -319,11 +347,20 @@ export default function Wizard() {
       {/* Step content */}
       <div>
         {/* Step 1 — General info (all types) */}
-        {step === 1 && (
+        {step === 1 && !isComputerizedSystem && (
           <GeneralInfoStep
             protocolId={id}
             onDone={() => setStep(2)}
             equipmentType={protocolEquipmentType ?? undefined}
+          />
+        )}
+
+        {isComputerizedSystem && currentStepDef && (
+          <ComputerizedSystemStep
+            protocolId={id}
+            section={currentStepDef.key as any}
+            onNext={step < totalSteps ? () => setStep(step + 1) : undefined}
+            onBack={step > 1 ? () => setStep(step - 1) : undefined}
           />
         )}
 
@@ -379,7 +416,7 @@ export default function Wizard() {
         )}
 
         {/* ── STANDARD FLOW ──────────────────────────────────────────── */}
-        {!isWarehouse && currentStepDef?.key === "iq" && (
+        {!isWarehouse && !isComputerizedSystem && currentStepDef?.key === "iq" && (
           <ChecklistStep
             protocolId={id}
             stage="iq"
@@ -388,7 +425,7 @@ export default function Wizard() {
             equipmentType={protocolEquipmentType ?? undefined}
           />
         )}
-        {!isWarehouse && currentStepDef?.key === "oq" && (
+        {!isWarehouse && !isComputerizedSystem && currentStepDef?.key === "oq" && (
           <ChecklistStep
             protocolId={id}
             stage="oq"
@@ -397,16 +434,16 @@ export default function Wizard() {
             equipmentType={protocolEquipmentType ?? undefined}
           />
         )}
-        {!isWarehouse && currentStepDef?.key === "pv" && (
+        {!isWarehouse && !isComputerizedSystem && currentStepDef?.key === "pv" && (
           <PVStep protocolId={id} onDone={() => setStep(step + 1)} onBack={() => setStep(step - 1)} />
         )}
-        {!isWarehouse && currentStepDef?.key === "excursion" && (
+        {!isWarehouse && !isComputerizedSystem && currentStepDef?.key === "excursion" && (
           <ExcursionStudyStep protocolId={id} onDone={() => setStep(step + 1)} onBack={() => setStep(step - 1)} />
         )}
-        {!isWarehouse && currentStepDef?.key === "attachments" && (
+        {!isWarehouse && !isComputerizedSystem && currentStepDef?.key === "attachments" && (
           <ProtocolAttachmentsStep protocolId={id} onDone={() => setStep(step + 1)} onBack={() => setStep(step - 1)} />
         )}
-        {!isWarehouse && currentStepDef?.key === "final" && (
+        {!isWarehouse && !isComputerizedSystem && currentStepDef?.key === "final" && (
           <FinalReportStep protocolId={id} onBack={() => setStep(step - 1)} />
         )}
       </div>

@@ -75,6 +75,7 @@ export const EQUIPMENT_TYPES = [
   { id: "chamber", label: "Холодильная камера" },
   { id: "auto-refrigerator", label: "Авторефрижератор" },
   { id: "thermal-container", label: "Термоконтейнер" },
+  { id: "computerized-system", label: "Компьютеризированная система" },
   { id: "warehouse", label: "Помещение / зона хранения" },
   { id: "other", label: "Другое" },
 ] as const;
