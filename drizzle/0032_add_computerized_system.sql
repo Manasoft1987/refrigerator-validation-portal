@@ -1,7 +1,7 @@
 ALTER TABLE `protocols`
   MODIFY COLUMN `equipmentType`
   enum('refrigerator','auto-refrigerator','thermal-container','computerized-system','warehouse','other')
-  NULL DEFAULT 'refrigerator';
+  DEFAULT 'refrigerator';
 
 ALTER TABLE `generalInfo`
   ADD COLUMN `computerizedSystemConfig` json NULL AFTER `thermalContainerConfig`;
@@ -9,4 +9,4 @@ ALTER TABLE `generalInfo`
 ALTER TABLE `generalInfo`
   MODIFY COLUMN `equipmentType`
   enum('refrigerator','auto-refrigerator','chamber','thermal-container','computerized-system','warehouse','other')
-  NULL DEFAULT 'refrigerator';
+  DEFAULT 'refrigerator';

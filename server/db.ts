@@ -893,7 +893,7 @@ export async function ensureThermalContainerStorage() {
       await db.execute(sql.raw(
         "ALTER TABLE protocols MODIFY COLUMN equipmentType " +
         "enum('refrigerator','auto-refrigerator','thermal-container','computerized-system','warehouse','other') " +
-        "NULL DEFAULT 'refrigerator'",
+        "DEFAULT 'refrigerator'",
       ));
     }
 
@@ -906,7 +906,7 @@ export async function ensureThermalContainerStorage() {
       await db.execute(sql.raw(
         "ALTER TABLE generalInfo MODIFY COLUMN equipmentType " +
         "enum('refrigerator','auto-refrigerator','chamber','thermal-container','computerized-system','warehouse','other') " +
-        "NULL DEFAULT 'refrigerator'",
+        "DEFAULT 'refrigerator'",
       ));
     }
 
