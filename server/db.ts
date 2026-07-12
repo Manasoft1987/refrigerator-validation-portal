@@ -796,18 +796,30 @@ export async function insertProtocol(data: InsertProtocol) {
       return protocol;
     });
   }
+  // Drizzle includes every modeled pvSessions column in INSERT statements,
+  // even when only protocolId and defaults are supplied. Older production
+  // databases therefore need both incremental PV schema upgrades before a
+  // protocol can be created, regardless of its equipment type.
+  await ensurePVTrialStorage();
+  await ensurePVPlanBackgroundStorage();
   const res = await db.insert(protocols).values(data);
   const [row] = await db
     .select()
     .from(protocols)
     .where(eq(protocols.id, (res as any)[0].insertId))
     .limit(1);
-  // Initialize empty PV session
-  await db.insert(pvSessions).values({
-    protocolId: row.id,
-    minDurationHours: 72,
-    minSensorCount: 9,
-  });
+  // Initialize empty PV session. If this unexpectedly fails, remove the
+  // parent row so the registry never contains a half-created protocol.
+  try {
+    await db.insert(pvSessions).values({
+      protocolId: row.id,
+      minDurationHours: 72,
+      minSensorCount: 9,
+    });
+  } catch (error) {
+    await db.delete(protocols).where(eq(protocols.id, row.id));
+    throw error;
+  }
   return row;
 }
 
