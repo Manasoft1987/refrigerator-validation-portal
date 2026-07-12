@@ -281,7 +281,7 @@ const schemaSql = [
     text text NOT NULL,
     isDefault int NOT NULL DEFAULT 1,
     companyId int,
-    equipmentType enum('refrigerator','auto-refrigerator','chamber','thermal-container','warehouse','other') NOT NULL DEFAULT 'refrigerator',
+    equipmentType enum('refrigerator','auto-refrigerator','chamber','thermal-container','computerized-system','warehouse','other') NOT NULL DEFAULT 'refrigerator',
     equipmentKind enum('conditioner','ventilation','heat_curtain','chiller','fan_coil','other'),
     PRIMARY KEY (id)
   )`,

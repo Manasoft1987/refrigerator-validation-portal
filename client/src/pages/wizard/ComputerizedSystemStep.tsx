@@ -28,11 +28,11 @@ export default function ComputerizedSystemStep({ protocolId, section, onNext, on
   const [config, setConfig] = useState<any>(DEFAULT_CONFIG);
   const [seeded, setSeeded] = useState(false);
   useEffect(() => {
-    if (!giQ.data || seeded) return;
-    const saved = (giQ.data.computerizedSystemConfig as any) || {};
+    if (giQ.isLoading || seeded) return;
+    const saved = (giQ.data?.computerizedSystemConfig as any) || {};
     setConfig({ ...DEFAULT_CONFIG, ...saved, screening: { ...DEFAULT_CONFIG.screening, ...(saved.screening || {}) }, supplierAssessment: { ...DEFAULT_CONFIG.supplierAssessment, ...(saved.supplierAssessment || {}) } });
     setSeeded(true);
-  }, [giQ.data, seeded]);
+  }, [giQ.data, giQ.isLoading, seeded]);
   const save = trpc.generalInfo.save.useMutation({ onError: e => toast.error(e.message) });
   const report = trpc.report.generate.useMutation({
     onSuccess: ({ url }) => window.open(new URL(url, window.location.origin).href, "_blank", "noopener,noreferrer"),
@@ -75,6 +75,7 @@ export default function ComputerizedSystemStep({ protocolId, section, onNext, on
   };
   const updateRow = (key: "requirements" | "tests", i: number, patch: any) => setConfig({ ...config, [key]: config[key].map((x: any, idx: number) => idx === i ? { ...x, ...patch } : x) });
   const removeRow = (key: "requirements" | "tests", i: number) => setConfig({ ...config, [key]: config[key].filter((_: any, idx: number) => idx !== i) });
+  if (giQ.isError) return <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-sm text-destructive">Не удалось загрузить данные системы: {giQ.error.message}</div>;
   if (giQ.isLoading || !seeded) return <div className="h-72 rounded-xl bg-muted animate-pulse" />;
   return <div className="space-y-6"><Card><CardContent className="p-6 md:p-8 space-y-6">
     {section === "profile" && <><Header title="Паспорт компьютеризированной системы" text="Границы системы и предполагаемое GxP-использование."/><div className="grid md:grid-cols-2 gap-4">
