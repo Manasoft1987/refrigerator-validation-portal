@@ -329,8 +329,8 @@ export default function ProtocolsIndex() {
       )}
 
       <Dialog open={createOpen} onOpenChange={open => { setCreateOpen(open); }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[calc(100dvh-2rem)] max-w-lg flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b px-6 py-5 pr-12">
             <DialogTitle>Новый протокол</DialogTitle>
             <DialogDescription>
               {createStep === 1
@@ -339,8 +339,9 @@ export default function ProtocolsIndex() {
             </DialogDescription>
           </DialogHeader>
 
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-4">
           {createStep === 1 && (
-            <div className="py-2 space-y-4">
+            <div className="space-y-4">
               <div className="grid grid-cols-1 gap-3">
                 {([
                   { id: "refrigerator", label: "Холодильник", icon: "🧊", desc: "Фармацевтический холодильник / камера хранения" },
@@ -385,7 +386,7 @@ export default function ProtocolsIndex() {
           )}
 
           {createStep === 2 && (
-            <div className="py-2 space-y-2">
+            <div className="space-y-2">
               <Label className="text-xs uppercase tracking-wide text-muted-foreground">
                 Организация
               </Label>
@@ -412,7 +413,9 @@ export default function ProtocolsIndex() {
             </div>
           )}
 
-          <DialogFooter className="gap-2">
+          </div>
+
+          <DialogFooter className="shrink-0 gap-2 border-t bg-background px-6 py-4">
             <Button variant="outline" onClick={() => {
               if (createStep === 2) setCreateStep(1);
               else setCreateOpen(false);
