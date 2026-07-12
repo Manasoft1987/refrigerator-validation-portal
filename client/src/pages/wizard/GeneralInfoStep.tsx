@@ -91,7 +91,7 @@ export default function GeneralInfoStep({
       setForm((prev: any) => ({
         ...prev,
         ...giQ.data,
-        equipmentType: giQ.data?.equipmentType || initialEquipmentType || prev.equipmentType,
+        equipmentType: initialEquipmentType || giQ.data?.equipmentType || prev.equipmentType,
         commissionMembers: (giQ.data?.commissionMembers as CM[] | null) || [],
         thermalContainerConfig: {
           ...prev.thermalContainerConfig,

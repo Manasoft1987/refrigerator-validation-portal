@@ -778,6 +778,11 @@ export const appRouter = router({
         const isComputerizedSystemSave =
           protocol.equipmentType === "computerized-system" ||
           coerced.equipmentType === "computerized-system";
+        const usesProtocolEquipmentType =
+          protocol.equipmentType === "thermal-container" ||
+          protocol.equipmentType === "computerized-system" ||
+          coerced.equipmentType === "thermal-container" ||
+          coerced.equipmentType === "computerized-system";
         if (isComputerizedSystemSave && coerced.computerizedSystemConfig) {
           const computerizedSystemConfig = coerced.computerizedSystemConfig as any;
           const decision = computerizedSystemConfig.releaseDecision;
@@ -789,7 +794,7 @@ export const appRouter = router({
             });
           }
         }
-        if (isComputerizedSystemSave && coerced.equipmentType === "computerized-system") {
+        if (usesProtocolEquipmentType) {
           delete coerced.equipmentType;
         }
         const saved = await upsertGeneralInfo(protocolId, coerced);

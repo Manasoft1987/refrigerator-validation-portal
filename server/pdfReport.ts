@@ -359,7 +359,7 @@ const WAREHOUSE_SEASON_LABEL: Record<string, string> = {
 };
 
 function getReportEquipmentType(input?: ReportInput): string | null {
-  return input?.generalInfo?.equipmentType || input?.protocol?.equipmentType || null;
+  return input?.protocol?.equipmentType || input?.generalInfo?.equipmentType || null;
 }
 
 /** Returns the human-readable equipment name from protocol-level fields (nominative case) */
@@ -747,7 +747,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   /* ЧАСТЬ I — ПРОТОКОЛ КВАЛИФИКАЦИИ (ПЛАН)            */
   /* ============================================================ */
   drawPartCover(doc, input, "part1");
-  const isWarehouseDoc = (input.generalInfo?.equipmentType || input.protocol?.equipmentType) === "warehouse";
+  const isWarehouseDoc = getReportEquipmentType(input) === "warehouse";
   if (isWarehouseDoc) {
     // ── WAREHOUSE PART I: sections 1–7 per EAEU Rec. #8 ──────────────────────
     drawWarehouseProtocolPart1(doc, input);
@@ -813,14 +813,14 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
 
   doc.addPage();
     drawSectionTitle(doc, "9. Результаты PV — Эксплуатационная квалификация");
-    if ((input.generalInfo?.equipmentType || input.protocol?.equipmentType) === "thermal-container") {
+    if (getReportEquipmentType(input) === "thermal-container") {
       drawThermalTrialsSummary(doc, input);
     }
   drawStageDataEntryTable(doc, input, "PV");
   drawPVParams(doc, input.pv, input);
 
   if (input.pvLoggers && input.pvLoggers.length > 0) {
-    const eqType = input.generalInfo?.equipmentType || input.protocol?.equipmentType || "";
+    const eqType = getReportEquipmentType(input) || "";
     if (eqType === "warehouse") {
       // Warehouse: single floor plan diagram only (no ISPE grid schema)
       drawWarehousePlanDiagram(doc, input, false, "Схема. Расстановка датчиков на плане помещения");
@@ -961,7 +961,7 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
     .text(partSubtitle, left, y, { align: "center" });
 
   y += 24;
-  const eqType = input.generalInfo?.equipmentType || input.protocol?.equipmentType || "";
+  const eqType = getReportEquipmentType(input) || "";
   const equipmentTypeLabel = eqType === "chamber"
     ? "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430"
     : eqType === "thermal-container"
@@ -986,7 +986,7 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
   const gi = input.generalInfo;
   const objectLabel = eqType === "warehouse"
     ? getEquipmentName(input)
-    : EQUIPMENT_LABEL[gi?.equipmentType || ""] || "—";
+    : EQUIPMENT_LABEL[eqType || ""] || "—";
   const refrigerationUnit = `${gi?.manufacturer || ""} ${gi?.model || ""}`.trim() || "—";
   const selectedThermalModes = gi?.thermalContainerConfig?.selectedModes || [];
   const temperatureModeLabel = selectedThermalModes.length > 0
@@ -1181,7 +1181,8 @@ function drawThermalTrialsSummary(doc: PDFKit.PDFDocument, input: ReportInput) {
 
 function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
   const gi = input.generalInfo;
-  const isWarehouse = gi?.equipmentType === "warehouse";
+  const eqType = getReportEquipmentType(input) || "";
+  const isWarehouse = eqType === "warehouse";
   const loadPercentLabel = formatLoadPercent(gi?.loadPercent);
 
   let rows: Array<[string, string]>;
@@ -1195,7 +1196,7 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
     const dims = `${lengthM} × ${widthM} × ${heightM} м (Д × Ш × В)`;
     const fillStatusLabel = gi?.fillStatus ? { empty: "Пустой", loaded: "Загруженный" }[gi.fillStatus] : "—";
     rows = [
-      ["Тип объекта", gi?.equipmentType === "warehouse" ? getEquipmentName(input) : EQUIPMENT_LABEL[gi?.equipmentType || ""] || "—"],
+      ["Тип объекта", eqType === "warehouse" ? getEquipmentName(input) : EQUIPMENT_LABEL[eqType || ""] || "—"],
       ["Тип помещения / зоны", WAREHOUSE_STUDY_LABEL[gi?.whStudyType || ""] || "—"],
       ["Адрес объекта", gi?.location || "—"],
       ["Температурный режим", TEMP_MODE_LABEL[gi?.tempMode || ""] || "—"],
@@ -1220,7 +1221,7 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
   } else {
     // Refrigerator / auto-refrigerator: show equipment-specific fields
     rows = [
-      ["Тип оборудования", gi?.equipmentType === "warehouse" ? getEquipmentName(input) : EQUIPMENT_LABEL[gi?.equipmentType || ""] || "—"],
+      ["Тип оборудования", eqType === "warehouse" ? getEquipmentName(input) : EQUIPMENT_LABEL[eqType || ""] || "—"],
       ["Производитель", gi?.manufacturer || "—"],
       ["Модель", gi?.model || "—"],
       ["Серийный номер", gi?.serial || "—"],
@@ -1235,9 +1236,9 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
       ["Процент загруженности объекта", loadPercentLabel],
     ];
   }
-  if (gi?.equipmentType === "thermal-container") {
-    const config = gi.thermalContainerConfig;
-    const modeLabels = (config?.selectedModes || [gi.tempMode].filter(Boolean) as string[])
+  if (eqType === "thermal-container") {
+    const config = gi?.thermalContainerConfig;
+    const modeLabels = (config?.selectedModes || [gi?.tempMode].filter(Boolean) as string[])
       .map(mode => TEMP_MODE_LABEL[mode] || mode)
       .join(", ") || "—";
     const dimensions = [config?.innerLengthCm, config?.innerWidthCm, config?.innerHeightCm]
@@ -1249,11 +1250,11 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
 
     rows = [
       ["Тип оборудования", "Термоконтейнер"],
-      ["Производитель", gi.manufacturer || "—"],
-      ["Модель", gi.model || "—"],
-      ["Серийный / инвентарный номер", gi.serial || gi.inventory || "—"],
+      ["Производитель", gi?.manufacturer || "—"],
+      ["Модель", gi?.model || "—"],
+      ["Серийный / инвентарный номер", gi?.serial || gi?.inventory || "—"],
       ["Заявленные температурные режимы", modeLabels],
-      ["Режим текущего испытания", TEMP_MODE_LABEL[gi.tempMode || ""] || "—"],
+      ["Режим текущего испытания", TEMP_MODE_LABEL[gi?.tempMode || ""] || "—"],
       ["Полезный объем", config?.volumeLiters ? `${config.volumeLiters} л` : "—"],
       ["Внутренние размеры (Д × Ш × В)", `${dimensions} см`],
       ["Тип теплоизоляции", config?.insulationType || "—"],
@@ -1262,8 +1263,8 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
       ["Заявленное время удержания", config?.targetDurationHours ? `${config.targetDurationHours} ч` : "—"],
       ["Профиль загрузки", loadProfile || "—"],
       ["Схема упаковки / примечания", config?.packingNotes || "—"],
-      ["Место подготовки и эксплуатации", gi.location || "—"],
-      ["Назначение", gi.purpose || "—"],
+      ["Место подготовки и эксплуатации", gi?.location || "—"],
+      ["Назначение", gi?.purpose || "—"],
       ["Организация", input.org.name],
     ];
   }
