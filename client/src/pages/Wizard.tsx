@@ -262,7 +262,9 @@ export default function Wizard() {
             </div>
             <h1 className="text-3xl font-semibold tracking-tight num">{p.number}</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Заполните {totalSteps} этапов — портал автоматически рассчитает статистику PV и подготовит PDF.
+              {isComputerizedSystem
+                ? "Заполните 6 этапов — портал подготовит GAMP-отчёт и решение о выпуске системы."
+                : `Заполните ${totalSteps} этапов — портал автоматически рассчитает статистику PV и подготовит PDF.`}
             </p>
           </div>
           <div className="space-y-1 w-full max-w-xs">

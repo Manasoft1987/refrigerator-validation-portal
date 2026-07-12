@@ -679,7 +679,7 @@ export const appRouter = router({
       .input(z.object({ protocolId: z.number() }))
       .query(async ({ ctx, input }) => {
         await ownProtocol(ctx.user.id, input.protocolId);
-        return getGeneralInfo(input.protocolId);
+        return (await getGeneralInfo(input.protocolId)) ?? null;
       }),
     save: protectedProcedure
       .input(
