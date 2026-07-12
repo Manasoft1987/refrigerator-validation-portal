@@ -745,7 +745,7 @@ export const appRouter = router({
         }),
       )
        .mutation(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
         const { protocolId, ...patch } = input;
         // Drizzle decimal columns expect strings (or null). Coerce numeric inputs.
         const decimalKeys = [
@@ -775,7 +775,10 @@ export const appRouter = router({
             });
           }
         }
-        if (coerced.equipmentType === "computerized-system" && coerced.computerizedSystemConfig) {
+        const isComputerizedSystemSave =
+          protocol.equipmentType === "computerized-system" ||
+          coerced.equipmentType === "computerized-system";
+        if (isComputerizedSystemSave && coerced.computerizedSystemConfig) {
           const computerizedSystemConfig = coerced.computerizedSystemConfig as any;
           const decision = computerizedSystemConfig.releaseDecision;
           if (computerizedSystemConfig.lastSavedSection === "release" && (decision === "approved" || decision === "conditional") && !getComputerizedSystemReleaseReadiness(computerizedSystemConfig).ready) {
@@ -786,8 +789,11 @@ export const appRouter = router({
             });
           }
         }
+        if (isComputerizedSystemSave && coerced.equipmentType === "computerized-system") {
+          delete coerced.equipmentType;
+        }
         const saved = await upsertGeneralInfo(protocolId, coerced);
-        if (coerced.equipmentType === "computerized-system" && coerced.computerizedSystemConfig) {
+        if (isComputerizedSystemSave && coerced.computerizedSystemConfig) {
           const computerizedSystemConfig = coerced.computerizedSystemConfig as any;
           const decision = computerizedSystemConfig.releaseDecision;
           if (decision && decision !== "pending") {

@@ -897,19 +897,6 @@ export async function ensureThermalContainerStorage() {
       ));
     }
 
-    const generalInfoTypeResult = await db.execute(sql.raw(
-      "SHOW COLUMNS FROM generalInfo LIKE 'equipmentType'",
-    ));
-    const generalInfoTypeRows = (generalInfoTypeResult as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
-    const generalInfoType = String(generalInfoTypeRows?.[0]?.Type ?? generalInfoTypeRows?.[0]?.type ?? "");
-    if (!generalInfoType.includes("'computerized-system'")) {
-      await db.execute(sql.raw(
-        "ALTER TABLE generalInfo MODIFY COLUMN equipmentType " +
-        "enum('refrigerator','auto-refrigerator','chamber','thermal-container','computerized-system','warehouse','other') " +
-        "DEFAULT 'refrigerator'",
-      ));
-    }
-
     const configColumnResult = await db.execute(sql.raw(
       "SHOW COLUMNS FROM generalInfo LIKE 'thermalContainerConfig'",
     ));
