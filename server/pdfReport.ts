@@ -1864,35 +1864,37 @@ function drawDeviationsSection(doc: PDFKit.PDFDocument, pv: ReportInput["pv"]) {
   const right = doc.page.width - PAGE_MARGIN;
   const w = right - left;
   const cols = [
-    { label: "Датчик", w: 0.2 },
-    { label: "Тип", w: 0.12 },
-    { label: "Начало", w: 0.22 },
-    { label: "Окончание", w: 0.22 },
+    { label: "Датчик", w: 0.22 },
+    { label: "Тип", w: 0.17 },
+    { label: "Начало", w: 0.185 },
+    { label: "Окончание", w: 0.185 },
     { label: "Длительность", w: 0.14 },
     { label: "Экстремум, °C", w: 0.1 },
   ];
-  ensureSpace(doc, 26);
+  const padding = 4;
+  const headerFontSize = 8.5;
+  doc.font("bold").fontSize(headerFontSize);
+  const headerH = Math.max(
+    24,
+    ...cols.map(c =>
+      doc.heightOfString(c.label, { width: c.w * w - padding * 2 }) + padding * 2,
+    ),
+  );
+  ensureSpace(doc, headerH + 4);
   let y = doc.y;
   doc.save();
-  doc.rect(left, y, w, 22).fill(ACCENT);
+  doc.rect(left, y, w, headerH).fill(ACCENT);
   doc.restore();
   let cx = left;
-  doc.fillColor("white").font("bold").fontSize(9);
+  doc.fillColor("white").font("bold").fontSize(headerFontSize);
   cols.forEach(c => {
     const cw = c.w * w;
-    doc.text(c.label, cx + 4, y + 6, { width: cw - 8 });
+    doc.text(c.label, cx + padding, y + padding, { width: cw - padding * 2 });
     cx += cw;
   });
-  doc.y = y + 22;
+  doc.y = y + headerH;
 
   all.forEach((d, idx) => {
-    ensureSpace(doc, 22);
-    const ry = doc.y;
-    if (idx % 2 === 0) {
-      doc.save();
-      doc.fillColor(SOFT_BG).rect(left, ry, w, 22).fill();
-      doc.restore();
-    }
     const cells = [
       d.label,
       d.type === "high" ? "Превышение" : "Понижение",
@@ -1901,14 +1903,28 @@ function drawDeviationsSection(doc: PDFKit.PDFDocument, pv: ReportInput["pv"]) {
       fmtDuration(d.durationMs),
       d.value.toFixed(2),
     ];
+    doc.font("body").fontSize(9);
+    const rowH = Math.max(
+      24,
+      ...cells.map((val, i) =>
+        doc.heightOfString(val || "—", { width: cols[i].w * w - padding * 2 }) + padding * 2,
+      ),
+    );
+    ensureSpace(doc, rowH);
+    const ry = doc.y;
+    if (idx % 2 === 0) {
+      doc.save();
+      doc.fillColor(SOFT_BG).rect(left, ry, w, rowH).fill();
+      doc.restore();
+    }
     let cx2 = left;
     doc.font("body").fontSize(9).fillColor(d.type === "high" ? "#b91c1c" : "#1d4ed8");
     cells.forEach((val, i) => {
       const cw = cols[i].w * w;
-      doc.text(val, cx2 + 4, ry + 6, { width: cw - 8 });
+      doc.text(val, cx2 + padding, ry + padding, { width: cw - padding * 2 });
       cx2 += cw;
     });
-    doc.y = ry + 22;
+    doc.y = ry + rowH;
   });
   doc.moveDown(0.4);
 }
