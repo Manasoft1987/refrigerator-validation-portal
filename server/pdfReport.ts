@@ -1105,27 +1105,17 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
 /* -------------------------------------------------------------------------- */
 
 function drawSectionTitle(doc: PDFKit.PDFDocument, title: string) {
+  ensureSpace(doc, 70);
   const left = PAGE_MARGIN;
   const right = doc.page.width - PAGE_MARGIN;
-  const textX = left + 14;
-  const textW = right - textX - 4;
-  doc.font("bold").fontSize(14);
-  const textH = doc.heightOfString(title, { width: textW });
-  const barH = Math.max(30, Math.ceil(textH + 14));
-  ensureSpace(doc, barH + 40);
-  const y = doc.y;
   doc.save();
-  doc.rect(left, y, 4, barH).fill(ACCENT);
+  doc.rect(left, doc.y, 4, 30).fill(ACCENT);
   doc.restore();
   doc
     .fillColor(ACCENT)
     .font("bold")
     .fontSize(14)
-    .text(title, textX, y + Math.max(7, (barH - textH) / 2), {
-      width: textW,
-      lineBreak: true,
-    });
-  doc.y = y + barH;
+    .text(title, left + 14, doc.y + 7, { width: right - left - 18, lineBreak: false });
   doc.moveDown(0.7);
   doc.save();
   doc.strokeColor(BORDER).lineWidth(0.6).moveTo(left, doc.y).lineTo(right, doc.y).stroke();
@@ -1342,41 +1332,31 @@ function drawSimpleTable(
   const colW = colFractions.map(fraction => fraction * totalW);
   const padding = 6;
 
-  doc.fillColor("white").font("bold").fontSize(9);
-  const headerTextHeights = headers.map((header, index) =>
-    doc.heightOfString(header, { width: colW[index] - padding * 2 }),
-  );
-  const headerH = Math.max(24, Math.ceil(Math.max(...headerTextHeights) + padding * 2));
-  const drawHeader = () => {
-    ensureSpace(doc, headerH + 2);
-    const headerY = doc.y;
-    doc.save();
-    doc.rect(left, headerY, totalW, headerH).fill(ACCENT);
-    doc.restore();
+  ensureSpace(doc, 28);
+  let y = doc.y;
+  const headerH = 24;
+  doc.save();
+  doc.rect(left, y, totalW, headerH).fill(ACCENT);
+  doc.restore();
 
-    let headerX = left;
-    doc.fillColor("white").font("bold").fontSize(9);
-    headers.forEach((header, index) => {
-      doc.text(header, headerX + padding, headerY + (headerH - headerTextHeights[index]) / 2, {
-        width: colW[index] - padding * 2,
-        lineBreak: true,
-      });
-      headerX += colW[index];
-    });
-    doc.y = headerY + headerH;
-  };
-  drawHeader();
+  let cx = left;
+  doc.fillColor("white").font("bold").fontSize(9);
+  headers.forEach((header, index) => {
+    doc.text(header, cx + padding, y + 7, { width: colW[index] - padding * 2, lineBreak: false });
+    cx += colW[index];
+  });
+  doc.y = y + headerH;
 
   rows.forEach((cells, rowIndex) => {
     doc.font("body").fontSize(9);
-    const cellHeights = cells.map((cell, index) =>
-      doc.heightOfString(cell || "—", { width: colW[index] - padding * 2 }),
+    const rowH = Math.max(
+      26,
+      ...cells.map((cell, index) =>
+        doc.heightOfString(cell || "—", { width: colW[index] - padding * 2 }) + padding * 2,
+      ),
     );
-    const rowH = Math.max(26, ...cellHeights.map(height => height + padding * 2));
-    const pageBefore = doc.page;
     ensureSpace(doc, rowH);
-    if (doc.page !== pageBefore) drawHeader();
-    const y = doc.y;
+    y = doc.y;
     if (rowIndex % 2 === 0) {
       doc.save();
       doc.fillColor(SOFT_BG).rect(left, y, totalW, rowH).fill();
@@ -1386,7 +1366,7 @@ function drawSimpleTable(
     doc.strokeColor(BORDER).lineWidth(0.5).rect(left, y, totalW, rowH).stroke();
     doc.restore();
 
-    let cx = left;
+    cx = left;
     cells.forEach((cell, index) => {
       if (index > 0) {
         doc.save();
@@ -1394,9 +1374,7 @@ function drawSimpleTable(
         doc.restore();
       }
       doc.fillColor(ACCENT).font("body").fontSize(9)
-        .text(cell || "—", cx + padding, y + (rowH - cellHeights[index]) / 2, {
-          width: colW[index] - padding * 2,
-        });
+        .text(cell || "—", cx + padding, y + padding, { width: colW[index] - padding * 2 });
       cx += colW[index];
     });
     doc.y = y + rowH;
@@ -1468,12 +1446,7 @@ function drawStageBlocks(
     ["Критерии приемлемости", stage.criteria],
   ];
   blocks.forEach(([k, v]) => {
-    const width = doc.page.width - PAGE_MARGIN * 2;
-    doc.font("bold").fontSize(11);
-    const headingH = doc.heightOfString(k, { width });
-    doc.font("body").fontSize(10);
-    const bodyH = doc.heightOfString(v || "—", { width, align: "justify" });
-    ensureSpace(doc, headingH + bodyH + 24);
+    ensureSpace(doc, 60);
     doc.fillColor(ACCENT).font("bold").fontSize(11).text(k);
     doc.moveDown(0.3);
     doc.fillColor("#1f2937").font("body").fontSize(10).text(v, { align: "justify" });
@@ -1677,35 +1650,31 @@ function drawStatsTable(
     { label: "Откл.", w: 0.08 },
   ];
 
-  const paddingX = 4;
-  const paddingY = 6;
-  doc.fillColor("white").font("bold").fontSize(9);
-  const headerTextHeights = cols.map(c =>
-    doc.heightOfString(c.label, { width: c.w * w - paddingX * 2 }),
-  );
-  const headerH = Math.max(24, Math.ceil(Math.max(...headerTextHeights) + paddingY * 2));
+  const ROW_H = 26; // Increased by 10% from 24
+  const HEADER_H = 24; // Increased by 10% from 22
 
-  const drawHeader = () => {
-    ensureSpace(doc, headerH + 2);
-    const headerY = doc.y;
-    doc.save();
-    doc.rect(left, headerY, w, headerH).fill(ACCENT);
-    doc.restore();
-    let headerX = left;
-    doc.fillColor("white").font("bold").fontSize(9);
-    cols.forEach((c, index) => {
-      const cw = c.w * w;
-      doc.text(c.label, headerX + paddingX, headerY + (headerH - headerTextHeights[index]) / 2, {
-        width: cw - paddingX * 2,
-        lineBreak: true,
-      });
-      headerX += cw;
-    });
-    doc.y = headerY + headerH;
-  };
-  drawHeader();
+  ensureSpace(doc, HEADER_H + 2);
+  let y = doc.y;
+  doc.save();
+  doc.rect(left, y, w, HEADER_H).fill(ACCENT);
+  doc.restore();
+  let cx = left;
+  doc.fillColor("white").font("bold").fontSize(9);
+  cols.forEach(c => {
+    const cw = c.w * w;
+    doc.text(c.label, cx + 4, y + 5, { width: cw - 8, lineBreak: false });
+    cx += cw;
+  });
+  doc.y = y + HEADER_H;
 
   loggers.forEach((l, idx) => {
+    ensureSpace(doc, ROW_H);
+    const ry = doc.y;
+    if (idx % 2 === 0) {
+      doc.save();
+      doc.fillColor(SOFT_BG).rect(left, ry, w, ROW_H).fill();
+      doc.restore();
+    }
     let role = l.role === "external" ? "внеш." : "внутр.";
     if (idx === hotIdx) role = "внутр. гор.";
     if (idx === coldIdx) role = "внутр. хол.";
@@ -1722,31 +1691,14 @@ function drawStatsTable(
       String(l.pointCount),
       String(l.deviations.length),
     ];
-    doc.font("body").fontSize(9);
-    const cellHeights = cells.map((value, index) =>
-      doc.heightOfString(value, { width: cols[index].w * w - paddingX * 2 }),
-    );
-    const rowH = Math.max(26, Math.ceil(Math.max(...cellHeights) + paddingY * 2));
-    const pageBefore = doc.page;
-    ensureSpace(doc, rowH);
-    if (doc.page !== pageBefore) drawHeader();
-    const ry = doc.y;
-    if (idx % 2 === 0) {
-      doc.save();
-      doc.fillColor(SOFT_BG).rect(left, ry, w, rowH).fill();
-      doc.restore();
-    }
     let cx2 = left;
-    doc.fillColor(ACCENT);
+    doc.font("body").fontSize(9).fillColor(ACCENT);
     cells.forEach((val, i) => {
       const cw = cols[i].w * w;
-      doc.text(val, cx2 + paddingX, ry + (rowH - cellHeights[i]) / 2, {
-        width: cw - paddingX * 2,
-        lineBreak: true,
-      });
+      doc.text(val, cx2 + 4, ry + 8, { width: cw - 8, lineBreak: false });
       cx2 += cw;
     });
-    doc.y = ry + rowH;
+    doc.y = ry + ROW_H;
   });
   doc.moveDown(0.4);
 }
@@ -2680,7 +2632,7 @@ function drawMeasurementTable(doc: PDFKit.PDFDocument, loggers: LoggerSummary[],
   }
 
   const ROW_H = 18;
-  const HEADER_MIN_H = 26;
+  const HEADER_H = 26;
   const MAX_SENSORS_PER_BLOCK = 12;
 
   // Limit to 2000 rows to avoid huge PDFs; if more, sample evenly
@@ -2716,18 +2668,12 @@ function drawMeasurementTable(doc: PDFKit.PDFDocument, loggers: LoggerSummary[],
         w: sensorColW,
       })),
     ];
-    doc.font("bold").fontSize(6.5);
-    const headerLabels = cols.map(c => fitTextToLines(doc, c.label, c.w * w - 6, 3));
-    const headerTextHeights = headerLabels.map((label, index) =>
-      doc.heightOfString(label, { width: cols[index].w * w - 6 }),
-    );
-    const headerH = Math.max(HEADER_MIN_H, Math.ceil(Math.max(...headerTextHeights) + 10));
     const firstSensorNo = groupIdx * MAX_SENSORS_PER_BLOCK + 1;
     const lastSensorNo = firstSensorNo + group.length - 1;
     const blockLabel = `Датчики ${firstSensorNo}–${lastSensorNo} из ${loggers.length}`;
 
     const drawBlockHeading = () => {
-      ensureSpace(doc, (loggerGroups.length > 1 ? 20 : 0) + headerH + ROW_H);
+      ensureSpace(doc, (loggerGroups.length > 1 ? 20 : 0) + HEADER_H + ROW_H);
       if (loggerGroups.length > 1) {
         doc.font("bold").fontSize(8).fillColor(MUTED).text(blockLabel, left, doc.y, {
           width: w,
@@ -2738,22 +2684,19 @@ function drawMeasurementTable(doc: PDFKit.PDFDocument, loggers: LoggerSummary[],
     };
 
     const drawHeader = () => {
-      ensureSpace(doc, headerH + ROW_H);
+      ensureSpace(doc, HEADER_H + ROW_H);
       const y = doc.y;
       doc.save();
-      doc.rect(left, y, w, headerH).fillColor(ACCENT).fill();
+      doc.rect(left, y, w, HEADER_H).fillColor(ACCENT).fill();
       doc.restore();
       let cx = left;
       doc.fillColor("white").font("bold").fontSize(6.5);
-      cols.forEach((c, index) => {
+      cols.forEach(c => {
         const cw = c.w * w;
-        doc.text(headerLabels[index], cx + 3, y + (headerH - headerTextHeights[index]) / 2, {
-          width: cw - 6,
-          lineBreak: true,
-        });
+        doc.text(c.label, cx + 3, y + 5, { width: cw - 6, lineBreak: true });
         cx += cw;
       });
-      doc.y = y + headerH;
+      doc.y = y + HEADER_H;
     };
 
     drawBlockHeading();
@@ -4636,29 +4579,20 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
   if (eqList.length > 0) {
     doc.moveDown(0.8);
     drawSubTitle(doc, "5.1. Перечень оборудования зоны хранения");
-    const safeValue = (v: string | null | undefined): string => {
-      const s = (v ?? "").toString().trim();
-      return s.length > 0 ? s : "—";
-    };
-    const blockWidth = doc.page.width - PAGE_MARGIN * 2;
     eqList.forEach((eq, idx) => {
-      const title = `Оборудование ${idx + 1}: ${safeValue(eq.name)}`;
+      ensureSpace(doc, 60);
+      doc.font("bold").fontSize(10).fillColor(ACCENT)
+        .text(`Оборудование ${idx + 1}: ${eq.name}`, { underline: false });
+      const safeValue = (v: string | null | undefined): string => {
+        const s = (v ?? "").toString().trim();
+        return s.length > 0 ? s : "—";
+      };
       const rows: [string, string][] = [
         ["Производитель", safeValue(eq.manufacturer)],
         ["Модель", safeValue(eq.model)],
         ["Серийный номер", safeValue(eq.serial)],
         ["Назначение", safeValue(eq.purpose)],
       ];
-      doc.font("bold").fontSize(10);
-      const titleH = doc.heightOfString(title, { width: blockWidth });
-      doc.font("body").fontSize(10);
-      const detailsH = rows.reduce(
-        (sum, [label, value]) => sum + doc.heightOfString(`${label}: ${value}`, { width: blockWidth }),
-        0,
-      );
-      ensureSpace(doc, titleH + detailsH + 12);
-      doc.font("bold").fontSize(10).fillColor(ACCENT)
-        .text(title, { width: blockWidth, underline: false });
       rows.forEach(([label, value]) => {
         doc.font("body").fontSize(10).fillColor(MUTED).text(`${label}: `, { continued: true })
           .fillColor(ACCENT).text(value);
@@ -4778,37 +4712,27 @@ function drawSensorTable(
   };
   
   const headers = ["Номер датчика", "Дата поверки", "Следующая поверка", "Статус", "Погрешность (± °C)"];
-  const columnWidths = Object.values(colWidths);
-  const paddingX = 5;
-  const paddingY = 5;
+  const headerY = doc.y;
   
   // Draw header row
   doc.font("bold").fontSize(9).fillColor(ACCENT);
-  const headerHeights = headers.map((header, idx) =>
-    doc.heightOfString(header, { width: columnWidths[idx] - paddingX * 2 }),
-  );
-  const headerH = Math.max(24, Math.ceil(Math.max(...headerHeights) + paddingY * 2));
-  const drawHeader = () => {
-    ensureSpace(doc, headerH + 2);
-    const headerY = doc.y;
-    let headerX = left;
-    doc.font("bold").fontSize(9).fillColor(ACCENT);
-    headers.forEach((header, idx) => {
-      const colW = columnWidths[idx];
-      doc.text(header, headerX + paddingX, headerY + (headerH - headerHeights[idx]) / 2, {
-        width: colW - paddingX * 2,
-        align: "left",
-        lineBreak: true,
-      });
-      headerX += colW;
-    });
-    doc.y = headerY + headerH;
-    doc.save().strokeColor(BORDER).lineWidth(0.6).moveTo(left, doc.y).lineTo(right, doc.y).stroke().restore();
-  };
-  drawHeader();
+  let x = left;
+  headers.forEach((header, idx) => {
+    const colW = Object.values(colWidths)[idx];
+    doc.text(header, x, headerY, { width: colW, align: "left", lineBreak: true });
+    x += colW;
+  });
+  
+  // Draw separator line
+  doc.moveTo(left, doc.y).lineTo(right, doc.y).stroke();
+  doc.moveDown(0.3);
   
   // Draw data rows
-  uniqueSensors.forEach((sensor, rowIndex) => {
+  doc.font("body").fontSize(9).fillColor(ACCENT);
+  uniqueSensors.forEach((sensor) => {
+    ensureSpace(doc, 28);
+    const rowY = doc.y;
+    
     // Format dates
     const calibDate = fmtTraceDate(sensor.calibrationDate);
     const nextDate = fmtTraceDate(sensor.nextCalibrationDate);
@@ -4831,35 +4755,20 @@ function drawSensorTable(
     const accuracyText = `±${rowAccuracy.toFixed(2)}`;
 
     const rowData = [sensor.number, calibDate, nextDate, statusText, accuracyText];
-    doc.font("body").fontSize(9);
-    const rowHeights = rowData.map((value, idx) =>
-      doc.heightOfString(value || "—", { width: columnWidths[idx] - paddingX * 2 }),
-    );
-    const rowH = Math.max(24, Math.ceil(Math.max(...rowHeights) + paddingY * 2));
-    const pageBefore = doc.page;
-    ensureSpace(doc, rowH);
-    if (doc.page !== pageBefore) drawHeader();
-    const rowY = doc.y;
-    if (rowIndex % 2 === 0) {
-      doc.save().fillColor(SOFT_BG).rect(left, rowY, totalWidth, rowH).fill().restore();
-    }
     
     // Draw cells
-    let x = left;
-    columnWidths.forEach((colW, idx) => {
+    x = left;
+    Object.values(colWidths).forEach((colW, idx) => {
       doc.fillColor(idx === 3 ? statusColor : ACCENT);
-      doc.text(rowData[idx], x + paddingX, rowY + (rowH - rowHeights[idx]) / 2, {
-        width: colW - paddingX * 2,
-        align: "left",
-        lineBreak: true,
-      });
+      doc.text(rowData[idx], x, rowY, { width: colW, align: "left", lineBreak: true });
       x += colW;
     });
-    doc.y = rowY + rowH;
-    doc.save().strokeColor(BORDER).lineWidth(0.35).moveTo(left, doc.y).lineTo(right, doc.y).stroke().restore();
+    
+    // Move to next row
+    doc.moveDown(1.2);
   });
   
   // Draw bottom border
-  doc.save().strokeColor(BORDER).lineWidth(0.6).moveTo(left, doc.y).lineTo(right, doc.y).stroke().restore();
+  doc.moveTo(left, doc.y).lineTo(right, doc.y).stroke();
   doc.moveDown(0.5);
 }
