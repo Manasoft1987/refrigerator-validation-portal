@@ -1,11 +1,31 @@
 import { describe, expect, it } from "vitest";
 import PDFDocument from "pdfkit";
 import {
+  addHeadersAndFooters,
   filterProtocolSensorsForReport,
   generateProtocolPdf,
   getSensorCalibrationStatusAtProtocolDate,
   resolveProtocolReferenceDate,
 } from "./pdfReport";
+
+describe("PDF page headers and footers", () => {
+  it("does not append blank pages while numbering buffered pages", () => {
+    const doc = new PDFDocument({ size: "A4", margin: 56, bufferPages: true });
+    doc.registerFont("body", "server/fonts/DejaVuSans.ttf");
+    doc.font("body").text("Страница 1");
+    doc.addPage().font("body").text("Страница 2");
+    doc.addPage().font("body").text("Страница 3");
+
+    const before = doc.bufferedPageRange().count;
+    addHeadersAndFooters(doc, {
+      org: { name: "Тестовая организация" },
+      protocol: { number: "VAL-TEST-001" },
+    } as any);
+
+    expect(doc.bufferedPageRange().count).toBe(before);
+    doc.end();
+  });
+});
 
 function mkSeries(start: number, hours: number, temp: number) {
   const ts: number[] = [];

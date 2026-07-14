@@ -3484,7 +3484,7 @@ function fitTextToLines(doc: PDFKit.PDFDocument, text: string, maxWidth: number,
   return normalized.slice(0, best).trimEnd() + suffix;
 }
 
-function addHeadersAndFooters(doc: PDFKit.PDFDocument, input: ReportInput) {
+export function addHeadersAndFooters(doc: PDFKit.PDFDocument, input: ReportInput) {
   const range = doc.bufferedPageRange();
   const total = range.count;
   const protocolLabel = `Протокол ${input.protocol.number}`;
@@ -3523,14 +3523,23 @@ function addHeadersAndFooters(doc: PDFKit.PDFDocument, input: ReportInput) {
     const pageLabel = `Стр. ${i + 1} из ${total}`;
     const pageLabelW = doc.widthOfString(pageLabel);
     const centerX = left + (right - left) / 2 - pageLabelW / 2;
-    doc
-      .fillColor(MUTED)
-      .font("body")
-      .fontSize(8)
-      .text(pageLabel, centerX, pageH - 26, {
-        width: pageLabelW,
-        lineBreak: false,
-      });
+    // The footer intentionally lives below the content margin. PDFKit 0.18
+    // otherwise treats this text as overflow and appends a blank page for
+    // every buffered page that receives a footer.
+    const originalBottomMargin = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
+    try {
+      doc
+        .fillColor(MUTED)
+        .font("body")
+        .fontSize(8)
+        .text(pageLabel, centerX, pageH - 26, {
+          width: pageLabelW,
+          lineBreak: false,
+        });
+    } finally {
+      doc.page.margins.bottom = originalBottomMargin;
+    }
   }
 }
 
