@@ -778,6 +778,8 @@ export const appRouter = router({
         const isComputerizedSystemSave =
           protocol.equipmentType === "computerized-system" ||
           coerced.equipmentType === "computerized-system";
+        const requestedEquipmentType =
+          typeof coerced.equipmentType === "string" ? coerced.equipmentType : null;
         const usesProtocolEquipmentType =
           protocol.equipmentType === "thermal-container" ||
           protocol.equipmentType === "computerized-system" ||
@@ -798,6 +800,21 @@ export const appRouter = router({
           delete coerced.equipmentType;
         }
         const saved = await upsertGeneralInfo(protocolId, coerced);
+        const syncableProtocolEquipmentTypes = new Set([
+          "refrigerator",
+          "auto-refrigerator",
+          "warehouse",
+          "other",
+        ]);
+        if (
+          requestedEquipmentType &&
+          syncableProtocolEquipmentTypes.has(requestedEquipmentType) &&
+          protocol.equipmentType !== requestedEquipmentType
+        ) {
+          await updateProtocolStatus(protocol.userId, protocolId, {
+            equipmentType: requestedEquipmentType as any,
+          });
+        }
         if (isComputerizedSystemSave && coerced.computerizedSystemConfig) {
           const computerizedSystemConfig = coerced.computerizedSystemConfig as any;
           const decision = computerizedSystemConfig.releaseDecision;
