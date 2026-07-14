@@ -112,8 +112,61 @@ function drawLineChart(
   const marginRight = 56;
   const x0 = marginLeft;
   const pageWidth = doc.page.width - marginLeft - marginRight;
+  const plotLeftPad = 42; // space for Y labels
+  const plotRightPad = 14;
+  const plotLeft = x0 + plotLeftPad;
+  const plotRight = x0 + pageWidth - plotRightPad;
 
-  ensureSpace(doc, height + 20);
+  doc.font("bold").fontSize(11);
+  const titleHeight = doc.heightOfString(title, { width: pageWidth });
+  const singleLineTitleHeight = doc.heightOfString("Ag", { width: pageWidth });
+  const extraTitleHeight = Math.max(0, titleHeight - singleLineTitleHeight);
+
+  const compactLegendName = (value: string): string => {
+    const singleLine = String(value || "—").replace(/\s+/g, " ").trim();
+    const maxTextWidth = Math.min(150, (plotRight - plotLeft) * 0.42);
+    if (doc.widthOfString(singleLine) <= maxTextWidth) return singleLine;
+    let lo = 1;
+    let hi = singleLine.length;
+    let best = "…";
+    while (lo <= hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      const candidate = `${singleLine.slice(0, mid).trimEnd()}…`;
+      if (doc.widthOfString(candidate) <= maxTextWidth) {
+        best = candidate;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    return best;
+  };
+  doc.font("body").fontSize(8);
+  const legendEntries = showLegend
+    ? [
+        ...series.map((s, i) => ({
+          name: compactLegendName(s.name),
+          color: s.color || ACCENT_PALETTE[i % ACCENT_PALETTE.length],
+        })),
+        { name: `Диапазон ${rangeMin}…${rangeMax} °C`, color: BAND_LINE },
+      ]
+    : [];
+  let measuredLegendRows = showLegend ? 1 : 0;
+  if (showLegend) {
+    let measuredX = plotLeft;
+    for (const entry of legendEntries) {
+      const entryWidth = 10 + 4 + doc.widthOfString(entry.name) + 12;
+      if (measuredX + entryWidth > plotRight && measuredX > plotLeft) {
+        measuredLegendRows++;
+        measuredX = plotLeft;
+      }
+      measuredX += entryWidth;
+    }
+  }
+  const extraLegendHeight = Math.max(0, measuredLegendRows - 1) * 14;
+  const chartHeight = height + extraTitleHeight;
+
+  ensureSpace(doc, chartHeight + extraLegendHeight + 20);
   const startY = doc.y;
 
   // Title
@@ -124,15 +177,11 @@ function drawLineChart(
 
   // Top padding gives space for chart title (top) AND event-marker label pills below it.
   // Each stacking level needs ~14pt; reserve 2 levels (28pt) plus 18pt base + 18pt title gap = 64pt.
-  const plotTopPad = eventMarkers.length > 0 ? 64 : 18;
+  const plotTopPad = (eventMarkers.length > 0 ? 64 : 18) + extraTitleHeight;
   const plotTop = startY + plotTopPad;
-  const plotLeftPad = 42; // space for Y labels
   const plotBottomPad = showLegend ? 34 : 18; // space for X labels + legend
-  const plotRightPad = 14;
   const plotWidth = pageWidth - plotLeftPad - plotRightPad;
-  const plotHeight = height - plotTopPad - plotBottomPad;
-  const plotLeft = x0 + plotLeftPad;
-  const plotRight = plotLeft + plotWidth;
+  const plotHeight = chartHeight - plotTopPad - plotBottomPad;
   const plotBottom = plotTop + plotHeight;
 
   // Determine time domain
@@ -291,15 +340,8 @@ function drawLineChart(
     let legendY = plotBottom + 18;
     let lx = plotLeft;
     doc.font("body").fontSize(8).fillColor(LABEL_COLOR);
-    const entries = [
-      ...series.map((s, i) => ({
-        name: s.name,
-        color: s.color || ACCENT_PALETTE[i % ACCENT_PALETTE.length],
-      })),
-      { name: `Диапазон ${rangeMin}…${rangeMax} °C`, color: BAND_LINE },
-    ];
     let legendRowCount = 1;
-    for (const e of entries) {
+    for (const e of legendEntries) {
       const textWidth = doc.widthOfString(e.name);
       const entryWidth = 10 + 4 + textWidth + 12;
       // If entry doesn't fit in current row, wrap to next row
@@ -321,7 +363,7 @@ function drawLineChart(
     // Adjust doc.y to account for multi-row legend
     doc.y = plotBottom + 18 + legendRowCount * 14;
   } else {
-    doc.y = startY + height + 8;
+    doc.y = startY + chartHeight + 8;
   }
   doc.fillColor("#000000");
 }
