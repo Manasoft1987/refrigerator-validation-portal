@@ -311,6 +311,28 @@ function readProviders(): StorageProvider[] {
   return Array.from(new Set(providers));
 }
 
+function writeProviders(): StorageProvider[] {
+  const primary = primaryProvider();
+  const providers: StorageProvider[] = [primary];
+
+  const mirror = mirrorProvider();
+  if (mirror) providers.push(mirror);
+
+  // If the primary S3-compatible endpoint returns a malformed proxy response,
+  // keep uploads working by falling back to legacy Forge storage when it is
+  // configured. This is especially important for generated PDFs: the PDF itself
+  // may be valid, while only object storage is temporarily unavailable.
+  if (primary !== "manus" && ENV.forgeApiUrl && ENV.forgeApiKey) {
+    providers.push("manus");
+  }
+
+  return Array.from(new Set(providers));
+}
+
+function storageErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export function contentTypeForKey(relKey: string): string {
   const ext = path.extname(normalizeKey(relKey)).toLowerCase();
   switch (ext) {
@@ -343,21 +365,36 @@ export async function storagePut(
   data: Buffer | Uint8Array | string,
   contentType = "application/octet-stream",
 ): Promise<{ key: string; url: string }> {
-  const provider = primaryProvider();
   const key = appendHashSuffix(normalizeKey(relKey));
+  const providers = writeProviders();
+  const failures: string[] = [];
+  let writtenProvider: StorageProvider | null = null;
 
-  await putWithProvider(provider, key, data, contentType);
-
-  const mirror = mirrorProvider();
-  if (mirror) {
+  for (const provider of providers) {
     try {
-      await putWithProvider(mirror, key, data, contentType);
+      await putWithProvider(provider, key, data, contentType);
+      writtenProvider = provider;
+      break;
     } catch (error) {
-      console.warn(`[Storage] Mirror write to ${mirror} failed:`, error);
+      failures.push(`${provider}: ${storageErrorMessage(error)}`);
+      console.warn(`[Storage] Write to ${provider} failed:`, error);
     }
   }
 
-  return { key, url: publicUrl(provider, key) };
+  if (!writtenProvider) {
+    throw new Error(`Storage write failed: ${key}. Tried ${failures.join("; ")}`);
+  }
+
+  for (const provider of providers) {
+    if (provider === writtenProvider) continue;
+    try {
+      await putWithProvider(provider, key, data, contentType);
+    } catch (error) {
+      console.warn(`[Storage] Mirror write to ${provider} failed:`, error);
+    }
+  }
+
+  return { key, url: publicUrl(writtenProvider, key) };
 }
 
 export async function storageGet(relKey: string): Promise<{ key: string; url: string }> {
@@ -389,7 +426,7 @@ export async function storageReadBuffer(relKey: string): Promise<StoredObject> {
     try {
       return await readWithProvider(provider, key);
     } catch (error) {
-      failures.push(`${provider}: ${error instanceof Error ? error.message : String(error)}`);
+      failures.push(`${provider}: ${storageErrorMessage(error)}`);
     }
   }
 
