@@ -28,6 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
+import { openReportUrl } from "@/lib/reportDownload";
 import {
   ClipboardList,
   Copy,
@@ -139,7 +140,7 @@ export default function ProtocolsIndex() {
     setDownloadingId(id);
     try {
       const res = await genReport.mutateAsync({ protocolId: id });
-      window.open(new URL(res.url, window.location.origin).href, "_blank", "noopener,noreferrer");
+      await openReportUrl(res.url);
     } catch (e: any) {
       toast.error(e.message || "Не удалось сформировать PDF");
     } finally {

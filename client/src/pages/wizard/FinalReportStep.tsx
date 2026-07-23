@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { openReportUrl } from "@/lib/reportDownload";
 import { trpc } from "@/lib/trpc";
 import {
   AlertTriangle,
@@ -99,9 +100,9 @@ export default function FinalReportStep({
   });
 
   const gen = trpc.report.generate.useMutation({
-    onSuccess: ({ url, size }) => {
+    onSuccess: async ({ url, size }) => {
       setLastReportUrl(url);
-      openGeneratedReport(url);
+      await openGeneratedReport(url);
       toast.success(`PDF сформирован (${(size / 1024).toFixed(0)} КБ)`);
     },
     onError: (e) => {
@@ -131,15 +132,10 @@ export default function FinalReportStep({
     pendingReportWindowRef.current = window.open("about:blank", "_blank");
   }
 
-  function openGeneratedReport(url: string) {
-    const target = reportUrl(url);
+  async function openGeneratedReport(url: string) {
     const pendingWindow = pendingReportWindowRef.current;
     pendingReportWindowRef.current = null;
-    if (pendingWindow && !pendingWindow.closed) {
-      pendingWindow.location.href = target;
-      return;
-    }
-    window.open(target, "_blank", "noopener,noreferrer");
+    await openReportUrl(url, pendingWindow);
   }
 
   function closePendingReportWindow() {

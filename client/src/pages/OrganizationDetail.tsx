@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { openReportUrl } from "@/lib/reportDownload";
 import { trpc } from "@/lib/trpc";
 import {
   ArrowLeft,
@@ -119,7 +120,7 @@ export default function OrganizationDetail() {
     setDownloadingId(protocolId);
     try {
       const res = await generateReport.mutateAsync({ protocolId });
-      window.open(new URL(res.url, window.location.origin).href, "_blank", "noopener,noreferrer");
+      await openReportUrl(res.url);
       toast.success("PDF-протокол сформирован");
     } catch (e: any) {
       toast.error(e.message || "Не удалось сформировать PDF");

@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { openReportUrl } from "@/lib/reportDownload";
 import { trpc } from "@/lib/trpc";
 import { AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Download, Loader2, Plus, Save, Sparkles, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -35,7 +36,7 @@ export default function ComputerizedSystemStep({ protocolId, section, onNext, on
   }, [giQ.data, giQ.isLoading, seeded]);
   const save = trpc.generalInfo.save.useMutation({ onError: e => toast.error(e.message) });
   const report = trpc.report.generate.useMutation({
-    onSuccess: ({ url }) => window.open(new URL(url, window.location.origin).href, "_blank", "noopener,noreferrer"),
+    onSuccess: ({ url }) => openReportUrl(url),
     onError: e => toast.error(e.message),
   });
   const s = config.screening || {};

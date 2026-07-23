@@ -193,6 +193,24 @@ const PASSWORD_LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const CHAMBER_PROTOCOL_MARKER = "__equipmentType:chamber";
 const passwordLoginAttempts = new Map<string, { count: number; resetAt: number }>();
 
+async function storeGeneratedPdfOrInline(
+  relKey: string,
+  buffer: Buffer,
+): Promise<{ key: string; url: string; size: number }> {
+  try {
+    const { key, url } = await storagePut(relKey, buffer, "application/pdf");
+    return { key, url, size: buffer.length };
+  } catch (error) {
+    console.warn("[Report] PDF storage write failed; returning inline PDF:", error);
+    const safeName = relKey.split("/").pop() || "report.pdf";
+    return {
+      key: `inline:${safeName}`,
+      url: `data:application/pdf;base64,${buffer.toString("base64")}`,
+      size: buffer.length,
+    };
+  }
+}
+
 function normalizeUserEmail(email: string) {
   return email.trim().toLowerCase();
 }
@@ -1637,12 +1655,10 @@ export const appRouter = router({
             org,
             config: (gi?.computerizedSystemConfig as any) || {},
           });
-          const { key, url } = await storagePut(
+          return storeGeneratedPdfOrInline(
             `protocol-${input.protocolId}/gamp-report-${protocol.number}-${Date.now()}.pdf`,
             buffer,
-            "application/pdf",
           );
-          return { key, url, size: buffer.length };
         }
         const iqItems = await listChecklist(input.protocolId, "iq");
         const oqItems = await listChecklist(input.protocolId, "oq");
@@ -2056,12 +2072,10 @@ export const appRouter = router({
         }
         
         const buffer = await generateProtocolPdf(reportInput);
-        const { key, url } = await storagePut(
+        return storeGeneratedPdfOrInline(
           `protocol-${input.protocolId}/report-${protocol.number}-${Date.now()}.pdf`,
           buffer,
-          "application/pdf",
         );
-         return { key, url, size: buffer.length };
       }),
   }),
 
