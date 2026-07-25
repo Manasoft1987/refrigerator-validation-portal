@@ -211,6 +211,21 @@ async function storeGeneratedPdfOrInline(
   }
 }
 
+async function storeUploadedSourceOrMetadata(
+  relKey: string,
+  buffer: Buffer,
+  contentType = "application/octet-stream",
+): Promise<{ key: string; url: string; stored: boolean }> {
+  try {
+    const { key, url } = await storagePut(relKey, buffer, contentType);
+    return { key, url, stored: true };
+  } catch (error) {
+    console.warn("[Upload] Source file storage write failed; keeping parsed data only:", error);
+    const safeKey = `unsaved:${relKey}`.slice(0, 512);
+    return { key: safeKey, url: "", stored: false };
+  }
+}
+
 function normalizeUserEmail(email: string) {
   return email.trim().toLowerCase();
 }
@@ -1190,7 +1205,7 @@ export const appRouter = router({
           });
         }
         const safeName = input.fileName.replace(/[^a-zA-Z0-9._-]+/g, "_");
-        const { key, url } = await storagePut(
+        const { key, url } = await storeUploadedSourceOrMetadata(
           `protocol-${input.protocolId}/loggers/${safeName}`,
           buf,
           input.contentType || "application/octet-stream",
@@ -2248,7 +2263,7 @@ export const appRouter = router({
           });
         }
         const safeName = input.fileName.replace(/[^a-zA-Z0-9._-]+/g, "_");
-        const { key, url } = await storagePut(
+        const { key, url } = await storeUploadedSourceOrMetadata(
           `protocol-${input.protocolId}/excursion/${safeName}`,
           buf,
           input.contentType || "application/octet-stream",
