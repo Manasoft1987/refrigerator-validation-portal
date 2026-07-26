@@ -2014,6 +2014,8 @@ export const appRouter = router({
             position: l.position,
             posX: l.posX != null ? Number(l.posX) : null,
             posY: l.posY != null ? Number(l.posY) : null,
+            avg: preparedLoggers.find(item => item.logger.id === l.id)?.stats?.avg ??
+              (l.avgVal === null ? null : Number(l.avgVal)),
           })),
           coolingUnitPos: session?.coolingUnitPos as any,
           doorPos: session?.doorPos as any,

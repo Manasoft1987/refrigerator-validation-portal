@@ -258,6 +258,7 @@ export type ReportInput = {
     position?: string | null;
     posX?: number | null;
     posY?: number | null;
+    avg?: number | null;
   }>;
   /** Датчики, используемые для валидации (из базы датчиков) */
   protocolSensors?: Array<{
@@ -648,6 +649,51 @@ function normalizeSensorNumber(value: string | null | undefined): string {
     .replace(/\s+/g, "");
 }
 
+function formatDiagramAverageTemp(value: number | string | null | undefined): string | null {
+  const n = typeof value === "string" ? Number(value) : value;
+  if (n == null || !Number.isFinite(n)) return null;
+  return `${n.toFixed(1).replace(".", ",")} °C`;
+}
+
+function shortSensorId(value: string | null | undefined): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length >= 4) return digits.slice(-4);
+  return raw.length > 6 ? raw.slice(-6) : raw;
+}
+
+function buildSensorAverageMap(input: ReportInput): Map<string, string> {
+  const map = new Map<string, string>();
+  const add = (label: string | null | undefined, avg: number | string | null | undefined) => {
+    const formatted = formatDiagramAverageTemp(avg);
+    if (!formatted) return;
+    const normalized = normalizeSensorNumber(label);
+    if (!normalized) return;
+    map.set(normalized, formatted);
+    const shortId = normalizeSensorNumber(shortSensorId(label));
+    if (shortId) map.set(shortId, formatted);
+  };
+
+  input.pv.loggers.forEach(logger => {
+    add(logger.label, logger.avg);
+    add(logger.customName, logger.avg);
+  });
+  input.pvLoggers?.forEach(logger => {
+    add(logger.label, logger.avg);
+    add(logger.customName, logger.avg);
+  });
+
+  return map;
+}
+
+function sensorLabelWithAverage(label: string | null | undefined, avgBySensor: Map<string, string>): string {
+  const shortId = shortSensorId(label) || "D";
+  const direct = normalizeSensorNumber(label);
+  const avg = avgBySensor.get(direct) ?? avgBySensor.get(normalizeSensorNumber(shortId));
+  return avg ? `${shortId} (${avg})` : shortId;
+}
+
 function buildActiveSensorTokens(input: ReportInput): Set<string> {
   const tokens = new Set<string>();
   const add = (value: string | null | undefined) => {
@@ -823,7 +869,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     const eqType = getReportEquipmentType(input) || "";
     if (eqType === "warehouse") {
       // Warehouse: single floor plan diagram only (no ISPE grid schema)
-      drawWarehousePlanDiagram(doc, input, false, "Схема. Расстановка датчиков на плане помещения");
+      drawWarehousePlanDiagram(doc, input, false, "Схема. Расстановка датчиков на плане помещения (ID и средняя температура)");
     } else {
       // Non-warehouse: Schema 1 (reference positions)
       if (isReeferLike(eqType)) {
@@ -839,7 +885,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
         const coldLabel = input.pv.coldIdx !== null && input.pv.loggers[input.pv.coldIdx] ? input.pv.loggers[input.pv.coldIdx].label : null;
         drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, false, "Схема 2. Расстановка датчиков (с серийными номерами)", hotLabel, coldLabel, eqType === "chamber" || eqType === "thermal-container" ? "chamber" : "truck");
       } else {
-        drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, "Схема 2. Расстановка датчиков (с серийными номерами)", "serial");
+        drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, "Схема 2. Расстановка датчиков (серийные номера и средняя температура)", "serial");
       }
     }
     drawSensorPlacementAnalysis(doc, input.pvLoggers as DiagramSensor[], input);
@@ -3758,6 +3804,7 @@ function drawWarehousePlanDiagram(
   const allFloorObjs = (input.floorPlanObjects ?? []);
   const floorObjs = allFloorObjs.filter((o: { type: string }) => o.type !== "sensor_point");
   const sensorPointObjs = allFloorObjs.filter((o: { type: string }) => o.type === "sensor_point");
+  const avgBySensor = buildSensorAverageMap(input);
   if (floorObjs.length > 0) {
     // Object type visual properties
     const OBJ_STYLES: Record<string, { fill: string; stroke: string; text: string }> = {
@@ -3908,11 +3955,23 @@ function drawWarehousePlanDiagram(
     const spY = planY + (sp.yPct / 100) * drawH;
     const spR = Math.min((sp.widthPct / 100) * drawW, (sp.heightPct / 100) * drawH) / 2;
     const r = Math.max(8, Math.min(16, spR));
+    const label = sensorLabelWithAverage(sp.label, avgBySensor);
+    const labelFont = label.includes("(") ? 6.2 : Math.max(5, Math.min(8, r * 0.7));
     doc.save();
+    doc.font("bold").fontSize(labelFont);
+    const labelW = Math.min(78, Math.max(r * 2, doc.widthOfString(label) + 8));
     doc.fillColor("#7dd3fc").strokeColor("#0369a1").lineWidth(1.5).circle(spX, spY, r).fillAndStroke();
-    const shortId = (sp.label || "D").slice(0, 6);
-    doc.fillColor("#0c4a6e").font("bold").fontSize(Math.max(5, Math.min(8, r * 0.7)))
-      .text(shortId, spX - r, spY - 4, { width: r * 2, align: "center" });
+    if (label.includes("(")) {
+      const labelX = Math.max(planX + 2, Math.min(planX + drawW - labelW - 2, spX - labelW / 2));
+      const labelY = Math.max(planY + 2, spY - r - 14);
+      doc.fillColor("white").strokeColor("#0369a1").lineWidth(0.5)
+        .roundedRect(labelX, labelY, labelW, 12, 3).fillAndStroke();
+      doc.fillColor("#0c4a6e")
+        .text(label, labelX + 3, labelY + 3, { width: labelW - 6, align: "center", lineBreak: false });
+    } else {
+      doc.fillColor("#0c4a6e")
+        .text(label, spX - r, spY - 4, { width: r * 2, align: "center" });
+    }
     doc.restore();
   }
 

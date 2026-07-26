@@ -698,6 +698,7 @@ export type DiagramSensor = {
   position?: string | null;
   posX?: number | string | null;
   posY?: number | string | null;
+  avg?: number | string | null;
 };
 
 const SNAP_POS: Record<string, { x: number; y: number }> = {
@@ -723,6 +724,19 @@ function refrigeratorBadgeLabel(sensor: DiagramSensor): string {
   if (serial.length > 0) return serial.length > 6 ? serial.slice(-6) : serial;
   const fallback = String(sensor.customName ?? "").trim();
   return fallback.length > 6 ? fallback.slice(0, 6) : fallback;
+}
+
+function formatSensorAvg(avg: DiagramSensor["avg"]): string | null {
+  const value = typeof avg === "string" ? Number(avg) : avg;
+  if (value == null || !Number.isFinite(value)) return null;
+  return value.toFixed(1).replace(".", ",");
+}
+
+function refrigeratorBadgeText(sensor: DiagramSensor, idx: number, badgeMode: "serial" | "position"): string {
+  if (badgeMode === "position") return refrigeratorPositionLabel(sensor, idx);
+  const base = refrigeratorBadgeLabel(sensor);
+  const avg = formatSensorAvg(sensor.avg);
+  return avg ? `${base} (${avg} °C)` : base;
 }
 
 function refrigeratorPositionLabel(sensor: DiagramSensor, idx: number): string {
@@ -760,8 +774,10 @@ export function drawRefrigeratorDiagram(
   const wallT = 10;
   const outerW = cabW + wallT * 2;
   const outerH = cabH + wallT * 2;
-  const BADGE_W = 36;
-  const BADGE_H = 20;
+  const showAvgInBadges = badgeMode === "serial" && sensors.some(s => formatSensorAvg(s.avg));
+  const BADGE_W = showAvgInBadges ? 68 : 36;
+  const BADGE_H = showAvgInBadges ? 22 : 20;
+  const badgeFontSize = showAvgInBadges ? 6.4 : 8;
   const extBlockH = externals.length > 0 ? 30 + (externals.length - 1) * 45 + BADGE_H + 18 : 0;
   const titleH = title ? 28 : 0;
   const blockH = titleH + Math.max(outerH, extBlockH) + 18;
@@ -837,7 +853,7 @@ export function drawRefrigeratorDiagram(
   // --- Internal sensor badges (rectangles) ---
   internals.forEach((s, idx) => {
     const color = sensorBadgeColor(idx);
-    const name = badgeMode === "position" ? refrigeratorPositionLabel(s, idx) : refrigeratorBadgeLabel(s);
+    const name = refrigeratorBadgeText(s, idx, badgeMode);
 
     let pctX = 40;
     let pctY = 50;
@@ -860,8 +876,8 @@ export function drawRefrigeratorDiagram(
     doc.save();
     doc.roundedRect(bx - BADGE_W / 2, by - BADGE_H / 2, BADGE_W, BADGE_H, 3).fill(color);
     doc.roundedRect(bx - BADGE_W / 2, by - BADGE_H / 2, BADGE_W, BADGE_H, 3).lineWidth(1.5).strokeColor("white").stroke();
-    doc.font("bold").fontSize(8).fillColor("white");
-    doc.text(name, bx - BADGE_W / 2, by - 5, {
+    doc.font("bold").fontSize(badgeFontSize).fillColor("white");
+    doc.text(name, bx - BADGE_W / 2, by - badgeFontSize / 2, {
       width: BADGE_W,
       align: "center",
       lineBreak: false,
@@ -873,7 +889,7 @@ export function drawRefrigeratorDiagram(
   const extStartX = cabX + cabW + 20;
   externals.forEach((s, idx) => {
     const color = sensorBadgeColor(internals.length + idx);
-    const name = badgeMode === "position" ? refrigeratorPositionLabel(s, idx) : refrigeratorBadgeLabel(s);
+    const name = refrigeratorBadgeText(s, idx, badgeMode);
     const ey = cabY + 28 + idx * 45;
 
     // Connector line
@@ -885,8 +901,8 @@ export function drawRefrigeratorDiagram(
     const badgeCx = extStartX + 8 + BADGE_W / 2;
     doc.roundedRect(badgeCx - BADGE_W / 2, ey - BADGE_H / 2, BADGE_W, BADGE_H, 3).fill(color);
     doc.roundedRect(badgeCx - BADGE_W / 2, ey - BADGE_H / 2, BADGE_W, BADGE_H, 3).lineWidth(1.5).strokeColor("white").stroke();
-    doc.font("bold").fontSize(8).fillColor("white");
-    doc.text(name, badgeCx - BADGE_W / 2, ey - 5, {
+    doc.font("bold").fontSize(badgeFontSize).fillColor("white");
+    doc.text(name, badgeCx - BADGE_W / 2, ey - badgeFontSize / 2, {
       width: BADGE_W,
       align: "center",
       lineBreak: false,
