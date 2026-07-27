@@ -4,6 +4,7 @@ export const TEMP_MODES = [
   { id: "2-8", label: "2–8 °C", min: 2, max: 8 },
   { id: "8-15", label: "8–15 °C", min: 8, max: 15 },
   { id: "15-25", label: "15–25 °C", min: 15, max: 25 },
+  { id: "custom", label: "Произвольный режим", min: null, max: null },
 ] as const;
 
 export type TempModeId = (typeof TEMP_MODES)[number]["id"];

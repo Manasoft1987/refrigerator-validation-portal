@@ -98,6 +98,8 @@ export const generalInfo = mysqlTable("generalInfo", {
 	inventory: varchar({ length: 128 }),
 	year: int(),
 	tempMode: varchar({ length: 16 }),
+	customMin: decimal({ precision: 6, scale: 2 }),
+	customMax: decimal({ precision: 6, scale: 2 }),
 	thermalContainerConfig: json(),
 	computerizedSystemConfig: json(),
 	location: text(),

@@ -106,6 +106,8 @@ export type ReportInput = {
     inventory: string | null;
     year: number | null;
     tempMode: string | null;
+    customMin?: string | number | null;
+    customMax?: string | number | null;
     thermalContainerConfig?: {
       selectedModes?: string[];
       volumeLiters?: string | number | null;
@@ -332,6 +334,7 @@ const TEMP_MODE_LABEL: Record<string, string> = {
   "2-8": "+2 °C...+8 °C",
   "8-15": "+8 °C...+15 °C",
   "15-25": "+15 °C...+25 °C",
+  custom: "Произвольный режим",
 };
 
 const EQUIPMENT_LABEL: Record<string, string> = {
@@ -501,6 +504,30 @@ function fmtTempValue(value: number | null | undefined): string {
 
 function fmtTempRange(min: number | null | undefined, max: number | null | undefined): string {
   return `${fmtTempValue(min)}...${fmtTempValue(max)}`;
+}
+
+function numericOrNull(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function temperatureModeLabel(mode: string | null | undefined, customMin?: unknown, customMax?: unknown): string {
+  if (mode === "custom") {
+    const min = numericOrNull(customMin);
+    const max = numericOrNull(customMax);
+    if (min !== null && max !== null) return `${fmtTempRange(min, max)} (произвольный режим)`;
+  }
+  return TEMP_MODE_LABEL[mode || ""] || mode || "—";
+}
+
+function pvTemperatureModeLabel(pv: ReportInput["pv"]): string {
+  if (pv.tempMode === "custom") {
+    const min = pv.rawRangeMin ?? null;
+    const max = pv.rawRangeMax ?? null;
+    if (min !== null && max !== null) return `${fmtTempRange(min, max)} (произвольный режим)`;
+  }
+  return temperatureModeLabel(pv.tempMode);
 }
 
 function sensorAccuracyRows(pv: ReportInput["pv"]): Array<[string, string]> {
@@ -1035,9 +1062,9 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
     : EQUIPMENT_LABEL[eqType || ""] || "—";
   const refrigerationUnit = `${gi?.manufacturer || ""} ${gi?.model || ""}`.trim() || "—";
   const selectedThermalModes = gi?.thermalContainerConfig?.selectedModes || [];
-  const temperatureModeLabel = selectedThermalModes.length > 0
+  const temperatureModeText = selectedThermalModes.length > 0
     ? selectedThermalModes.map(mode => TEMP_MODE_LABEL[mode] || mode).join(", ")
-    : TEMP_MODE_LABEL[gi?.tempMode || ""] || "—";
+    : temperatureModeLabel(gi?.tempMode, gi?.customMin, gi?.customMax);
   const baseRows: Array<[string, string]> = [
     ["Номер протокола", input.protocol.number],
     ["Редакция", input.dataIntegrity?.revision || "01"],
@@ -1053,7 +1080,7 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
       : [
           ["Адрес объекта", gi?.location || "—"],
         ] as Array<[string, string]>),
-    ["Температурный режим", temperatureModeLabel],
+    ["Температурный режим", temperatureModeText],
     ["Сезон", gi?.season ? { warm: "Теплый период", cold: "Холодный период", interseasonal: "Межсезонье", none: "Не применимо" }[gi.season] || "—" : "—"],
     ["Тип квалификации", gi?.qualificationType ? { primary: "Первичная", periodic: "Периодическая", repeat: "Повторная" }[gi.qualificationType] || "—" : "—"],
   ];
@@ -1245,7 +1272,7 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
       ["Тип объекта", eqType === "warehouse" ? getEquipmentName(input) : EQUIPMENT_LABEL[eqType || ""] || "—"],
       ["Тип помещения / зоны", WAREHOUSE_STUDY_LABEL[gi?.whStudyType || ""] || "—"],
       ["Адрес объекта", gi?.location || "—"],
-      ["Температурный режим", TEMP_MODE_LABEL[gi?.tempMode || ""] || "—"],
+      ["Температурный режим", temperatureModeLabel(gi?.tempMode, gi?.customMin, gi?.customMax)],
       ["Контроль влажности", gi?.whHumidityControl ? `Да (${gi?.whHumidityMin ?? "—"} – ${gi?.whHumidityMax ?? "—"} % о.в.)` : "Не контролируется"],
       ["Сезон исследования", gi?.season ? { warm: "Тёплый период", cold: "Холодный период", interseasonal: "Межсезонье", none: "Не применимо" }[gi.season] || WAREHOUSE_SEASON_LABEL[gi.season] || "—" : "—"],
       ["Контакт с внешней средой", gi?.whExternalEnv ? "Имеется (учитываются сезонные колебания)" : "Отсутствует"],
@@ -1271,7 +1298,7 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
       ["Производитель", gi?.manufacturer || "—"],
       ["Модель", gi?.model || "—"],
       ["Серийный номер", gi?.serial || "—"],
-      ["Температурный режим", TEMP_MODE_LABEL[gi?.tempMode || ""] || "—"],
+      ["Температурный режим", temperatureModeLabel(gi?.tempMode, gi?.customMin, gi?.customMax)],
       ["Место установки", gi?.location || "—"],
       ["Назначение / хранимая продукция", gi?.purpose || "—"],
       ["Организация", input.org.name],
@@ -1300,7 +1327,7 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
       ["Модель", gi?.model || "—"],
       ["Серийный / инвентарный номер", gi?.serial || gi?.inventory || "—"],
       ["Заявленные температурные режимы", modeLabels],
-      ["Режим текущего испытания", TEMP_MODE_LABEL[gi?.tempMode || ""] || "—"],
+      ["Режим текущего испытания", temperatureModeLabel(gi?.tempMode, gi?.customMin, gi?.customMax)],
       ["Полезный объем", config?.volumeLiters ? `${config.volumeLiters} л` : "—"],
       ["Внутренние размеры (Д × Ш × В)", `${dimensions} см`],
       ["Тип теплоизоляции", config?.insulationType || "—"],
@@ -1655,7 +1682,7 @@ function drawPVParams(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Re
     ? `от 3 суток и далее (не менее 72 ч); выбрано ${pv.minDurationHours} ч`
     : `${pv.minDurationHours} ч`;
   const rows: Array<[string, string]> = [
-    ["Температурный режим", TEMP_MODE_LABEL[pv.tempMode] || pv.tempMode],
+    ["Температурный режим", pvTemperatureModeLabel(pv)],
     ...sensorAccuracyRows(pv),
     ["Начало испытания", pv.startAt ? fmtDate(pv.startAt) : "—"],
     ["Окончание испытания", pv.endAt ? fmtDate(pv.endAt) : "—"],
@@ -2247,7 +2274,7 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
     text =
       "\u041d\u0430 \u043e\u0441\u043d\u043e\u0432\u0430\u043d\u0438\u0438 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u043e\u0432 IQ, OQ \u0438 PV \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u043f\u0440\u0438\u0437\u043d\u0430\u0451\u0442 " + (getReportEquipmentType(input) === "warehouse" ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 (\u0437\u043e\u043d\u0443) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : reeferConclusionObject(input)) + " " +
       `${suitabilityWord} для хранения лекарственных средств ` +
-      `в температурном режиме ${TEMP_MODE_LABEL[input.pv.tempMode || ""] || "—"} в соответствии с требованиями GDP / GPP. ` +
+      `в температурном режиме ${pvTemperatureModeLabel(input.pv)} в соответствии с требованиями GDP / GPP. ` +
       (getReportEquipmentType(input) === "warehouse"
         ? `Система кондиционирования/отопления обеспечивает стабильное распределение температуры по всему объёму помещения. ` 
         : "") +
@@ -2429,7 +2456,7 @@ function drawPVPlan(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     ? `от 3 суток и далее (не менее 72 ч); выбрано ${pv.minDurationHours} ч`
     : `не менее ${pv.minDurationHours} ч`;
   const rows: Array<[string, string]> = [
-    ["Температурный режим", TEMP_MODE_LABEL[pv.tempMode] || pv.tempMode],
+    ["Температурный режим", pvTemperatureModeLabel(pv)],
     ...sensorAccuracyRows(pv),
     ["Требуемая длительность испытания", durationRequirement],
     ["Минимальное число внутренних датчиков", String(pv.minSensorCount)],

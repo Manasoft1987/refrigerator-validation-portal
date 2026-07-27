@@ -165,7 +165,7 @@ async function removeAutoLinkedSensorIfUnused(protocolId: number, removedLabel: 
   }
 }
 
-const TEMP_MODE_SCHEMA = z.enum(["2-8", "8-15", "15-25"]);
+const TEMP_MODE_SCHEMA = z.enum(["2-8", "8-15", "15-25", "custom"]);
 const ATTACHMENT_KINDS = [
   "vehicle_registration",
   "vehicle_photo",
@@ -332,6 +332,19 @@ function rangeForWithSensorAccuracy(
   const rawMin = customMin ?? mode?.min ?? 2;
   const rawMax = customMax ?? mode?.max ?? 8;
   return applySensorAccuracyGuardBand(rawMin, rawMax, sensorAccuracy);
+}
+
+function nullableNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function effectiveCustomRange(session?: { customMin?: unknown; customMax?: unknown } | null, gi?: { customMin?: unknown; customMax?: unknown } | null) {
+  return {
+    customMin: nullableNumber(session?.customMin) ?? nullableNumber(gi?.customMin),
+    customMax: nullableNumber(session?.customMax) ?? nullableNumber(gi?.customMax),
+  };
 }
 
 function maxAccuracyForUsedInternalSensors(
@@ -725,6 +738,8 @@ export const appRouter = router({
           inventory: z.string().optional().nullable(),
           year: z.number().int().optional().nullable(),
           tempMode: z.string().optional().nullable(),
+          customMin: z.union([z.number(), z.string()]).optional().nullable(),
+          customMax: z.union([z.number(), z.string()]).optional().nullable(),
           thermalContainerConfig: z.object({
             selectedModes: z.array(z.enum(["2-8", "8-15", "15-25"])).min(1),
             volumeLiters: z.union([z.number(), z.string()]).optional().nullable(),
@@ -788,6 +803,8 @@ export const appRouter = router({
           "whHumidityMin",
           "whHumidityMax",
           "loadPercent",
+          "customMin",
+          "customMax",
         ] as const;
         const coerced: any = { ...patch };
         for (const k of decimalKeys) {
@@ -828,6 +845,19 @@ export const appRouter = router({
               message: `Выпуск системы заблокирован: ${readiness.blockers.join("; ")}.`,
             });
           }
+        }
+        if (coerced.tempMode === "custom") {
+          const customMin = nullableNumber(coerced.customMin);
+          const customMax = nullableNumber(coerced.customMax);
+          if (customMin === null || customMax === null || customMin >= customMax) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Для произвольного режима укажите корректный диапазон: минимум меньше максимума.",
+            });
+          }
+        } else if ("tempMode" in coerced) {
+          coerced.customMin = null;
+          coerced.customMax = null;
         }
         if (usesProtocolEquipmentType) {
           delete coerced.equipmentType;
@@ -1056,6 +1086,16 @@ export const appRouter = router({
         }
         if (customMin !== undefined) patch.customMin = customMin === null ? null : String(customMin);
         if (customMax !== undefined) patch.customMax = customMax === null ? null : String(customMax);
+        if (patch.tempMode === "custom") {
+          const effectiveMin = nullableNumber(patch.customMin);
+          const effectiveMax = nullableNumber(patch.customMax);
+          if (effectiveMin === null || effectiveMax === null || effectiveMin >= effectiveMax) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Для произвольного режима укажите корректный диапазон: минимум меньше максимума.",
+            });
+          }
+        }
         if (samplingStepMinutes !== undefined) {
           patch.samplingStepMinutes =
             samplingStepMinutes === null || samplingStepMinutes === 0 ? null : samplingStepMinutes;
@@ -1081,10 +1121,11 @@ export const appRouter = router({
         const session = await getPVSession(protocolId, trialKey);
         if (session) {
           const gi = await getGeneralInfo(protocolId);
+          const customRange = effectiveCustomRange(session, gi);
           const { min, max } = rangeFor(
             session.tempMode || gi?.tempMode || "2-8",
-            session.customMin ? Number(session.customMin) : null,
-            session.customMax ? Number(session.customMax) : null,
+            customRange.customMin,
+            customRange.customMax,
           );
           const loggers = await listLoggers(protocolId, trialKey);
           for (const l of loggers) {
@@ -1300,10 +1341,11 @@ export const appRouter = router({
         if (!session) throw new TRPCError({ code: "NOT_FOUND" });
         const loggers = await listLoggers(input.protocolId, trialKey);
         const gi0 = await getGeneralInfo(input.protocolId);
+        const customRange = effectiveCustomRange(session, gi0);
         const { min, max } = rangeFor(
           session.tempMode || gi0?.tempMode || "2-8",
-          session.customMin ? Number(session.customMin) : null,
-          session.customMax ? Number(session.customMax) : null,
+          customRange.customMin,
+          customRange.customMax,
         );
         const externals = detectExternalSensors(
           loggers.map(l => ({ avg: Number(l.avgVal || 0) })),
@@ -1327,10 +1369,11 @@ export const appRouter = router({
         if (!session) throw new TRPCError({ code: "NOT_FOUND" });
         const loggers = await listLoggers(input.protocolId, trialKey);
         const gi1 = await getGeneralInfo(input.protocolId);
+        const customRange = effectiveCustomRange(session, gi1);
         const { min, max } = rangeFor(
           session.tempMode || gi1?.tempMode || "2-8",
-          session.customMin ? Number(session.customMin) : null,
-          session.customMax ? Number(session.customMax) : null,
+          customRange.customMin,
+          customRange.customMax,
         );
 
         // Recompute stats with clipped + resampled range, store deviations
@@ -1443,10 +1486,11 @@ export const appRouter = router({
 
         const session = await getPVSession(input.protocolId, trialKey);
         const gi = await getGeneralInfo(input.protocolId);
+        const customRange = effectiveCustomRange(session, gi);
         const { min: rangeMin, max: rangeMax } = rangeFor(
           session?.tempMode || gi?.tempMode || "2-8",
-          session?.customMin ? Number(session.customMin) : null,
-          session?.customMax ? Number(session.customMax) : null,
+          customRange.customMin,
+          customRange.customMax,
         );
 
         // Load series for each internal logger
@@ -1691,11 +1735,12 @@ export const appRouter = router({
 
         const tempMode = session?.tempMode || gi?.tempMode || "2-8";
         const sensorAccuracyForProtocol = maxAccuracyForUsedInternalSensors(linkedProtocolSensors, loggers);
+        const customRange = effectiveCustomRange(session, gi);
         const guardedRange = rangeForWithSensorAccuracy(
           tempMode,
           sensorAccuracyForProtocol,
-          session?.customMin ? Number(session.customMin) : null,
-          session?.customMax ? Number(session.customMax) : null,
+          customRange.customMin,
+          customRange.customMax,
         );
         const { min, max } = guardedRange;
 

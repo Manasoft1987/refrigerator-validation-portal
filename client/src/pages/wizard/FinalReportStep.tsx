@@ -43,6 +43,22 @@ function commissionToSignatories(members: CM[]): Signatory[] {
     .map(m => ({ role: m.role || "", name: m.name || "", company: m.company || null }));
 }
 
+function formatTempMode(mode: unknown, customMin?: unknown, customMax?: unknown): string {
+  const labels: Record<string, string> = {
+    "2-8": "2–8 °C",
+    "8-15": "8–15 °C",
+    "15-25": "15–25 °C",
+  };
+  const key = String(mode || "");
+  if (key === "custom") {
+    const min = Number(customMin);
+    const max = Number(customMax);
+    if (Number.isFinite(min) && Number.isFinite(max)) return `${min}…${max} °C`;
+    return "Произвольный режим";
+  }
+  return labels[key] || key || "—";
+}
+
 export default function FinalReportStep({
   protocolId,
   onBack,
@@ -228,7 +244,11 @@ export default function FinalReportStep({
               <Row label="Серийный №" value={gi?.serial || "—"} />
               <Row
                 label="Температурный режим"
-                value={session?.tempMode ? `${session.tempMode} °C` : gi?.tempMode || "—"}
+                value={formatTempMode(
+                  session?.tempMode || gi?.tempMode,
+                  (session as any)?.customMin ?? (gi as any)?.customMin,
+                  (session as any)?.customMax ?? (gi as any)?.customMax,
+                )}
               />
               <Row label="Датчиков (всего)" value={String(loggers.length)} />
               <Row

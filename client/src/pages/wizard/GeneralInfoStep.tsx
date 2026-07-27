@@ -45,6 +45,8 @@ export default function GeneralInfoStep({
     model: "",
     serial: "",
     tempMode: "2-8",
+    customMin: "",
+    customMax: "",
     location: "",
     purpose: "",
     validationDate: new Date().toISOString().slice(0, 10),
@@ -131,16 +133,32 @@ export default function GeneralInfoStep({
 
   const isWarehouse = form.equipmentType === "warehouse";
   const isThermalContainer = form.equipmentType === "thermal-container";
-  const tempModesForEquipment = form.equipmentType === "chamber"
-    ? TEMP_MODES.filter(m => m.id !== "15-25")
-    : TEMP_MODES;
+  const standardTempModes = TEMP_MODES.filter(m => m.id !== "custom");
+  const tempModesForEquipment = form.equipmentType === "refrigerator"
+    ? TEMP_MODES
+    : form.equipmentType === "chamber"
+      ? standardTempModes.filter(m => m.id !== "15-25")
+      : standardTempModes;
 
   useEffect(() => {
     if (form.equipmentType === "chamber" && form.tempMode === "15-25") {
       setForm((prev: any) => ({ ...prev, tempMode: "2-8" }));
     }
+    if (form.equipmentType !== "refrigerator" && form.tempMode === "custom") {
+      setForm((prev: any) => ({ ...prev, tempMode: "2-8", customMin: "", customMax: "" }));
+    }
   }, [form.equipmentType, form.tempMode]);
 
+  const parseCustomRangeNumber = (value: unknown) => {
+    const text = String(value ?? "").trim().replace(",", ".");
+    if (!text) return Number.NaN;
+    return Number(text);
+  };
+  const customRangeMin = parseCustomRangeNumber(form.customMin);
+  const customRangeMax = parseCustomRangeNumber(form.customMax);
+  const customRangeValid =
+    form.tempMode !== "custom" ||
+    (Number.isFinite(customRangeMin) && Number.isFinite(customRangeMax) && customRangeMin < customRangeMax);
 
   const canContinueBase = isWarehouse
     ? !!(form.location && form.tempMode)
@@ -191,6 +209,8 @@ export default function GeneralInfoStep({
       model: form.model ?? null,
       serial: form.serial ?? null,
       tempMode: form.tempMode ?? null,
+      customMin: form.tempMode === "custom" && form.customMin !== "" && form.customMin != null ? Number(String(form.customMin).replace(",", ".")) : null,
+      customMax: form.tempMode === "custom" && form.customMax !== "" && form.customMax != null ? Number(String(form.customMax).replace(",", ".")) : null,
       thermalContainerConfig: isThermalContainer ? form.thermalContainerConfig : null,
       location: form.location ?? null,
       purpose: form.purpose ?? null,
@@ -221,6 +241,10 @@ export default function GeneralInfoStep({
       loadPercent: form.loadPercent === "" || form.loadPercent == null ? null : String(form.loadPercent),
     };
     try {
+      if (!customRangeValid) {
+        toast.error("Для произвольного режима укажите корректный диапазон: минимум меньше максимума.");
+        return;
+      }
       await save.mutateAsync(payload);
       toast.success("Общие сведения сохранены");
       if (goNext) onDone();
@@ -309,7 +333,7 @@ export default function GeneralInfoStep({
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {(isWarehouse ? TEMP_MODES : tempModesForEquipment).map(m => (
+                    {(isWarehouse ? standardTempModes : tempModesForEquipment).map(m => (
                       <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -513,12 +537,37 @@ export default function GeneralInfoStep({
                 <SelectContent>
                   {(isThermalContainer
                     ? TEMP_MODES.filter(m => (form.thermalContainerConfig?.selectedModes || ["2-8"]).includes(m.id))
-                    : isWarehouse ? TEMP_MODES : tempModesForEquipment).map(m => (
+                    : isWarehouse ? standardTempModes : tempModesForEquipment).map(m => (
                     <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </Field>
+            {form.equipmentType === "refrigerator" && form.tempMode === "custom" && (
+              <div className="md:col-span-2 grid md:grid-cols-2 gap-4 rounded-lg border border-blue-200 bg-blue-50/40 p-4">
+                <Field label="Минимум произвольного режима, °C">
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={form.customMin ?? ""}
+                    onChange={e => setForm({ ...form, customMin: e.target.value })}
+                    placeholder="например 0"
+                  />
+                </Field>
+                <Field label="Максимум произвольного режима, °C">
+                  <Input
+                    type="number"
+                    step="0.1"
+                    value={form.customMax ?? ""}
+                    onChange={e => setForm({ ...form, customMax: e.target.value })}
+                    placeholder="например 10"
+                  />
+                </Field>
+                <p className="md:col-span-2 text-xs text-muted-foreground">
+                  Этот диапазон будет использоваться как номинальный температурный режим в PV-расчётах и PDF.
+                </p>
+              </div>
+            )}
             <Field label="Производитель">
               <Input
                 value={form.manufacturer || ""}
@@ -611,7 +660,7 @@ export default function GeneralInfoStep({
               <div className="space-y-2">
                 <Label>Заявленные температурные режимы *</Label>
                 <div className="flex flex-wrap gap-2">
-                  {TEMP_MODES.map(mode => {
+                  {standardTempModes.map(mode => {
                     const selected = (form.thermalContainerConfig?.selectedModes || []).includes(mode.id);
                     return (
                       <Button
@@ -755,7 +804,7 @@ export default function GeneralInfoStep({
               <Save className="h-4 w-4" /> Сохранить
             </Button>
             <Button
-              disabled={!(canContinueBase && warehouseDimsValidLive) || save.isPending}
+              disabled={!(canContinueBase && customRangeValid && warehouseDimsValidLive) || save.isPending}
               onClick={() => handleSave(true)}
             >
               {isWarehouse ? "К разделам протокола" : "К этапу IQ"} <ArrowRight className="h-4 w-4" />

@@ -906,6 +906,16 @@ export async function ensureThermalContainerStorage() {
         "ALTER TABLE generalInfo ADD COLUMN thermalContainerConfig JSON NULL AFTER tempMode",
       ));
     }
+    for (const [column, definition] of [
+      ["customMin", "decimal(6,2) NULL AFTER tempMode"],
+      ["customMax", "decimal(6,2) NULL AFTER customMin"],
+    ] as const) {
+      const result = await db.execute(sql.raw(`SHOW COLUMNS FROM generalInfo LIKE '${column}'`));
+      const rows = (result as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
+      if (rows.length === 0) {
+        await db.execute(sql.raw(`ALTER TABLE generalInfo ADD COLUMN ${column} ${definition}`));
+      }
+    }
     const csResult = await db.execute(sql.raw(
       "SHOW COLUMNS FROM generalInfo LIKE 'computerizedSystemConfig'",
     ));
@@ -964,6 +974,8 @@ export async function upsertGeneralInfo(
         inventory: null,
         year: null,
         tempMode: null,
+        customMin: null,
+        customMax: null,
         location: null,
         purpose: null,
         validationDate: null,

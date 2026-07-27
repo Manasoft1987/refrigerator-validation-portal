@@ -68,6 +68,9 @@ export default function PVStep({
   const equipmentType = protocolQ.data?.equipmentType ?? "refrigerator";
   const isWarehouse = equipmentType === "warehouse";
   const isThermalContainer = equipmentType === "thermal-container";
+  const tempModesForPV = equipmentType === "refrigerator"
+    ? TEMP_MODES
+    : TEMP_MODES.filter(m => m.id !== "custom");
   const thermalModes = ((giQ.data?.thermalContainerConfig as any)?.selectedModes || [giQ.data?.tempMode || "2-8"]) as string[];
   const [activeTrialKey, setActiveTrialKey] = useState("default");
   useEffect(() => {
@@ -98,8 +101,8 @@ export default function PVStep({
         minDurationHours: session.minDurationHours || 72,
         minSensorCount: session.minSensorCount || 9,
         samplingStepMinutes: session.samplingStepMinutes ? String(session.samplingStepMinutes) : "0",
-        customMin: session.customMin ?? "",
-        customMax: session.customMax ?? "",
+        customMin: session.customMin ?? (giQ.data as any)?.customMin ?? "",
+        customMax: session.customMax ?? (giQ.data as any)?.customMax ?? "",
       });
     }
   }, [session, giQ.data, activeTrialKey, isThermalContainer]);
@@ -307,7 +310,7 @@ export default function PVStep({
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {TEMP_MODES.map(m => (
+                  {tempModesForPV.map(m => (
                     <SelectItem key={m.id} value={m.id}>
                       {m.label}
                     </SelectItem>
