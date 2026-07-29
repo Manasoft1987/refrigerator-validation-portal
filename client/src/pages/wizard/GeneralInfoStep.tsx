@@ -47,6 +47,7 @@ export default function GeneralInfoStep({
     tempMode: "2-8",
     customMin: "",
     customMax: "",
+    reportLanguage: "ru",
     location: "",
     purpose: "",
     validationDate: new Date().toISOString().slice(0, 10),
@@ -211,6 +212,7 @@ export default function GeneralInfoStep({
       tempMode: form.tempMode ?? null,
       customMin: form.tempMode === "custom" && form.customMin !== "" && form.customMin != null ? Number(String(form.customMin).replace(",", ".")) : null,
       customMax: form.tempMode === "custom" && form.customMax !== "" && form.customMax != null ? Number(String(form.customMax).replace(",", ".")) : null,
+      reportLanguage: isWarehouse ? (form.reportLanguage || "ru") : null,
       thermalContainerConfig: isThermalContainer ? form.thermalContainerConfig : null,
       location: form.location ?? null,
       purpose: form.purpose ?? null,
@@ -336,6 +338,18 @@ export default function GeneralInfoStep({
                     {(isWarehouse ? standardTempModes : tempModesForEquipment).map(m => (
                       <SelectItem key={m.id} value={m.id}>{m.label}</SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field label="Язык итогового PDF">
+                <Select
+                  value={form.reportLanguage || "ru"}
+                  onValueChange={v => setForm({ ...form, reportLanguage: v })}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ru">Русский</SelectItem>
+                    <SelectItem value="en">English</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>

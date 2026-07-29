@@ -100,6 +100,7 @@ export const generalInfo = mysqlTable("generalInfo", {
 	tempMode: varchar({ length: 16 }),
 	customMin: decimal({ precision: 6, scale: 2 }),
 	customMax: decimal({ precision: 6, scale: 2 }),
+	reportLanguage: varchar({ length: 8 }),
 	thermalContainerConfig: json(),
 	computerizedSystemConfig: json(),
 	location: text(),

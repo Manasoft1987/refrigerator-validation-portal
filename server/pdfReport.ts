@@ -108,6 +108,7 @@ export type ReportInput = {
     tempMode: string | null;
     customMin?: string | number | null;
     customMax?: string | number | null;
+    reportLanguage?: "ru" | "en" | string | null;
     thermalContainerConfig?: {
       selectedModes?: string[];
       volumeLiters?: string | number | null;
@@ -366,6 +367,74 @@ function getReportEquipmentType(input?: ReportInput): string | null {
   return input?.protocol?.equipmentType || input?.generalInfo?.equipmentType || null;
 }
 
+function isEnglishWarehouse(input?: ReportInput): boolean {
+  return getReportEquipmentType(input) === "warehouse" && input?.generalInfo?.reportLanguage === "en";
+}
+
+function hasCyrillic(text: string | null | undefined): boolean {
+  return /[А-Яа-яЁё]/.test(text || "");
+}
+
+function enRu(input: ReportInput | undefined, en: string, ru: string): string {
+  return isEnglishWarehouse(input) ? en : ru;
+}
+
+const WAREHOUSE_STUDY_LABEL_EN: Record<string, string> = {
+  warehouse: "Warehouse",
+  controlled_env: "Controlled environment room",
+  reception: "Receiving area",
+  expedition: "Dispatch area",
+  cold_room: "Cold / freezer room within a controlled environment",
+};
+
+const SEASON_LABEL_RU: Record<string, string> = {
+  warm: "Теплый период",
+  cold: "Холодный период",
+  interseasonal: "Межсезонье",
+  none: "Не применимо",
+};
+
+const SEASON_LABEL_EN: Record<string, string> = {
+  warm: "Warm season",
+  cold: "Cold season",
+  interseasonal: "Interseasonal period",
+  none: "Not applicable",
+};
+
+const QUALIFICATION_LABEL_RU: Record<string, string> = {
+  primary: "Первичная",
+  periodic: "Периодическая",
+  repeat: "Повторная",
+};
+
+const QUALIFICATION_LABEL_EN: Record<string, string> = {
+  primary: "Initial qualification",
+  periodic: "Periodic qualification",
+  repeat: "Repeat qualification",
+};
+
+const FILL_STATUS_LABEL_RU: Record<string, string> = {
+  empty: "Пустой",
+  loaded: "Загруженный",
+};
+
+const FILL_STATUS_LABEL_EN: Record<string, string> = {
+  empty: "Empty",
+  loaded: "Loaded",
+};
+
+function answerLabel(answer: string | null | undefined, input?: ReportInput): string {
+  if (!isEnglishWarehouse(input)) return ANSWER_LABEL[answer || "unset"] || "—";
+  return ({ yes: "Yes", no: "No", na: "N/A", unset: "—" } as Record<string, string>)[answer || "unset"] || "—";
+}
+
+function verdictLabelLocal(verdict: "pass" | "fail" | "none", input?: ReportInput): string {
+  if (!isEnglishWarehouse(input)) return verdictLabel(verdict);
+  if (verdict === "pass") return "Passed";
+  if (verdict === "fail") return "Failed";
+  return "Not completed";
+}
+
 /** Returns the human-readable equipment name from protocol-level fields (nominative case) */
 function getEquipmentName(input: ReportInput): string {
   const type = getReportEquipmentType(input);
@@ -374,6 +443,7 @@ function getEquipmentName(input: ReportInput): string {
   }
   // For warehouse, always use "помещение (зона) хранения" instead of "авторефрижератор"
   if (type === "warehouse") {
+    if (isEnglishWarehouse(input)) return "storage room / storage area";
     return "помещение (зона) хранения";
   }
   return EQUIPMENT_LABEL[type || ""] || "Оборудование";
@@ -512,32 +582,32 @@ function numericOrNull(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function temperatureModeLabel(mode: string | null | undefined, customMin?: unknown, customMax?: unknown): string {
+function temperatureModeLabel(mode: string | null | undefined, customMin?: unknown, customMax?: unknown, input?: ReportInput): string {
   if (mode === "custom") {
     const min = numericOrNull(customMin);
     const max = numericOrNull(customMax);
-    if (min !== null && max !== null) return `${fmtTempRange(min, max)} (произвольный режим)`;
+    if (min !== null && max !== null) return `${fmtTempRange(min, max)} (${enRu(input, "custom mode", "произвольный режим")})`;
   }
   return TEMP_MODE_LABEL[mode || ""] || mode || "—";
 }
 
-function pvTemperatureModeLabel(pv: ReportInput["pv"]): string {
+function pvTemperatureModeLabel(pv: ReportInput["pv"], input?: ReportInput): string {
   if (pv.tempMode === "custom") {
     const min = pv.rawRangeMin ?? null;
     const max = pv.rawRangeMax ?? null;
-    if (min !== null && max !== null) return `${fmtTempRange(min, max)} (произвольный режим)`;
+    if (min !== null && max !== null) return `${fmtTempRange(min, max)} (${enRu(input, "custom mode", "произвольный режим")})`;
   }
-  return temperatureModeLabel(pv.tempMode);
+  return temperatureModeLabel(pv.tempMode, null, null, input);
 }
 
-function sensorAccuracyRows(pv: ReportInput["pv"]): Array<[string, string]> {
+function sensorAccuracyRows(pv: ReportInput["pv"], input?: ReportInput): Array<[string, string]> {
   if (pv.sensorAccuracy === undefined || pv.sensorAccuracy === null) return [];
   const rawMin = pv.rawRangeMin ?? pv.rangeMin - pv.sensorAccuracy;
   const rawMax = pv.rawRangeMax ?? pv.rangeMax + pv.sensorAccuracy;
   return [
-    ["Номинальный температурный диапазон", fmtTempRange(rawMin, rawMax)],
-    ["Погрешность датчиков, учитываемая в расчётах", `±${pv.sensorAccuracy.toFixed(1)} °C`],
-    ["Расчётный диапазон с учётом погрешности", fmtTempRange(pv.rangeMin, pv.rangeMax)],
+    [enRu(input, "Nominal temperature range", "Номинальный температурный диапазон"), fmtTempRange(rawMin, rawMax)],
+    [enRu(input, "Sensor accuracy applied in calculations", "Погрешность датчиков, учитываемая в расчётах"), `±${pv.sensorAccuracy.toFixed(1)} °C`],
+    [enRu(input, "Calculated range with accuracy allowance", "Расчётный диапазон с учётом погрешности"), fmtTempRange(pv.rangeMin, pv.rangeMax)],
   ];
 }
 
@@ -798,9 +868,11 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     margin: PAGE_MARGIN,
     bufferPages: true,
     info: {
-      Title: `Протокол валидации ${input.protocol.number}`,
+      Title: `${isEnglishWarehouse(input) ? "Qualification Protocol and Report" : "Протокол валидации"} ${input.protocol.number}`,
       Author: input.org.name,
-      Subject: "Протокол квалификации/валидации холодильного оборудования",
+      Subject: isEnglishWarehouse(input)
+        ? "Storage area temperature mapping qualification protocol and report"
+        : "Протокол квалификации/валидации холодильного оборудования",
     },
   });
 
@@ -847,19 +919,19 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     
     doc.addPage();
     drawSectionTitle(doc, "2. План IQ — Квалификация монтажа");
-    drawStageBlocks(doc, input.iq);
+    drawStageBlocks(doc, input.iq, input);
     drawChecklistPlan(doc, input.iq.items);
     doc.addPage();
     drawSectionTitle(doc, "3. План OQ — Квалификация функционирования");
-    drawStageBlocks(doc, input.oq);
+    drawStageBlocks(doc, input.oq, input);
     drawChecklistPlan(doc, input.oq.items);
     doc.addPage();
     drawSectionTitle(doc, "4. План PV — Эксплуатационная квалификация");
-    drawStageBlocks(doc, input.pv);
+    drawStageBlocks(doc, input.pv, input);
     drawPVPlan(doc, input.pv, input);
     doc.addPage();
     drawSectionTitle(doc, "5. Подписи к Протоколу");
-    drawSignaturesBlock(doc, getSignatoriesPart1(input), "Настоящий протокол квалификации рассмотрен и утверждён:");
+    drawSignaturesBlock(doc, getSignatoriesPart1(input), "Настоящий протокол квалификации рассмотрен и утверждён:", input);
   }
 
   /* ============================================================ */
@@ -869,23 +941,23 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   drawPartCover(doc, input, "part2");
 
   doc.addPage();
-  drawSectionTitle(doc, "6. Период проведения испытаний");
+  drawSectionTitle(doc, isEnglishWarehouse(input) ? "6. Test Period" : "6. Период проведения испытаний");
   drawTestPeriod(doc, input);
 
   doc.addPage();
-  drawSectionTitle(doc, "7. Результаты IQ — Квалификация монтажа");
+  drawSectionTitle(doc, isEnglishWarehouse(input) ? "7. IQ Results - Installation Qualification" : "7. Результаты IQ — Квалификация монтажа");
   drawStageDataEntryTable(doc, input, "IQ");
-  drawChecklistTable(doc, input.iq.items);
-  drawStageVerdict(doc, "IQ", input.iq.verdict, input.iq.items);
+  drawChecklistTable(doc, input.iq.items, input);
+  drawStageVerdict(doc, "IQ", input.iq.verdict, input.iq.items, input);
 
   doc.addPage();
-  drawSectionTitle(doc, "8. Результаты OQ — Квалификация функционирования");
+  drawSectionTitle(doc, isEnglishWarehouse(input) ? "8. OQ Results - Operational Qualification" : "8. Результаты OQ — Квалификация функционирования");
   drawStageDataEntryTable(doc, input, "OQ");
-  drawChecklistTable(doc, input.oq.items);
-  drawStageVerdict(doc, "OQ", input.oq.verdict, input.oq.items);
+  drawChecklistTable(doc, input.oq.items, input);
+  drawStageVerdict(doc, "OQ", input.oq.verdict, input.oq.items, input);
 
   doc.addPage();
-    drawSectionTitle(doc, "9. Результаты PV — Эксплуатационная квалификация");
+    drawSectionTitle(doc, isEnglishWarehouse(input) ? "9. PV Results - Performance Qualification" : "9. Результаты PV — Эксплуатационная квалификация");
     if (getReportEquipmentType(input) === "thermal-container") {
       drawThermalTrialsSummary(doc, input);
     }
@@ -896,7 +968,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     const eqType = getReportEquipmentType(input) || "";
     if (eqType === "warehouse") {
       // Warehouse: single floor plan diagram only (no ISPE grid schema)
-      drawWarehousePlanDiagram(doc, input, false, "Схема. Расстановка датчиков на плане помещения (ID и средняя температура)");
+      drawWarehousePlanDiagram(doc, input, false, isEnglishWarehouse(input) ? "Diagram. Sensor placement on the storage area plan (ID and average temperature)" : "Схема. Расстановка датчиков на плане помещения (ID и средняя температура)");
     } else {
       // Non-warehouse: Schema 1 (reference positions)
       if (isReeferLike(eqType)) {
@@ -922,15 +994,15 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     }
   }
 
-  drawSubTitle(doc, "Сводная статистика по датчикам");
-  drawStatsTable(doc, input.pv.loggers, input.pv.hotIdx, input.pv.coldIdx, input.pv.extIndices);
+  drawSubTitle(doc, isEnglishWarehouse(input) ? "Sensor Summary Statistics" : "Сводная статистика по датчикам");
+  drawStatsTable(doc, input.pv.loggers, input.pv.hotIdx, input.pv.coldIdx, input.pv.extIndices, input);
 
   doc.addPage();
-  drawSubTitle(doc, "Таблица результатов измерений");
-  drawMeasurementTable(doc, input.pv.loggers, input.pv.samplingStepMinutes);
+  drawSubTitle(doc, isEnglishWarehouse(input) ? "Measurement Results Table" : "Таблица результатов измерений");
+  drawMeasurementTable(doc, input.pv.loggers, input.pv.samplingStepMinutes, input);
 
   drawCharts(doc, input.pv, input);
-  drawDeviationsSection(doc, input.pv);
+  drawDeviationsSection(doc, input.pv, input);
   drawStagePVVerdict(doc, input.pv, input);
 
   if (input.excursion?.enabled) {
@@ -939,33 +1011,33 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   }
 
   doc.addPage();
-  drawSectionTitle(doc, input.excursion?.enabled ? "11. Отчёт о квалификации" : "10. Отчёт о квалификации");
+  drawSectionTitle(doc, isEnglishWarehouse(input) ? (input.excursion?.enabled ? "11. Qualification Report" : "10. Qualification Report") : (input.excursion?.enabled ? "11. Отчёт о квалификации" : "10. Отчёт о квалификации"));
   drawFinalConclusion(doc, input);
 
   doc.addPage();
-  drawSectionTitle(doc, input.excursion?.enabled ? "12. Отклонения от плана протокола" : "11. Отклонения от плана протокола");
+  drawSectionTitle(doc, isEnglishWarehouse(input) ? (input.excursion?.enabled ? "12. Deviations from the Protocol Plan" : "11. Deviations from the Protocol Plan") : (input.excursion?.enabled ? "12. Отклонения от плана протокола" : "11. Отклонения от плана протокола"));
   drawPlanDeviationsSection(doc, input);
 
-  drawSectionTitle(doc, input.excursion?.enabled ? "13. Рекомендации" : "12. Рекомендации");
+  drawSectionTitle(doc, isEnglishWarehouse(input) ? (input.excursion?.enabled ? "13. Recommendations" : "12. Recommendations") : (input.excursion?.enabled ? "13. Рекомендации" : "12. Рекомендации"));
   drawRecommendationsSection(doc, input);
 
   doc.addPage();
-  drawSectionTitle(doc, input.excursion?.enabled ? "14. Подписи к Отчёту" : "13. Подписи к Отчёту");
-  drawSignaturesBlock(doc, getSignatoriesPart2(input), "Настоящий отчёт о квалификации рассмотрен и утверждён:");
+  drawSectionTitle(doc, isEnglishWarehouse(input) ? (input.excursion?.enabled ? "14. Report Signatures" : "13. Report Signatures") : (input.excursion?.enabled ? "14. Подписи к Отчёту" : "13. Подписи к Отчёту"));
+  drawSignaturesBlock(doc, getSignatoriesPart2(input), isEnglishWarehouse(input) ? "This qualification report has been reviewed and approved by:" : "Настоящий отчёт о квалификации рассмотрен и утверждён:", input);
 
-  drawSectionTitle(doc, input.excursion?.enabled ? "15. Срок действия документа" : "14. Срок действия документа");
+  drawSectionTitle(doc, isEnglishWarehouse(input) ? (input.excursion?.enabled ? "15. Document Validity Period" : "14. Document Validity Period") : (input.excursion?.enabled ? "15. Срок действия документа" : "14. Срок действия документа"));
   drawValiditySection(doc, input);
 
   if (input.attachments?.some(item => item.includeInPdf !== false && item.includeInPdf !== 0)) {
     doc.addPage();
-    drawSectionTitle(doc, input.excursion?.enabled ? "16. Приложения" : "15. Приложения");
+    drawSectionTitle(doc, isEnglishWarehouse(input) ? (input.excursion?.enabled ? "16. Annexes" : "15. Annexes") : (input.excursion?.enabled ? "16. Приложения" : "15. Приложения"));
     drawAttachmentsSection(doc, input);
   }
 
   doc.addPage();
   drawCalibrationPage(doc, input.attachments?.some(item => item.includeInPdf !== false && item.includeInPdf !== 0)
-    ? (input.excursion?.enabled ? "17. Поверка средств измерений" : "16. Поверка средств измерений")
-    : undefined);
+    ? (isEnglishWarehouse(input) ? (input.excursion?.enabled ? "17. Calibration of Measuring Instruments" : "16. Calibration of Measuring Instruments") : (input.excursion?.enabled ? "17. Поверка средств измерений" : "16. Поверка средств измерений"))
+    : (isEnglishWarehouse(input) ? "16. Calibration of Measuring Instruments" : undefined));
 
   /* ---------------- Footer / pagination ---------------- */
   addHeadersAndFooters(doc, input);
@@ -1005,13 +1077,14 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
 
   y += 130;
 
-  const partLabel = part === "part1" ? "ЧАСТЬ I" : "ЧАСТЬ II";
+  const en = isEnglishWarehouse(input);
+  const partLabel = part === "part1" ? (en ? "PART I" : "ЧАСТЬ I") : (en ? "PART II" : "ЧАСТЬ II");
   const partTitle = part === "part1"
-    ? "ПРОТОКОЛ КВАЛИФИКАЦИИ"
-    : "ОТЧЁТ О КВАЛИФИКАЦИИ";
+    ? (en ? "QUALIFICATION PROTOCOL" : "ПРОТОКОЛ КВАЛИФИКАЦИИ")
+    : (en ? "QUALIFICATION REPORT" : "ОТЧЁТ О КВАЛИФИКАЦИИ");
   const partSubtitle = part === "part1"
     ? "IQ · OQ · PQ/PV"
-    : "Результаты испытаний IQ · OQ · PQ/PV";
+    : (en ? "IQ · OQ · PQ/PV Test Results" : "Результаты испытаний IQ · OQ · PQ/PV");
 
   doc
     .fillColor(MUTED)
@@ -1035,7 +1108,9 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
 
   y += 24;
   const eqType = getReportEquipmentType(input) || "";
-  const equipmentTypeLabel = eqType === "chamber"
+  const equipmentTypeLabel = en && eqType === "warehouse"
+    ? "Storage Room / Storage Area"
+    : eqType === "chamber"
     ? "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430"
     : eqType === "thermal-container"
       ? "\u0422\u0435\u0440\u043c\u043e\u043a\u043e\u043d\u0442\u0435\u0439\u043d\u0435\u0440"
@@ -1064,13 +1139,15 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
   const selectedThermalModes = gi?.thermalContainerConfig?.selectedModes || [];
   const temperatureModeText = selectedThermalModes.length > 0
     ? selectedThermalModes.map(mode => TEMP_MODE_LABEL[mode] || mode).join(", ")
-    : temperatureModeLabel(gi?.tempMode, gi?.customMin, gi?.customMax);
+    : temperatureModeLabel(gi?.tempMode, gi?.customMin, gi?.customMax, input);
+  const seasonLabels = en ? SEASON_LABEL_EN : SEASON_LABEL_RU;
+  const qualificationLabels = en ? QUALIFICATION_LABEL_EN : QUALIFICATION_LABEL_RU;
   const baseRows: Array<[string, string]> = [
-    ["Номер протокола", input.protocol.number],
-    ["Редакция", input.dataIntegrity?.revision || "01"],
-    ["Организация", input.org.name],
-    ["БИН / ИНН", input.org.bin || "—"],
-    ["Объект квалификации", objectLabel],
+    [en ? "Protocol No." : "Номер протокола", input.protocol.number],
+    [en ? "Revision" : "Редакция", input.dataIntegrity?.revision || "01"],
+    [en ? "Organization" : "Организация", input.org.name],
+    [en ? "BIN / Tax ID" : "БИН / ИНН", input.org.bin || "—"],
+    [en ? "Qualification object" : "Объект квалификации", objectLabel],
     ...(isReeferLike(eqType)
       ? [
           [reeferLocationLabel(eqType), gi?.location || "\u2014"],
@@ -1078,22 +1155,24 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
           ["\u0421\u0435\u0440\u0438\u0439\u043d\u044b\u0439 \u043d\u043e\u043c\u0435\u0440 \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0438", gi?.serial || "\u2014"],
         ] as Array<[string, string]>
       : [
-          ["Адрес объекта", gi?.location || "—"],
+          [en ? "Object address" : "Адрес объекта", gi?.location || "—"],
         ] as Array<[string, string]>),
-    ["Температурный режим", temperatureModeText],
-    ["Сезон", gi?.season ? { warm: "Теплый период", cold: "Холодный период", interseasonal: "Межсезонье", none: "Не применимо" }[gi.season] || "—" : "—"],
-    ["Тип квалификации", gi?.qualificationType ? { primary: "Первичная", periodic: "Периодическая", repeat: "Повторная" }[gi.qualificationType] || "—" : "—"],
+    [en ? "Temperature mode" : "Температурный режим", temperatureModeText],
+    [en ? "Season" : "Сезон", gi?.season ? seasonLabels[gi.season] || "—" : "—"],
+    [en ? "Qualification type" : "Тип квалификации", gi?.qualificationType ? qualificationLabels[gi.qualificationType] || "—" : "—"],
   ];
   const rows: Array<[string, string | undefined]> = part === "part1"
     ? [
         ...baseRows,
-        ["Дата составления протокола", fmtDateOnly(input.generalInfo?.validationDate ? new Date(input.generalInfo.validationDate) : typeof input.protocol.createdAt === 'string' ? new Date(input.protocol.createdAt) : input.protocol.createdAt)],
+        [en ? "Protocol date" : "Дата составления протокола", fmtDateOnly(input.generalInfo?.validationDate ? new Date(input.generalInfo.validationDate) : typeof input.protocol.createdAt === 'string' ? new Date(input.protocol.createdAt) : input.protocol.createdAt)],
       ]
     : [
         // Перекрёстная ссылка на Протокол (Часть I)
-        ["Отчёт составлен по Протоколу №", `${input.protocol.number} от ${fmtDateOnly(input.generalInfo?.validationDate ? new Date(input.generalInfo.validationDate) : typeof input.protocol.createdAt === 'string' ? new Date(input.protocol.createdAt) : input.protocol.createdAt)}`],
+        [en ? "Report prepared under Protocol No." : "Отчёт составлен по Протоколу №", en
+          ? `${input.protocol.number} dated ${fmtDateOnly(input.generalInfo?.validationDate ? new Date(input.generalInfo.validationDate) : typeof input.protocol.createdAt === 'string' ? new Date(input.protocol.createdAt) : input.protocol.createdAt)}`
+          : `${input.protocol.number} от ${fmtDateOnly(input.generalInfo?.validationDate ? new Date(input.generalInfo.validationDate) : typeof input.protocol.createdAt === 'string' ? new Date(input.protocol.createdAt) : input.protocol.createdAt)}`],
         ...baseRows,
-        ["Дата составления отчёта", input.reportDate && input.reportDate.trim() ? input.reportDate.trim() : fmtDateOnly(input.generalInfo?.validationDate ? new Date(input.generalInfo.validationDate) : typeof input.protocol.createdAt === 'string' ? new Date(input.protocol.createdAt) : input.protocol.createdAt)]
+        [en ? "Report date" : "Дата составления отчёта", input.reportDate && input.reportDate.trim() ? input.reportDate.trim() : fmtDateOnly(input.generalInfo?.validationDate ? new Date(input.generalInfo.validationDate) : typeof input.protocol.createdAt === 'string' ? new Date(input.protocol.createdAt) : input.protocol.createdAt)]
       ];
 
   const rowMinH = 24;
@@ -1111,10 +1190,13 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
       "\u041e\u0440\u0433\u0430\u043d\u0438\u0437\u0430\u0446\u0438\u044f",
       "\u0410\u0434\u0440\u0435\u0441 \u043e\u0431\u044a\u0435\u043a\u0442\u0430",
       "\u0422\u0440\u0430\u043d\u0441\u043f\u043e\u0440\u0442\u043d\u043e\u0435 \u0441\u0440\u0435\u0434\u0441\u0442\u0432\u043e / \u0433\u043e\u0441. \u043d\u043e\u043c\u0435\u0440",
+      "Organization",
+      "Object address",
     ]);
     const twoLineKeys = new Set([
       "\u041e\u0431\u044a\u0435\u043a\u0442 \u043a\u0432\u0430\u043b\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438",
       "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430",
+      "Qualification object",
     ]);
     doc.font("bold").fontSize(valueFontSize);
     // Allow long organisation names / addresses to wrap fully instead of being
@@ -1165,7 +1247,9 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
       .font("body")
       .fontSize(8)
       .text(
-        "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442 \u0441\u0444\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u043d \u0432 \u0441\u043e\u043e\u0442\u0432\u0435\u0442\u0441\u0442\u0432\u0438\u0438 \u0441 \u0442\u0440\u0435\u0431\u043e\u0432\u0430\u043d\u0438\u044f\u043c\u0438 GMP / GDP / GPP.",
+        en
+          ? "The document was generated in accordance with GMP / GDP / GPP requirements."
+          : "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442 \u0441\u0444\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u043d \u0432 \u0441\u043e\u043e\u0442\u0432\u0438\u0438 \u0441 \u0442\u0440\u0435\u0431\u043e\u0432\u0430\u043d\u0438\u044f\u043c\u0438 GMP / GDP / GPP.",
         left,
         footerNoteY,
         { width: right - left, align: "center" },
@@ -1256,6 +1340,7 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
   const gi = input.generalInfo;
   const eqType = getReportEquipmentType(input) || "";
   const isWarehouse = eqType === "warehouse";
+  const en = isEnglishWarehouse(input);
   const loadPercentLabel = formatLoadPercent(gi?.loadPercent);
 
   let rows: Array<[string, string]>;
@@ -1266,30 +1351,37 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
     const lengthM = gi?.whLengthM ? Number(gi.whLengthM).toFixed(2) : "—";
     const widthM  = gi?.whWidthM ? Number(gi.whWidthM).toFixed(2) : "—";
     const heightM = gi?.whHeightM ? Number(gi.whHeightM).toFixed(2) : "—";
-    const dims = `${lengthM} × ${widthM} × ${heightM} м (Д × Ш × В)`;
-    const fillStatusLabel = gi?.fillStatus ? { empty: "Пустой", loaded: "Загруженный" }[gi.fillStatus] : "—";
+    const dims = en
+      ? `${lengthM} × ${widthM} × ${heightM} m (L × W × H)`
+      : `${lengthM} × ${widthM} × ${heightM} м (Д × Ш × В)`;
+    const fillStatusLabel = gi?.fillStatus
+      ? (en ? FILL_STATUS_LABEL_EN : FILL_STATUS_LABEL_RU)[gi.fillStatus]
+      : "—";
+    const humidityText = gi?.whHumidityControl
+      ? (en ? `Yes (${gi?.whHumidityMin ?? "—"} – ${gi?.whHumidityMax ?? "—"} % RH)` : `Да (${gi?.whHumidityMin ?? "—"} – ${gi?.whHumidityMax ?? "—"} % о.в.)`)
+      : (en ? "Not controlled" : "Не контролируется");
     rows = [
-      ["Тип объекта", eqType === "warehouse" ? getEquipmentName(input) : EQUIPMENT_LABEL[eqType || ""] || "—"],
-      ["Тип помещения / зоны", WAREHOUSE_STUDY_LABEL[gi?.whStudyType || ""] || "—"],
-      ["Адрес объекта", gi?.location || "—"],
-      ["Температурный режим", temperatureModeLabel(gi?.tempMode, gi?.customMin, gi?.customMax)],
-      ["Контроль влажности", gi?.whHumidityControl ? `Да (${gi?.whHumidityMin ?? "—"} – ${gi?.whHumidityMax ?? "—"} % о.в.)` : "Не контролируется"],
-      ["Сезон исследования", gi?.season ? { warm: "Тёплый период", cold: "Холодный период", interseasonal: "Межсезонье", none: "Не применимо" }[gi.season] || WAREHOUSE_SEASON_LABEL[gi.season] || "—" : "—"],
-      ["Контакт с внешней средой", gi?.whExternalEnv ? "Имеется (учитываются сезонные колебания)" : "Отсутствует"],
-      ["Заполненность объекта", fillStatusLabel],
-      ["Процент загруженности объекта", loadPercentLabel],
-      ["Назначение / хранимая продукция", gi?.purpose || "—"],
-      ["Организация", input.org.name],
-      ["БИН / ИНН", input.org.bin || "—"],
-      ["Адрес организации", input.org.addressFact || "—"],
-      ["Ответственное лицо", input.org.responsible || "—"],
-      ["Контакты", input.org.phone || "—"],
+      [en ? "Object type" : "Тип объекта", eqType === "warehouse" ? getEquipmentName(input) : EQUIPMENT_LABEL[eqType || ""] || "—"],
+      [en ? "Room / area type" : "Тип помещения / зоны", en ? (WAREHOUSE_STUDY_LABEL_EN[gi?.whStudyType || ""] || "—") : (WAREHOUSE_STUDY_LABEL[gi?.whStudyType || ""] || "—")],
+      [en ? "Object address" : "Адрес объекта", gi?.location || "—"],
+      [en ? "Temperature mode" : "Температурный режим", temperatureModeLabel(gi?.tempMode, gi?.customMin, gi?.customMax, input)],
+      [en ? "Humidity control" : "Контроль влажности", humidityText],
+      [en ? "Study season" : "Сезон исследования", gi?.season ? (en ? SEASON_LABEL_EN[gi.season] : ({ warm: "Тёплый период", cold: "Холодный период", interseasonal: "Межсезонье", none: "Не применимо" } as Record<string, string>)[gi.season] || WAREHOUSE_SEASON_LABEL[gi.season]) || "—" : "—"],
+      [en ? "Contact with external environment" : "Контакт с внешней средой", gi?.whExternalEnv ? (en ? "Present (seasonal fluctuations are considered)" : "Имеется (учитываются сезонные колебания)") : (en ? "Absent" : "Отсутствует")],
+      [en ? "Object fill status" : "Заполненность объекта", fillStatusLabel],
+      [en ? "Object load percentage" : "Процент загруженности объекта", loadPercentLabel],
+      [en ? "Purpose / stored products" : "Назначение / хранимая продукция", gi?.purpose || "—"],
+      [en ? "Organization" : "Организация", input.org.name],
+      [en ? "BIN / Tax ID" : "БИН / ИНН", input.org.bin || "—"],
+      [en ? "Organization address" : "Адрес организации", input.org.addressFact || "—"],
+      [en ? "Responsible person" : "Ответственное лицо", input.org.responsible || "—"],
+      [en ? "Contacts" : "Контакты", input.org.phone || "—"],
     ];
     if (hasDimensions) {
-      rows.splice(3, 0, ["Геометрические размеры", dims]);
+      rows.splice(3, 0, [en ? "Geometric dimensions" : "Геометрические размеры", dims]);
     }
     if (gi?.whLayoutNotes) {
-      rows.push(["Примечания к планировке", gi.whLayoutNotes]);
+      rows.push([en ? "Layout notes" : "Примечания к планировке", gi.whLayoutNotes]);
     }
   } else {
     // Refrigerator / auto-refrigerator: show equipment-specific fields
@@ -1456,11 +1548,12 @@ function drawSimpleTable(
 }
 
 function drawRevisionHistorySection(doc: PDFKit.PDFDocument, input: ReportInput) {
-  drawSubTitle(doc, "Редакция протокола и история изменений");
+  const en = isEnglishWarehouse(input);
+  drawSubTitle(doc, en ? "Protocol Revision and Change History" : "Редакция протокола и история изменений");
   const revision = input.dataIntegrity?.revision || "01";
   drawKVTable(doc, [
-    ["Текущая редакция", revision],
-    ["Статус редакции", "Действующая"],
+    [en ? "Current revision" : "Текущая редакция", revision],
+    [en ? "Revision status" : "Статус редакции", en ? "Effective" : "Действующая"],
   ], 180);
 
   const author = getTraceablePerson(input);
@@ -1470,7 +1563,7 @@ function drawRevisionHistorySection(doc: PDFKit.PDFDocument, input: ReportInput)
     : [{
         revision,
         date: defaultDate,
-        change: "Первичная редакция протокола и отчёта о квалификации.",
+        change: en ? "Initial issue of the qualification protocol and report." : "Первичная редакция протокола и отчёта о квалификации.",
         author,
       }]
   ).map(item => [
@@ -1482,7 +1575,9 @@ function drawRevisionHistorySection(doc: PDFKit.PDFDocument, input: ReportInput)
 
   drawSimpleTable(
     doc,
-    ["Ред.", "Дата", "Описание изменения", "Внес / подготовил"],
+    en
+      ? ["Rev.", "Date", "Change description", "Entered / prepared by"]
+      : ["Ред.", "Дата", "Описание изменения", "Внес / подготовил"],
     rows,
     [0.10, 0.20, 0.45, 0.25],
   );
@@ -1490,6 +1585,7 @@ function drawRevisionHistorySection(doc: PDFKit.PDFDocument, input: ReportInput)
 
 function drawStageDataEntryTable(doc: PDFKit.PDFDocument, input: ReportInput, stage: "IQ" | "OQ" | "PV") {
   const trace = getStageTrace(input, stage);
+  const en = isEnglishWarehouse(input);
   // Auto-fill: ФИО — автор из истории изменений («внёс/подготовил»),
   // дата — как дата составления протокола.
   const filledBy = getTraceablePerson(input);
@@ -1500,11 +1596,13 @@ function drawStageDataEntryTable(doc: PDFKit.PDFDocument, input: ReportInput, st
         ? new Date(input.protocol.createdAt)
         : input.protocol.createdAt,
   );
-  drawSubTitle(doc, `Запись ввода данных ${stage === "PV" ? "PQ/PV" : stage}`);
+  drawSubTitle(doc, en ? `Data Entry Record ${stage === "PV" ? "PQ/PV" : stage}` : `Запись ввода данных ${stage === "PV" ? "PQ/PV" : stage}`);
   drawSimpleTable(
     doc,
-    ["Раздел данных", "Заполнил (ФИО)", "Дата заполнения", "Источник записи"],
-    [[trace.label || " ", filledBy || " ", protocolDate || " ", trace.source || " "]],
+    en
+      ? ["Data section", "Completed by", "Completion date", "Source record"]
+      : ["Раздел данных", "Заполнил (ФИО)", "Дата заполнения", "Источник записи"],
+    [[en ? `${stage === "PV" ? "PQ/PV" : stage} data` : (trace.label || " "), filledBy || " ", protocolDate || " ", en ? "Electronic protocol record / change history" : (trace.source || " ")]],
     [0.30, 0.22, 0.24, 0.24],
   );
 }
@@ -1512,11 +1610,12 @@ function drawStageDataEntryTable(doc: PDFKit.PDFDocument, input: ReportInput, st
 function drawStageBlocks(
   doc: PDFKit.PDFDocument,
   stage: { purpose: string; description: string; criteria: string },
+  input?: ReportInput,
 ) {
   const blocks: Array<[string, string]> = [
-    ["Цель испытания", stage.purpose],
-    ["Описание испытания", stage.description],
-    ["Критерии приемлемости", stage.criteria],
+    [enRu(input, "Test objective", "Цель испытания"), stage.purpose],
+    [enRu(input, "Test description", "Описание испытания"), stage.description],
+    [enRu(input, "Acceptance criteria", "Критерии приемлемости"), stage.criteria],
   ];
   blocks.forEach(([k, v]) => {
     ensureSpace(doc, 60);
@@ -1527,8 +1626,9 @@ function drawStageBlocks(
   });
 }
 
-function drawChecklistTable(doc: PDFKit.PDFDocument, items: ChecklistItem[]) {
-  drawSubTitle(doc, "Опросник");
+function drawChecklistTable(doc: PDFKit.PDFDocument, items: ChecklistItem[], input?: ReportInput) {
+  const en = isEnglishWarehouse(input);
+  drawSubTitle(doc, en ? "Checklist" : "Опросник");
   const left = PAGE_MARGIN;
   const right = doc.page.width - PAGE_MARGIN;
   const numW = 30;
@@ -1542,15 +1642,15 @@ function drawChecklistTable(doc: PDFKit.PDFDocument, items: ChecklistItem[]) {
   doc.rect(left, y, right - left, 22).fill(ACCENT);
   doc.restore();
   doc.fillColor("white").font("bold").fontSize(10);
-  doc.text("№", left + 6, y + 6, { width: numW - 6 });
-  doc.text("Вопрос / комментарий", left + numW + 6, y + 6, { width: qW - 12 });
-  doc.text("Ответ", left + numW + qW + 6, y + 6, { width: ansW - 12 });
+  doc.text(en ? "No." : "№", left + 6, y + 6, { width: numW - 6 });
+  doc.text(en ? "Question / comment" : "Вопрос / комментарий", left + numW + 6, y + 6, { width: qW - 12 });
+  doc.text(en ? "Answer" : "Ответ", left + numW + qW + 6, y + 6, { width: ansW - 12 });
   doc.y = y + 22;
 
   items.forEach((it, idx) => {
     const padding = 6;
     doc.font("body").fontSize(10);
-    const qText = it.questionText + (it.comment ? `\nКомментарий: ${it.comment}` : "");
+    const qText = it.questionText + (it.comment ? `\n${en ? "Comment" : "Комментарий"}: ${it.comment}` : "");
     const qH = doc.heightOfString(qText, { width: qW - 12 });
     const rowH = Math.max(22, qH + padding * 2);
     ensureSpace(doc, rowH);
@@ -1580,7 +1680,7 @@ function drawChecklistTable(doc: PDFKit.PDFDocument, items: ChecklistItem[]) {
       .fontSize(10)
       .text(qText, left + numW + 6, ry + padding, { width: qW - 12 });
 
-    const ansLabel = ANSWER_LABEL[it.answer] || "—";
+    const ansLabel = answerLabel(it.answer, input);
     let ansColor = MUTED;
     if (it.answer === "yes") ansColor = "#15803d";
     else if (it.answer === "no") ansColor = "#b91c1c";
@@ -1601,21 +1701,26 @@ function drawStageVerdict(
   name: string,
   verdict: "pass" | "fail" | "none",
   items: ChecklistItem[],
+  input?: ReportInput,
 ) {
+  const en = isEnglishWarehouse(input);
   const noItems = items.filter(i => i.answer === "no");
   doc.moveDown(0.5);
   // Draw title and box together — reserve space for both to prevent orphaned title
   doc.font("bold").fontSize(12);
-  const titleH = doc.heightOfString("Заключение по этапу") + 4;
+  const verdictTitle = en ? "Stage Conclusion" : "Заключение по этапу";
+  const titleH = doc.heightOfString(verdictTitle) + 4;
   doc.font("body").fontSize(10);
   // Use the longest possible verdict text to correctly estimate required height
   const longestSample =
-    "Все критерии приемлемости выполнены. Квалификация монтажа (IQ) пройдена успешно. " +
-    "Оборудование установлено, подключено и соответствует требованиям проектной, нормативной и эксплуатационной документации.";
+    en
+      ? "All acceptance criteria are met. Installation Qualification (IQ) has been completed successfully. The storage area and supporting systems meet the protocol requirements."
+      : "Все критерии приемлемости выполнены. Квалификация монтажа (IQ) пройдена успешно. " +
+        "Оборудование установлено, подключено и соответствует требованиям проектной, нормативной и эксплуатационной документации.";
   const sampleH = Math.max(60, doc.heightOfString(longestSample, { width: doc.page.width - PAGE_MARGIN * 2 - 28 }) + 28);
   ensureSpace(doc, titleH + 8 + sampleH);
   doc.fillColor(ACCENT).font("bold").fontSize(12).text(
-    "Заключение по этапу",
+    verdictTitle,
     PAGE_MARGIN,
     doc.y,
     {
@@ -1634,13 +1739,23 @@ function drawStageVerdict(
   let bg = "#f1f5f9";
   let bd = BORDER;
   let fg = ACCENT;
-  let text = "Заключение не сформировано — этап не завершён.";
+  let text = en ? "Conclusion has not been generated — the stage is not completed." : "Заключение не сформировано — этап не завершён.";
 
   if (verdict === "pass") {
     bg = "#ecfdf5";
     bd = "#a7f3d0";
     fg = "#065f46";
-    if (name === "IQ") {
+    if (en) {
+      if (name === "IQ") {
+        text =
+          "All acceptance criteria are met. Installation Qualification (IQ) has been completed successfully. The storage area, utilities and supporting documentation meet the protocol requirements.";
+      } else if (name === "OQ") {
+        text =
+          "All acceptance criteria are met. Operational Qualification (OQ) has been completed successfully. The storage area and supporting systems operate in accordance with the defined requirements.";
+      } else {
+        text = `All acceptance criteria are met. The ${name} stage has been completed successfully.`;
+      }
+    } else if (name === "IQ") {
       text =
         "Все критерии приемлемости выполнены. Квалификация монтажа (IQ) пройдена успешно. " +
         "Оборудование установлено, подключено и соответствует требованиям проектной, нормативной и эксплуатационной документации.";
@@ -1658,7 +1773,9 @@ function drawStageVerdict(
     const list = noItems
       .map((it, i) => `${i + 1}. ${it.questionText}${it.comment ? ` (${it.comment})` : ""}`)
       .join("\n");
-    text = `Этап ${name} не пройден. Выявлены несоответствия:\n${list || "—"}`;
+    text = en
+      ? `The ${name} stage failed. Non-conformities were identified:\n${list || "—"}`
+      : `Этап ${name} не пройден. Выявлены несоответствия:\n${list || "—"}`;
   }
 
   const padding = 14;
@@ -1677,26 +1794,27 @@ function drawStageVerdict(
 }
 
 function drawPVParams(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: ReportInput) {
+  const en = isEnglishWarehouse(input);
   const durationMs = pv.startAt && pv.endAt ? pv.endAt - pv.startAt : 0;
   const durationRequirement = getReportEquipmentType(input) === "warehouse"
-    ? `от 3 суток и далее (не менее 72 ч); выбрано ${pv.minDurationHours} ч`
+    ? (en ? `from 3 days onward (not less than 72 h); selected ${pv.minDurationHours} h` : `от 3 суток и далее (не менее 72 ч); выбрано ${pv.minDurationHours} ч`)
     : `${pv.minDurationHours} ч`;
   const rows: Array<[string, string]> = [
-    ["Температурный режим", pvTemperatureModeLabel(pv)],
-    ...sensorAccuracyRows(pv),
-    ["Начало испытания", pv.startAt ? fmtDate(pv.startAt) : "—"],
-    ["Окончание испытания", pv.endAt ? fmtDate(pv.endAt) : "—"],
-    ["Фактическая длительность", durationMs ? fmtDuration(durationMs) : "—"],
+    [en ? "Temperature mode" : "Температурный режим", pvTemperatureModeLabel(pv, input)],
+    ...sensorAccuracyRows(pv, input),
+    [en ? "Test start" : "Начало испытания", pv.startAt ? fmtDate(pv.startAt) : "—"],
+    [en ? "Test end" : "Окончание испытания", pv.endAt ? fmtDate(pv.endAt) : "—"],
+    [en ? "Actual duration" : "Фактическая длительность", durationMs ? fmtDuration(durationMs) : "—"],
     [
       getReportEquipmentType(input) === "warehouse"
-        ? "Требуемая длительность"
+        ? (en ? "Required duration" : "Требуемая длительность")
         : "Минимальная длительность (по умолчанию)",
       durationRequirement,
     ],
-    ["Минимальное число датчиков (по умолчанию)", String(pv.minSensorCount)],
-    ["Использовано датчиков", String(pv.loggers.length)],
-    ["Внутренних датчиков", String(pv.loggers.filter(l => l.role === "internal").length)],
-    ["Внешних датчиков", String(pv.loggers.filter(l => l.role === "external").length)],
+    [en ? "Minimum number of loggers (default)" : "Минимальное число датчиков (по умолчанию)", String(pv.minSensorCount)],
+    [en ? "Loggers used" : "Использовано датчиков", String(pv.loggers.length)],
+    [en ? "Internal loggers" : "Внутренних датчиков", String(pv.loggers.filter(l => l.role === "internal").length)],
+    [en ? "External loggers" : "Внешних датчиков", String(pv.loggers.filter(l => l.role === "external").length)],
   ];
   drawKVTable(doc, rows);
 }
@@ -1707,20 +1825,22 @@ function drawStatsTable(
   hotIdx: number | null,
   coldIdx: number | null,
   extIndices: number[],
+  input?: ReportInput,
 ) {
+  const en = isEnglishWarehouse(input);
   const left = PAGE_MARGIN;
   const right = doc.page.width - PAGE_MARGIN;
   const w = right - left;
   const cols = [
-    { label: "Датчик", w: 0.14 },
-    { label: "Роль", w: 0.14 },
+    { label: en ? "Logger" : "Датчик", w: 0.14 },
+    { label: en ? "Role" : "Роль", w: 0.14 },
     { label: "Min, °C", w: 0.1 },
     { label: "Max, °C", w: 0.1 },
     { label: "Avg, °C", w: 0.11 },
     { label: "STD", w: 0.08 },
     { label: "MKT, °C", w: 0.11 },
-    { label: "Точек", w: 0.10 },
-    { label: "Откл.", w: 0.08 },
+    { label: en ? "Points" : "Точек", w: 0.10 },
+    { label: en ? "Dev." : "Откл.", w: 0.08 },
   ];
 
   const ROW_H = 26; // Increased by 10% from 24
@@ -1748,9 +1868,9 @@ function drawStatsTable(
       doc.fillColor(SOFT_BG).rect(left, ry, w, ROW_H).fill();
       doc.restore();
     }
-    let role = l.role === "external" ? "внеш." : "внутр.";
-    if (idx === hotIdx) role = "внутр. гор.";
-    if (idx === coldIdx) role = "внутр. хол.";
+    let role = l.role === "external" ? (en ? "external" : "внеш.") : (en ? "internal" : "внутр.");
+    if (idx === hotIdx) role = en ? "internal hot" : "внутр. гор.";
+    if (idx === coldIdx) role = en ? "internal cold" : "внутр. хол.";
     const rawLabel = l.label.length > 4 ? l.label.slice(-4) : l.label;
     const name = l.customName ? `${rawLabel} · ${l.customName}` : rawLabel;
     const cells = [
@@ -1777,6 +1897,7 @@ function drawStatsTable(
 }
 
 function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: ReportInput) {
+  const en = isEnglishWarehouse(input);
   const eqName = input ? getEquipmentName(input) : "оборудования";
   const eqGen = eqName.toLowerCase(); // genitive approximation for use in sentences
   const internal = pv.loggers
@@ -1796,10 +1917,14 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     );
     drawChartExplanation(
       doc,
-      "Обзорный график показывает температурные кривые всех внутренних датчиков на одной диаграмме. " +
-      "Зелёная полоса обозначает допустимый диапазон температур (" + (pv.rangeMin > 0 ? '+' : '') + pv.rangeMin + "…" + (pv.rangeMax > 0 ? '+' : '') + pv.rangeMax + " °C). " +
-      "Если все кривые остаются в пределах полосы, это свидетельствует о стабильности условий хранения. " +
-      "Пересечение кривой за границы диапазона указывает на отклонение, требующее анализа."
+      en
+        ? "The overview chart shows temperature curves for all internal loggers on one diagram. " +
+          "The green band indicates the allowable temperature range (" + (pv.rangeMin > 0 ? '+' : '') + pv.rangeMin + "…" + (pv.rangeMax > 0 ? '+' : '') + pv.rangeMax + " °C). " +
+          "Curves remaining within the band indicate stable storage conditions. Crossing the band indicates an excursion requiring assessment."
+        : "Обзорный график показывает температурные кривые всех внутренних датчиков на одной диаграмме. " +
+          "Зелёная полоса обозначает допустимый диапазон температур (" + (pv.rangeMin > 0 ? '+' : '') + pv.rangeMin + "…" + (pv.rangeMax > 0 ? '+' : '') + pv.rangeMax + " °C). " +
+          "Если все кривые остаются в пределах полосы, это свидетельствует о стабильности условий хранения. " +
+          "Пересечение кривой за границы диапазона указывает на отклонение, требующее анализа."
     );
   }
 
@@ -1816,7 +1941,9 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
       pv.rangeMin,
       pv.rangeMax,
     );
-    const externalChartText = getReportEquipmentType(input) === "warehouse"
+    const externalChartText = en
+      ? "The external logger chart shows ambient temperature outside the storage room / storage area. This logger is not included in the main PV acceptance calculation, but supports assessment of environmental influence."
+      : getReportEquipmentType(input) === "warehouse"
       ? "\u0413\u0440\u0430\u0444\u0438\u043a \u0432\u043d\u0435\u0448\u043d\u0435\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0430\u0435\u0442 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u0443 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u044b \u0432\u043d\u0435 \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f (\u0437\u043e\u043d\u044b) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f. " +
         "\u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u043d\u0435 \u0432\u0445\u043e\u0434\u0438\u0442 \u0432 \u0440\u0430\u0441\u0447\u0451\u0442 \u043a\u0440\u0438\u0442\u0435\u0440\u0438\u0435\u0432 \u043f\u0440\u0438\u0435\u043c\u043b\u0435\u043c\u043e\u0441\u0442\u0438 PV, \u043d\u043e \u043f\u043e\u043c\u043e\u0433\u0430\u0435\u0442 \u043e\u0446\u0435\u043d\u0438\u0442\u044c \u0432\u043b\u0438\u044f\u043d\u0438\u0435 \u0441\u0440\u0435\u0434\u044b."
       : "\u0413\u0440\u0430\u0444\u0438\u043a \u0432\u043d\u0435\u0448\u043d\u0435\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0430\u0435\u0442 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u0443 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u044b \u0432\u043d\u0435 " + reeferAreaGenitive(getReportEquipmentType(input)) + ". " +
@@ -1838,7 +1965,9 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     );
     drawChartExplanation(
       doc,
-      getReportEquipmentType(input) === "warehouse"
+      en
+        ? "The hot point chart shows the logger with the highest average temperature. This logger identifies the least favourable warm area and supports worst-case assessment within the storage room."
+        : getReportEquipmentType(input) === "warehouse"
         ? "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0430\u043c\u043e\u0433\u043e \u0442\u0451\u043f\u043b\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 (\u0441 \u043d\u0430\u0438\u0431\u043e\u043b\u044c\u0448\u0438\u043c \u0441\u0440\u0435\u0434\u043d\u0438\u043c \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435\u043c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b). \u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u043e\u0431\u044b\u0447\u043d\u043e \u0440\u0430\u0441\u043f\u043e\u043b\u0430\u0433\u0430\u0435\u0442\u0441\u044f \u0432 \u0437\u043e\u043d\u0435 \u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u0435\u0435 \u044d\u0444\u0444\u0435\u043a\u0442\u0438\u0432\u043d\u044b\u043c \u043e\u0445\u043b\u0430\u0436\u0434\u0435\u043d\u0438\u0435\u043c \u0438 \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438 \u043d\u0430\u0438\u0445\u0443\u0434\u0448\u0438\u0445 \u0443\u0441\u043b\u043e\u0432\u0438\u0439 \u0432 \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0438."
         : "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0430\u043c\u043e\u0433\u043e \u0442\u0451\u043f\u043b\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 (\u0441 \u043d\u0430\u0438\u0431\u043e\u043b\u044c\u0448\u0438\u043c \u0441\u0440\u0435\u0434\u043d\u0438\u043c \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435\u043c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b). \u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u043e\u0431\u044b\u0447\u043d\u043e \u0440\u0430\u0441\u043f\u043e\u043b\u0430\u0433\u0430\u0435\u0442\u0441\u044f \u0432 \u0437\u043e\u043d\u0435 \u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u0435\u0435 \u044d\u0444\u0444\u0435\u043a\u0442\u0438\u0432\u043d\u044b\u043c \u043e\u0445\u043b\u0430\u0436\u0434\u0435\u043d\u0438\u0435\u043c \u0438 \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438 \u043d\u0430\u0438\u0445\u0443\u0434\u0448\u0438\u0445 \u0443\u0441\u043b\u043e\u0432\u0438\u0439 \u0432 " + reeferAreaAfterIn(getReportEquipmentType(input)) + "."
     );
@@ -1858,7 +1987,9 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     );
     drawChartExplanation(
       doc,
-      getReportEquipmentType(input) === "warehouse"
+      en
+        ? "The cold point chart shows the logger with the lowest average temperature. This logger supports assessment of the coldest area within the storage room."
+        : getReportEquipmentType(input) === "warehouse"
         ? "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0430\u043c\u043e\u0433\u043e \u0445\u043e\u043b\u043e\u0434\u043d\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 (\u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u044c\u0448\u0438\u043c \u0441\u0440\u0435\u0434\u043d\u0438\u043c \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435\u043c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b). \u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438 \u043d\u0430\u0438\u0431\u043e\u043b\u0435\u0435 \u0445\u043e\u043b\u043e\u0434\u043d\u043e\u0439 \u0437\u043e\u043d\u044b \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f."
         : "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0430\u043c\u043e\u0433\u043e \u0445\u043e\u043b\u043e\u0434\u043d\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 (\u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u044c\u0448\u0438\u043c \u0441\u0440\u0435\u0434\u043d\u0438\u043c \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435\u043c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b). \u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438 \u043d\u0430\u0438\u0431\u043e\u043b\u0435\u0435 \u0445\u043e\u043b\u043e\u0434\u043d\u043e\u0439 \u0437\u043e\u043d\u044b \u0432 " + reeferAreaAfterIn(getReportEquipmentType(input)) + "."
     );
@@ -1876,7 +2007,9 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     );
     drawChartExplanation(
       doc,
-      getReportEquipmentType(input) === "warehouse"
+      en
+        ? "The heat map shows distribution of average temperatures across all internal loggers in the storage room / storage area."
+        : getReportEquipmentType(input) === "warehouse"
         ? "\u0422\u0435\u043f\u043b\u043e\u0432\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u043f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442 \u0440\u0430\u0441\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u0438\u0435 \u0441\u0440\u0435\u0434\u043d\u0438\u0445 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440 \u043f\u043e \u0432\u0441\u0435\u043c \u0434\u0430\u0442\u0447\u0438\u043a\u0430\u043c \u0432 \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0438 (\u0437\u043e\u043d\u0435) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f."
         : "\u0422\u0435\u043f\u043b\u043e\u0432\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u043f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442 \u0440\u0430\u0441\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u0438\u0435 \u0441\u0440\u0435\u0434\u043d\u0438\u0445 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440 \u043f\u043e \u0432\u0441\u0435\u043c \u0434\u0430\u0442\u0447\u0438\u043a\u0430\u043c \u0432 " + reeferAreaAfterIn(getReportEquipmentType(input)) + "."
     );
@@ -1893,7 +2026,9 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     );
     drawChartExplanation(
       doc,
-      "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043a\u0438 \u043f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442 \u043a\u043b\u044e\u0447\u0435\u0432\u044b\u0435 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u044b \u0434\u043b\u044f \u043a\u0430\u0436\u0434\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430: \u043c\u0438\u043d\u0438\u043c\u0443\u043c, \u0441\u0440\u0435\u0434\u043d\u0435\u0435, \u043c\u0430\u043a\u0441\u0438\u043c\u0443\u043c \u0438 MKT. MKT \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u0442\u0441\u044f \u043a\u0430\u043a \u043e\u0431\u043e\u0431\u0449\u0451\u043d\u043d\u044b\u0439 \u043f\u043e\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u044c \u0442\u0435\u0440\u043c\u0438\u0447\u0435\u0441\u043a\u043e\u0433\u043e \u0432\u043e\u0437\u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f \u043d\u0430 \u043f\u0440\u043e\u0434\u0443\u043a\u0446\u0438\u044e."
+      en
+        ? "The statistics chart shows key parameters for each logger: minimum, average, maximum and MKT. MKT is used as an integrated indicator of thermal exposure to medicinal products."
+        : "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0442\u0430\u0442\u0438\u0441\u0442\u0438\u043a\u0438 \u043f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442 \u043a\u043b\u044e\u0447\u0435\u0432\u044b\u0435 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u044b \u0434\u043b\u044f \u043a\u0430\u0436\u0434\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430: \u043c\u0438\u043d\u0438\u043c\u0443\u043c, \u0441\u0440\u0435\u0434\u043d\u0435\u0435, \u043c\u0430\u043a\u0441\u0438\u043c\u0443\u043c \u0438 MKT. MKT \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u0435\u0442\u0441\u044f \u043a\u0430\u043a \u043e\u0431\u043e\u0431\u0449\u0451\u043d\u043d\u044b\u0439 \u043f\u043e\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u044c \u0442\u0435\u0440\u043c\u0438\u0447\u0435\u0441\u043a\u043e\u0433\u043e \u0432\u043e\u0437\u0434\u0435\u0439\u0441\u0442\u0432\u0438\u044f \u043d\u0430 \u043f\u0440\u043e\u0434\u0443\u043a\u0446\u0438\u044e."
     );
   }
 
@@ -1908,7 +2043,8 @@ function insertImage(doc: PDFKit.PDFDocument, buf: Buffer, height: number) {
   doc.y += height + 8;
 }
 
-function drawDeviationsSection(doc: PDFKit.PDFDocument, pv: ReportInput["pv"]) {
+function drawDeviationsSection(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: ReportInput) {
+  const en = isEnglishWarehouse(input);
   const internal = pv.loggers
     .map((l, i) => ({ ...l, idx: i }))
     .filter((l, i) => l.role === "internal");
@@ -1921,14 +2057,14 @@ function drawDeviationsSection(doc: PDFKit.PDFDocument, pv: ReportInput["pv"]) {
 
   ensureSpace(doc, 60);
   doc.moveDown(0.5);
-  doc.fillColor(ACCENT).font("bold").fontSize(12).text("Зафиксированные отклонения");
+  doc.fillColor(ACCENT).font("bold").fontSize(12).text(en ? "Recorded Deviations" : "Зафиксированные отклонения");
   doc.moveDown(0.3);
   if (all.length === 0) {
     doc
       .fillColor(MUTED)
       .font("body")
       .fontSize(10)
-      .text("Отклонений за границы режима в течение испытания не зафиксировано.");
+      .text(en ? "No deviations outside the specified range were recorded during the study." : "Отклонений за границы режима в течение испытания не зафиксировано.");
     doc.moveDown(0.4);
     return;
   }
@@ -1937,12 +2073,12 @@ function drawDeviationsSection(doc: PDFKit.PDFDocument, pv: ReportInput["pv"]) {
   const right = doc.page.width - PAGE_MARGIN;
   const w = right - left;
   const cols = [
-    { label: "Датчик", w: 0.22 },
-    { label: "Тип", w: 0.17 },
-    { label: "Начало", w: 0.185 },
-    { label: "Окончание", w: 0.185 },
-    { label: "Длительность", w: 0.14 },
-    { label: "Экстремум, °C", w: 0.1 },
+    { label: en ? "Logger" : "Датчик", w: 0.22 },
+    { label: en ? "Type" : "Тип", w: 0.17 },
+    { label: en ? "Start" : "Начало", w: 0.185 },
+    { label: en ? "End" : "Окончание", w: 0.185 },
+    { label: en ? "Duration" : "Длительность", w: 0.14 },
+    { label: en ? "Extreme, °C" : "Экстремум, °C", w: 0.1 },
   ];
   const padding = 4;
   const headerFontSize = 8.5;
@@ -1970,7 +2106,7 @@ function drawDeviationsSection(doc: PDFKit.PDFDocument, pv: ReportInput["pv"]) {
   all.forEach((d, idx) => {
     const cells = [
       d.label,
-      d.type === "high" ? "Превышение" : "Понижение",
+      d.type === "high" ? (en ? "High" : "Превышение") : (en ? "Low" : "Понижение"),
       fmtDate(d.start),
       fmtDate(d.end),
       fmtDuration(d.durationMs),
@@ -2003,6 +2139,7 @@ function drawDeviationsSection(doc: PDFKit.PDFDocument, pv: ReportInput["pv"]) {
 }
 
 function drawStagePVVerdict(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: ReportInput) {
+  const en = isEnglishWarehouse(input);
   const left = PAGE_MARGIN;
   const right = doc.page.width - PAGE_MARGIN;
   const w = right - left;
@@ -2010,13 +2147,13 @@ function drawStagePVVerdict(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], inpu
   doc.moveDown(0.5);
   doc.x = left;
   doc.fillColor(ACCENT).font("bold").fontSize(12).text(
-    "Заключение по этапу PV",
+    en ? "PV Stage Conclusion" : "Заключение по этапу PV",
     left,
     doc.y,
     { width: w, align: "center", lineBreak: false },
   );
   doc.moveDown(0.3);
-  let text = "Заключение не сформировано — этап не завершён.";
+  let text = en ? "Conclusion has not been generated — the stage is not completed." : "Заключение не сформировано — этап не завершён.";
   let bg = "#f1f5f9";
   let bd = BORDER;
   let fg = ACCENT;
@@ -2029,18 +2166,23 @@ function drawStagePVVerdict(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], inpu
     if (getReportEquipmentType(input) === "warehouse") {
       const hotSensor = pv.hotIdx !== null ? pv.loggers[pv.hotIdx] : null;
       const coldSensor = pv.coldIdx !== null ? pv.loggers[pv.coldIdx] : null;
-      const hotLabel = hotSensor ? `датчик "${hotSensor.customName || hotSensor.label}"` : "датчик";
-      const coldLabel = coldSensor ? `датчик "${coldSensor.customName || coldSensor.label}"` : "датчик";
+      const hotLabel = hotSensor ? `${en ? "logger" : "датчик"} "${hotSensor.customName || hotSensor.label}"` : (en ? "logger" : "датчик");
+      const coldLabel = coldSensor ? `${en ? "logger" : "датчик"} "${coldSensor.customName || coldSensor.label}"` : (en ? "logger" : "датчик");
       const internalCount = pv.loggers.filter(l => l.role === "internal").length;
       
-      text =
-        "Все критерии приемлемости выполнены. Эксплуатационная квалификация (PV) пройдена успешно. " +
-        `Анализ данных ${internalCount} внутренних датчиков показал стабильное распределение температуры ` +
-        "по всему объёму помещения (зоны) хранения. " +
-        (hotSensor ? `Максимальная температура зафиксирована ${hotLabel} (горячая точка). ` : "") +
-        (coldSensor ? `Минимальная температура зафиксирована ${coldLabel} (холодная точка). ` : "") +
-        "Система кондиционирования/отопления функционирует в штатном режиме, обеспечивая равномерное распределение " +
-        "температуры и надлежащие условия для хранения лекарственных средств в соответствии с требованиями GDP/GSP.";
+      text = en
+        ? "All acceptance criteria are met. Performance Qualification / Validation (PV) has been completed successfully. " +
+          `Analysis of ${internalCount} internal logger(s) demonstrates stable temperature distribution throughout the storage room / storage area volume. ` +
+          (hotSensor ? `The maximum temperature was recorded by ${hotLabel} (hot point). ` : "") +
+          (coldSensor ? `The minimum temperature was recorded by ${coldLabel} (cold point). ` : "") +
+          "The HVAC/heating system operates normally and provides appropriate storage conditions for medicinal products in accordance with GDP/GSP requirements."
+        : "Все критерии приемлемости выполнены. Эксплуатационная квалификация (PV) пройдена успешно. " +
+          `Анализ данных ${internalCount} внутренних датчиков показал стабильное распределение температуры ` +
+          "по всему объёму помещения (зоны) хранения. " +
+          (hotSensor ? `Максимальная температура зафиксирована ${hotLabel} (горячая точка). ` : "") +
+          (coldSensor ? `Минимальная температура зафиксирована ${coldLabel} (холодная точка). ` : "") +
+          "Система кондиционирования/отопления функционирует в штатном режиме, обеспечивая равномерное распределение " +
+          "температуры и надлежащие условия для хранения лекарственных средств в соответствии с требованиями GDP/GSP.";
     } else {
       text =
         "Все критерии приемлемости выполнены. Эксплуатационная квалификация (PV) пройдена успешно. " +
@@ -2051,7 +2193,7 @@ function drawStagePVVerdict(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], inpu
     bd = "#fecaca";
     fg = "#991b1b";
     text =
-      "Эксплуатационная квалификация (PV) не пройдена. Зафиксированы несоответствия:\n" +
+      (en ? "Performance Qualification / Validation (PV) failed. Non-conformities were recorded:\n" : "Эксплуатационная квалификация (PV) не пройдена. Зафиксированы несоответствия:\n") +
       pv.failureReasons.map((r, i) => `${i + 1}. ${r}`).join("\n");
   }
 
@@ -2079,6 +2221,7 @@ function drawSensorPlacementAnalysis(
   sensors: DiagramSensor[],
   input?: ReportInput,
 ) {
+  const en = isEnglishWarehouse(input);
   const eqName = input ? getEquipmentName(input) : "оборудования";
   const eqGen = eqName.toLowerCase();
   const left = PAGE_MARGIN;
@@ -2087,11 +2230,24 @@ function drawSensorPlacementAnalysis(
 
   ensureSpace(doc, 100);
   doc.moveDown(0.3);
-  doc.fillColor(ACCENT).font("bold").fontSize(11).text("Анализ расстановки датчиков и оценка рисков", left, doc.y, { width: w });
+  doc.fillColor(ACCENT).font("bold").fontSize(11).text(en ? "Sensor Placement Analysis and Risk Assessment" : "Анализ расстановки датчиков и оценка рисков", left, doc.y, { width: w });
   doc.moveDown(0.2);
 
   const internals = sensors.filter(s => s.role === "internal");
   const externals = sensors.filter(s => s.role === "external");
+
+  if (en) {
+    const analysisText =
+      `Internal data loggers are placed at representative points across the storage room / storage area volume to identify temperature gradients, hot points and cold points. ` +
+      `The placement covers the room geometry and relevant risk areas such as walls, corners, doors, shelving zones and areas influenced by HVAC/heating equipment where applicable. ` +
+      (externals.length > 0
+        ? "The external logger monitors ambient conditions outside the storage area and is not included in the main PV acceptance calculation, but supports interpretation of environmental influence."
+        : "No external logger is included in the sensor placement set.");
+    doc.font("body").fontSize(10).fillColor(ACCENT);
+    doc.text(analysisText, left, doc.y, { width: w, align: "justify", lineGap: 2 });
+    doc.moveDown(0.5);
+    return;
+  }
 
   let analysisText = "";
 
@@ -2167,19 +2323,23 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
   const left = PAGE_MARGIN;
   const right = doc.page.width - PAGE_MARGIN;
   const w = right - left;
+  const en = isEnglishWarehouse(input);
 
   const all = [input.iq.verdict, input.oq.verdict, input.pv.verdict];
   const allPass = all.every(v => v === "pass");
   const anyFail = all.some(v => v === "fail");
 
   const lines: Array<[string, string]> = [
-    ["Этап IQ — квалификация монтажа", verdictLabel(input.iq.verdict)],
-    ["Этап OQ — квалификация функционирования", verdictLabel(input.oq.verdict)],
-    ["Этап PV — эксплуатационная квалификация", verdictLabel(input.pv.verdict)],
+    [en ? "IQ stage — Installation Qualification" : "Этап IQ — квалификация монтажа", verdictLabelLocal(input.iq.verdict, input)],
+    [en ? "OQ stage — Operational Qualification" : "Этап OQ — квалификация функционирования", verdictLabelLocal(input.oq.verdict, input)],
+    [en ? "PV stage — Performance Qualification" : "Этап PV — эксплуатационная квалификация", verdictLabelLocal(input.pv.verdict, input)],
   ];
   if (input.excursion?.enabled) {
     const excVerdict = excursionVerdictLabel(input.excursion);
-    lines.push(["Испытания на температурное отклонение (Excursion Study)", excVerdict]);
+    lines.push([
+      en ? "Temperature Excursion Study" : "Испытания на температурное отклонение (Excursion Study)",
+      en ? excVerdict.replace("Пройдено", "Passed").replace("Не пройдено", "Failed").replace("Не завершено", "Not completed") : excVerdict,
+    ]);
   }
   // Use wider key column for the summary table so long stage names don't wrap
   drawKVTable(doc, lines, 280);
@@ -2232,7 +2392,7 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
   if (allPass && input.excursion?.enabled) {
     doc.moveDown(0.3);
     doc.font("body").fontSize(10).fillColor(MUTED);
-    doc.text("Параметры эксплуатации:", { underline: true });
+    doc.text(en ? "Operational parameters:" : "Параметры эксплуатации:", { underline: true });
     doc.moveDown(0.2);
     doc.fontSize(10).fillColor("#1e293b");
     
@@ -2262,30 +2422,32 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
   let bg = "#f1f5f9";
   let bd = BORDER;
   let fg = ACCENT;
-  let text = "Валидация не завершена. Не все этапы пройдены успешно.";
+  let text = en ? "Validation is not completed. Not all stages have been completed successfully." : "Валидация не завершена. Не все этапы пройдены успешно.";
   if (allPass) {
     bg = "#ecfdf5";
     bd = "#a7f3d0";
     fg = "#065f46";
     const excNote = input.excursion?.enabled
-      ? ` Испытания на температурное отклонение проведены и зафиксированы в разделе 10 настоящего отчёта.`
+      ? (en ? " Temperature excursion testing was performed and documented in the relevant section of this report." : ` Испытания на температурное отклонение проведены и зафиксированы в разделе 10 настоящего отчёта.`)
       : "";
     const suitabilityWord = getReportEquipmentType(input) === "chamber" ? "пригодной" : "пригодным";
-    text =
-      "\u041d\u0430 \u043e\u0441\u043d\u043e\u0432\u0430\u043d\u0438\u0438 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u043e\u0432 IQ, OQ \u0438 PV \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u043f\u0440\u0438\u0437\u043d\u0430\u0451\u0442 " + (getReportEquipmentType(input) === "warehouse" ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 (\u0437\u043e\u043d\u0443) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : reeferConclusionObject(input)) + " " +
-      `${suitabilityWord} для хранения лекарственных средств ` +
-      `в температурном режиме ${pvTemperatureModeLabel(input.pv)} в соответствии с требованиями GDP / GPP. ` +
-      (getReportEquipmentType(input) === "warehouse"
-        ? `Система кондиционирования/отопления обеспечивает стабильное распределение температуры по всему объёму помещения. ` 
-        : "") +
-      `Валидация завершена с положительным заключением.${excNote}`;
+    text = en
+      ? `Based on IQ, OQ and PV results, the commission recognizes the storage room / storage area as suitable for storage of medicinal products within the temperature regime ${pvTemperatureModeLabel(input.pv, input)} in accordance with GDP / GPP requirements. The HVAC/heating system provides stable temperature distribution throughout the room volume. Validation has been completed with a positive conclusion.${excNote}`
+      : "\u041d\u0430 \u043e\u0441\u043d\u043e\u0432\u0430\u043d\u0438\u0438 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u043e\u0432 IQ, OQ \u0438 PV \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u043f\u0440\u0438\u0437\u043d\u0430\u0451\u0442 " + (getReportEquipmentType(input) === "warehouse" ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 (\u0437\u043e\u043d\u0443) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : reeferConclusionObject(input)) + " " +
+        `${suitabilityWord} для хранения лекарственных средств ` +
+        `в температурном режиме ${pvTemperatureModeLabel(input.pv, input)} в соответствии с требованиями GDP / GPP. ` +
+        (getReportEquipmentType(input) === "warehouse"
+          ? `Система кондиционирования/отопления обеспечивает стабильное распределение температуры по всему объёму помещения. ` 
+          : "") +
+        `Валидация завершена с положительным заключением.${excNote}`;
   } else if (anyFail) {
     bg = "#fef2f2";
     bd = "#fecaca";
     fg = "#991b1b";
-    text =
-      "Валидация завершена с отрицательным заключением. Оборудование не может быть допущено к эксплуатации " +
-      "до устранения зафиксированных несоответствий и проведения повторных испытаний.";
+    text = en
+      ? "Validation has been completed with a negative conclusion. The storage area cannot be released for operation until the recorded non-conformities are corrected and repeat testing is performed."
+      : "Валидация завершена с отрицательным заключением. Оборудование не может быть допущено к эксплуатации " +
+        "до устранения зафиксированных несоответствий и проведения повторных испытаний.";
   }
 
   const padding = 14;
@@ -2360,7 +2522,9 @@ function drawSignaturesBlock(
   doc: PDFKit.PDFDocument,
   signatories: Signatory[],
   intro: string,
+  input?: ReportInput,
 ) {
+  const en = isEnglishWarehouse(input);
   doc.fillColor("#1f2937").font("body").fontSize(10).text(intro, { align: "left" });
   doc.moveDown(1);
   const BLOCK_H = 120;
@@ -2383,14 +2547,14 @@ function drawSignaturesBlock(
       .moveTo(right - 220, y + 45)
       .lineTo(right, y + 45)
       .stroke();
-    doc.fillColor(MUTED).font("body").fontSize(9).text("Подпись", right - 220, y + 48);
+    doc.fillColor(MUTED).font("body").fontSize(9).text(en ? "Signature" : "Подпись", right - 220, y + 48);
     doc
       .strokeColor(BORDER)
       .lineWidth(0.6)
       .moveTo(left, y + 65)
       .lineTo(left + 160, y + 65)
       .stroke();
-    doc.fillColor(MUTED).fontSize(9).text("Дата", left, y + 68);
+    doc.fillColor(MUTED).fontSize(9).text(en ? "Date" : "Дата", left, y + 68);
     doc.y = y + BLOCK_H;
   });
 }
@@ -2399,8 +2563,9 @@ function drawSignaturesBlock(
 /* Part I plan helpers                                                         */
 /* -------------------------------------------------------------------------- */
 
-function drawChecklistPlan(doc: PDFKit.PDFDocument, items: ChecklistItem[]) {
-  drawSubTitle(doc, "Перечень контрольных вопросов");
+function drawChecklistPlan(doc: PDFKit.PDFDocument, items: ChecklistItem[], input?: ReportInput) {
+  const en = isEnglishWarehouse(input);
+  drawSubTitle(doc, en ? "List of Control Questions" : "Перечень контрольных вопросов");
   const left = PAGE_MARGIN;
   const right = doc.page.width - PAGE_MARGIN;
   const numW = 30;
@@ -2413,7 +2578,7 @@ function drawChecklistPlan(doc: PDFKit.PDFDocument, items: ChecklistItem[]) {
   doc.restore();
   doc.fillColor("white").font("bold").fontSize(10);
   doc.text("№", left + 6, y + 6, { width: numW - 6 });
-  doc.text("Контрольный вопрос", left + numW + 6, y + 6, { width: qW - 12 });
+  doc.text(en ? "Control question" : "Контрольный вопрос", left + numW + 6, y + 6, { width: qW - 12 });
   doc.y = y + 22;
 
   items.forEach((it, idx) => {
@@ -2452,19 +2617,22 @@ function drawChecklistPlan(doc: PDFKit.PDFDocument, items: ChecklistItem[]) {
 }
 
 function drawPVPlan(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: ReportInput) {
+  const en = isEnglishWarehouse(input);
   const durationRequirement = getReportEquipmentType(input) === "warehouse"
-    ? `от 3 суток и далее (не менее 72 ч); выбрано ${pv.minDurationHours} ч`
+    ? (en ? `from 3 days onward (not less than 72 h); selected ${pv.minDurationHours} h` : `от 3 суток и далее (не менее 72 ч); выбрано ${pv.minDurationHours} ч`)
     : `не менее ${pv.minDurationHours} ч`;
   const rows: Array<[string, string]> = [
-    ["Температурный режим", pvTemperatureModeLabel(pv)],
-    ...sensorAccuracyRows(pv),
-    ["Требуемая длительность испытания", durationRequirement],
-    ["Минимальное число внутренних датчиков", String(pv.minSensorCount)],
+    [en ? "Temperature mode" : "Температурный режим", pvTemperatureModeLabel(pv, input)],
+    ...sensorAccuracyRows(pv, input),
+    [en ? "Required test duration" : "Требуемая длительность испытания", durationRequirement],
+    [en ? "Minimum number of internal loggers" : "Минимальное число внутренних датчиков", String(pv.minSensorCount)],
     [
-      "Места установки датчиков",
+      en ? "Logger placement points" : "Места установки датчиков",
       pv.sensorPlacement
         || (getReportEquipmentType(input) === "warehouse"
-          ? "Регистраторы данных следует располагать в форме сетки и таким образом, чтобы они покрывать зону хранения по всей ее длине и ширине, а также высоте. Регистраторы данных размещаются по возможности с равными интервалами. Внешний датчик — для контроля температуры вне помещения."
+          ? (en
+              ? "Data loggers shall be arranged as a representative grid covering the storage area across its length, width and height. Where possible, loggers are positioned at comparable intervals. The external logger monitors the temperature outside the room."
+              : "Регистраторы данных следует располагать в форме сетки и таким образом, чтобы они покрывать зону хранения по всей ее длине и ширине, а также высоте. Регистраторы данных размещаются по возможности с равными интервалами. Внешний датчик — для контроля температуры вне помещения.")
           : "\u0414\u0430\u0442\u0447\u0438\u043a\u0438 \u0440\u0430\u0441\u043f\u043e\u043b\u0430\u0433\u0430\u044e\u0442\u0441\u044f \u0432 \u0445\u0430\u0440\u0430\u043a\u0442\u0435\u0440\u043d\u044b\u0445 \u0442\u043e\u0447\u043a\u0430\u0445 \u043e\u0431\u044a\u0451\u043c\u0430 " + reeferAreaGenitive(getReportEquipmentType(input)) + ": \u043f\u043e \u0441\u0442\u0435\u043d\u0430\u043c \u0438 \u043f\u043e \u0446\u0435\u043d\u0442\u0440\u0443 \u043e\u0431\u044a\u0435\u043a\u0442\u0430. \u0412\u043d\u0435\u0448\u043d\u0438\u0439 \u0434\u0430\u0442\u0447\u0438\u043a \u2014 \u0434\u043b\u044f \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044f \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b \u0432 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u0435."),
     ],
   ];
@@ -2476,19 +2644,24 @@ function drawPVPlan(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
 /* -------------------------------------------------------------------------- */
 
 function drawTestPeriod(doc: PDFKit.PDFDocument, input: ReportInput) {
+  const en = isEnglishWarehouse(input);
   const pv = input.pv;
   const durationMs = pv.startAt && pv.endAt ? pv.endAt - pv.startAt : 0;
   const rows: Array<[string, string]> = [
-    ["Начало испытаний (PV)", pv.startAt ? fmtDate(pv.startAt) : "—"],
-    ["Окончание испытаний (PV)", pv.endAt ? fmtDate(pv.endAt) : "—"],
-    ["Фактическая длительность", durationMs ? fmtDuration(durationMs) : "—"],
+    [en ? "Test start (PV)" : "Начало испытаний (PV)", pv.startAt ? fmtDate(pv.startAt) : "—"],
+    [en ? "Test end (PV)" : "Окончание испытаний (PV)", pv.endAt ? fmtDate(pv.endAt) : "—"],
+    [en ? "Actual duration" : "Фактическая длительность", durationMs ? fmtDuration(durationMs) : "—"],
   ];
   drawKVTable(doc, rows);
 }
 
 function drawPlanDeviationsSection(doc: PDFKit.PDFDocument, input: ReportInput) {
   const text = (input.planDeviations && input.planDeviations.trim())
-    || "Отклонений от плана протокола не зафиксировано. Испытания проведены в полном соответствии с утверждённым планом Протокола (Часть I).";
+    || enRu(
+      input,
+      "No deviations from the protocol plan were recorded. The study was performed in accordance with the approved Protocol (Part I).",
+      "Отклонений от плана протокола не зафиксировано. Испытания проведены в полном соответствии с утверждённым планом Протокола (Часть I).",
+    );
   doc.fillColor("#1f2937").font("body").fontSize(10).text(text, { align: "justify" });
   doc.moveDown(0.6);
 }
@@ -2499,8 +2672,16 @@ function drawRecommendationsSection(doc: PDFKit.PDFDocument, input: ReportInput)
   let text = (input.recommendations && input.recommendations.trim()) || "";
   if (!text) {
     text = anyFail
-      ? "Рекомендуется устранить выявленные несоответствия, выполнить корректирующие действия и провести повторную квалификацию по этапам, завершившимся с отрицательным заключением. До получения положительных результатов эксплуатация оборудования для хранения лекарственных средств не допускается."
-      : "Рекомендуется проводить периодическую повторную квалификацию в соответствии с внутренними процедурами организации, а также при изменении условий эксплуатации, ремонте или перемещении оборудования.";
+      ? enRu(
+          input,
+          "It is recommended to eliminate the identified non-conformities, perform corrective actions and repeat qualification for the failed stages. Until positive results are obtained, the storage area shall not be released for storage of medicinal products.",
+          "Рекомендуется устранить выявленные несоответствия, выполнить корректирующие действия и провести повторную квалификацию по этапам, завершившимся с отрицательным заключением. До получения положительных результатов эксплуатация оборудования для хранения лекарственных средств не допускается.",
+        )
+      : enRu(
+          input,
+          "It is recommended to perform periodic requalification in accordance with the organization’s internal procedures and after changes to operating conditions, repair, reconstruction or relocation of the storage area.",
+          "Рекомендуется проводить периодическую повторную квалификацию в соответствии с внутренними процедурами организации, а также при изменении условий эксплуатации, ремонте или перемещении оборудования.",
+        );
   }
   doc.fillColor("#1f2937").font("body").fontSize(10).text(text, { align: "justify" });
   doc.moveDown(0.6);
@@ -2522,9 +2703,10 @@ function declenseYears(num: number): string {
 
 function drawValiditySection(doc: PDFKit.PDFDocument, input: ReportInput) {
   ensureSpace(doc, 60);
+  const en = isEnglishWarehouse(input);
   let period = (input.documentValidityPeriod && input.documentValidityPeriod.trim())
     ? input.documentValidityPeriod.trim()
-    : "1 года"; // genitive: "в течение 1 года"
+    : (en ? "1 year" : "1 года"); // genitive: "в течение 1 года"
   
   // If period is just a number, add proper declension
   const numMatch = period.match(/^(\d+)$/);
@@ -2539,10 +2721,11 @@ function drawValiditySection(doc: PDFKit.PDFDocument, input: ReportInput) {
     period = `${num} ${declenseYears(num)}`;
   }
   
-  const text =
-    `Настоящий документ действителен в течение ${period} с момента подписания. ` +
-    `По истечении срока действия требуется проведение повторной периодической квалификации в соответствии с внутренними ` +
-    `процедурами организации.`;
+  const text = en
+    ? `This document is valid for ${period} from the date of signing. After expiration, periodic requalification shall be performed in accordance with the organization’s internal procedures.`
+    : `Настоящий документ действителен в течение ${period} с момента подписания. ` +
+      `По истечении срока действия требуется проведение повторной периодической квалификации в соответствии с внутренними ` +
+      `процедурами организации.`;
   doc.fillColor("#1f2937").font("body").fontSize(10).text(text, { align: "justify" });
   doc.moveDown(0.6);
 }
@@ -2635,7 +2818,8 @@ function ensureSpace(doc: PDFKit.PDFDocument, needed: number) {
 /* -------------------------------------------------------------------------- */
 /* Measurement Data Table                                                     */
 /* -------------------------------------------------------------------------- */
-function drawMeasurementTable(doc: PDFKit.PDFDocument, loggers: LoggerSummary[], samplingStepMinutes?: number | null) {
+function drawMeasurementTable(doc: PDFKit.PDFDocument, loggers: LoggerSummary[], samplingStepMinutes?: number | null, input?: ReportInput) {
+  const en = isEnglishWarehouse(input);
   if (!loggers || loggers.length === 0) return;
 
   const left = PAGE_MARGIN;
@@ -2674,7 +2858,7 @@ function drawMeasurementTable(doc: PDFKit.PDFDocument, loggers: LoggerSummary[],
   }
 
   if (allTs.length === 0) {
-    doc.font("body").fontSize(9).fillColor(MUTED).text("Нет данных измерений.");
+    doc.font("body").fontSize(9).fillColor(MUTED).text(en ? "No measurement data available." : "Нет данных измерений.");
     return;
   }
 
@@ -2751,7 +2935,7 @@ function drawMeasurementTable(doc: PDFKit.PDFDocument, loggers: LoggerSummary[],
     const tsColW = 0.2;
     const sensorColW = (1 - tsColW) / group.length;
     const cols: Array<{ label: string; w: number }> = [
-      { label: "Дата / Время", w: tsColW },
+      { label: en ? "Date / Time" : "Дата / Время", w: tsColW },
       ...group.map(({ logger }) => ({
         label: shortLabel(logger.label, logger.customName),
         w: sensorColW,
@@ -2759,7 +2943,9 @@ function drawMeasurementTable(doc: PDFKit.PDFDocument, loggers: LoggerSummary[],
     ];
     const firstSensorNo = groupIdx * MAX_SENSORS_PER_BLOCK + 1;
     const lastSensorNo = firstSensorNo + group.length - 1;
-    const blockLabel = `Датчики ${firstSensorNo}–${lastSensorNo} из ${loggers.length}`;
+    const blockLabel = en
+      ? `Loggers ${firstSensorNo}–${lastSensorNo} of ${loggers.length}`
+      : `Датчики ${firstSensorNo}–${lastSensorNo} из ${loggers.length}`;
 
     const drawBlockHeading = () => {
       ensureSpace(doc, (loggerGroups.length > 1 ? 20 : 0) + HEADER_H + ROW_H);
@@ -2833,7 +3019,7 @@ function drawMeasurementTable(doc: PDFKit.PDFDocument, loggers: LoggerSummary[],
 
   if (allTs.length > MAX_ROWS) {
     doc.font("body").fontSize(7.6).fillColor(MUTED)
-      .text(`Показано ${MAX_ROWS} из ${allTs.length} строк (равномерная выборка).`, { align: "right" });
+      .text(en ? `Showing ${MAX_ROWS} of ${allTs.length} rows (uniform sample).` : `Показано ${MAX_ROWS} из ${allTs.length} строк (равномерная выборка).`, { align: "right" });
   }
 }
 
@@ -3576,7 +3762,9 @@ function fitTextToLines(doc: PDFKit.PDFDocument, text: string, maxWidth: number,
 export function addHeadersAndFooters(doc: PDFKit.PDFDocument, input: ReportInput) {
   const range = doc.bufferedPageRange();
   const total = range.count;
-  const protocolLabel = `Протокол ${input.protocol.number}`;
+  const protocolLabel = isEnglishWarehouse(input)
+    ? `Protocol ${input.protocol.number}`
+    : `Протокол ${input.protocol.number}`;
 
   for (let i = 0; i < total; i++) {
     doc.switchToPage(range.start + i);
@@ -3609,7 +3797,7 @@ export function addHeadersAndFooters(doc: PDFKit.PDFDocument, input: ReportInput
     doc.save();
     doc.strokeColor(BORDER).lineWidth(0.4).moveTo(left, pageH - 36).lineTo(right, pageH - 36).stroke();
     doc.restore();
-    const pageLabel = `Стр. ${i + 1} из ${total}`;
+    const pageLabel = isEnglishWarehouse(input) ? `Page ${i + 1} of ${total}` : `Стр. ${i + 1} из ${total}`;
     const pageLabelW = doc.widthOfString(pageLabel);
     const centerX = left + (right - left) / 2 - pageLabelW / 2;
     // The footer intentionally lives below the content margin. PDFKit 0.18
@@ -4627,20 +4815,107 @@ MKT (Mean Kinetic Temperature) — среднекинетическая темп
   "6.10": `Данные с каждого регистратора выгружены с помощью [указать ПО]. Файлы данных объединены для совместного анализа. Исходные файлы сохранены в архиве.`,
 };
 
+const WAREHOUSE_DEFAULT_SECTIONS_EN: Record<string, string> = {
+  "1.1": `EAEU — Eurasian Economic Union
+EEC — Eurasian Economic Commission
+Medicinal products — medicinal products stored under controlled conditions
+GDP (Good Distribution Practice)
+GPP (Good Pharmacy Practice)
+GMP (Good Manufacturing Practice)
+SOP — Standard Operating Procedure
+IQ (Installation Qualification)
+OQ (Operational Qualification)
+PV / PQ (Performance Validation / Performance Qualification)
+T — Temperature
+MKT (Mean Kinetic Temperature)`,
+
+  "1.2": `Temperature mapping — a documented study of temperature distribution within a storage room or storage area, performed to identify hot and cold points, evaluate temperature uniformity and define appropriate positions for routine monitoring sensors.
+
+Data logger — an autonomous measuring device that continuously records temperature values, and where applicable relative humidity, at a defined interval and stores the results in internal memory.
+
+Acceptance criterion — a predefined limit against which test results are evaluated to determine compliance or non-compliance.
+
+Storage area — a defined part of a warehouse, pharmacy room or other premises intended for storage of medicinal products under specified temperature conditions.`,
+
+  "2.1": `Mapping object: storage room / storage area for medicinal products.
+Address: [specify object address]
+Purpose: storage of medicinal products under controlled temperature conditions.`,
+
+  "2.2.1": `This temperature mapping study is performed with consideration of:
+• EEC Board Recommendation No. 8 dated 20.04.2021 on the Guide to Good Storage Practice for medicinal products for human use;
+• GDP / GPP / GMP requirements related to maintaining storage conditions for medicinal products;
+• Internal standard operating procedures of the organization.`,
+
+  "2.2.2": `Study-specific rationale may include:
+• Initial mapping before commissioning of the storage area / after renovation;
+• Scheduled periodic mapping (annual and/or seasonal);
+• Mapping after significant changes to the room layout, HVAC/heating system or operating conditions.`,
+
+  "3": `This protocol applies to the storage room / storage area specified in Section 2.1. The mapping results are used to:
+• confirm compliance of temperature conditions with defined requirements;
+• define appropriate locations for routine monitoring sensors;
+• develop recommendations for safe storage of medicinal products.`,
+
+  "4": `The objectives of temperature mapping are:
+a) to confirm that temperature conditions in the storage area remain within the specified limits during the study period;
+b) to identify hot and cold points and areas with unstable temperature behaviour;
+c) to document recorded temperature fluctuations;
+d) to provide recommendations for safe storage of medicinal products;
+e) to define or confirm monitoring sensor placement points.`,
+
+  "6.1": `Data logger type: [specify make/model]
+Measurement range: [specify]
+Accuracy: ±[specify] °C
+Recording interval: [specify] minutes
+Last calibration date: [specify]
+Calibration certificate No.: [specify]`,
+
+  "6.2": `Person responsible for temperature mapping: [full name, position]
+Performers: [list full names and positions]`,
+
+  "6.3": `Characteristics of the study object are provided in Section 5 "General Information".`,
+
+  "6.4": `Acceptance criteria:
+• Temperature at all internal measurement points shall remain within the defined storage range throughout the study period.
+• MKT for each internal data logger shall not exceed the upper limit of the storage range.
+• Allowable short-term excursions, if applicable, shall be assessed and documented according to the approved protocol.`,
+
+  "6.5": `The number and arrangement of logger placement points is defined with consideration of EEC Recommendation No. 8, the room dimensions, risk points and contact with the external environment. The calculation is provided in the General Information section.`,
+
+  "6.6": `Logger placement points are documented on the room plan (Annex 1). Each point is assigned a unique identifier.`,
+
+  "6.7": `All data loggers are programmed with the same recording interval. Date and time are synchronized before the start of the study. Each logger is marked with its identifier.`,
+
+  "6.8": `Data loggers are placed according to the approved room plan before the start of the recording period.`,
+
+  "6.9": `Data loggers are retrieved after completion of the recording period. Data are downloaded within the timeframe defined by the organization.`,
+
+  "6.10": `Data from each logger are downloaded using appropriate software. Data files are combined for joint analysis. Source files are retained in the archive.`,
+};
+
+const WAREHOUSE_MAPPING_METHOD_NOTE_EN =
+  "The guide for temperature mapping of medicinal product storage areas approved by EEC Board Recommendation No. 8 is used as a methodological reference. " +
+  "This protocol is adapted to its structure and approach. The study duration is established by the internal procedure as from 3 days onward " +
+  "(not less than 72 hours), considering risk assessment, operating mode of the storage area and representativeness of the observation period.";
+
 /**
  * Renders warehouse protocol Part I with sections 1–7 per EAEU Rec. #8.
  */
 function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput): void {
+  const en = isEnglishWarehouse(input);
   const sec = (key: string): string => {
     const custom = input.warehouseSections?.[key];
-    return custom !== undefined && custom.trim() !== "" ? custom : (WAREHOUSE_DEFAULT_SECTIONS[key] ?? "");
+    if (custom !== undefined && custom.trim() !== "" && (!en || !hasCyrillic(custom))) return custom;
+    return en
+      ? (WAREHOUSE_DEFAULT_SECTIONS_EN[key] ?? WAREHOUSE_DEFAULT_SECTIONS[key] ?? "")
+      : (WAREHOUSE_DEFAULT_SECTIONS[key] ?? "");
   };
 
   // ── Section 1: Сокращения и определения ─────────────────────────────────
   doc.addPage();
-  drawSectionTitle(doc, "1. Сокращения и определения");
+  drawSectionTitle(doc, en ? "1. Abbreviations and Definitions" : "1. Сокращения и определения");
 
-  drawSubTitle(doc, "1.1. Сокращения");
+  drawSubTitle(doc, en ? "1.1. Abbreviations" : "1.1. Сокращения");
   const abbrevText = sec("1.1");
   abbrevText.split("\n").forEach(line => {
     if (!line.trim()) { doc.moveDown(0.3); return; }
@@ -4648,7 +4923,7 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
   });
   doc.moveDown(0.8);
 
-  drawSubTitle(doc, "1.2. Определения");
+  drawSubTitle(doc, en ? "1.2. Definitions" : "1.2. Определения");
   const defText = sec("1.2");
   defText.split("\n").forEach(line => {
     if (!line.trim()) { doc.moveDown(0.3); return; }
@@ -4657,31 +4932,31 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
 
   // ── Section 2: Описание и обоснование ───────────────────────────────────
   doc.addPage();
-  drawSectionTitle(doc, "2. Описание и обоснование");
+  drawSectionTitle(doc, en ? "2. Description and Rationale" : "2. Описание и обоснование");
 
-  drawSubTitle(doc, "2.1. Описание объекта картирования");
+  drawSubTitle(doc, en ? "2.1. Mapping Object Description" : "2.1. Описание объекта картирования");
   renderTextBlock(doc, sec("2.1"));
 
-  drawSubTitle(doc, "2.2. Обоснование проведения температурного картирования");
-  drawSubTitle2(doc, "2.2.1. Нормативные основания");
+  drawSubTitle(doc, en ? "2.2. Temperature Mapping Rationale" : "2.2. Обоснование проведения температурного картирования");
+  drawSubTitle2(doc, en ? "2.2.1. Regulatory Basis" : "2.2.1. Нормативные основания");
   renderTextBlock(doc, sec("2.2.1"));
-  drawSubTitle2(doc, "Принятый методологический подход");
-  renderTextBlock(doc, WAREHOUSE_MAPPING_METHOD_NOTE);
-  drawSubTitle2(doc, "2.2.2. Конкретные основания для проведения исследования");
+  drawSubTitle2(doc, en ? "Methodological Approach" : "Принятый методологический подход");
+  renderTextBlock(doc, en ? WAREHOUSE_MAPPING_METHOD_NOTE_EN : WAREHOUSE_MAPPING_METHOD_NOTE);
+  drawSubTitle2(doc, en ? "2.2.2. Study-Specific Rationale" : "2.2.2. Конкретные основания для проведения исследования");
   renderTextBlock(doc, sec("2.2.2"));
 
   // ── Section 3: Область применения ───────────────────────────────────────
   doc.addPage();
-  drawSectionTitle(doc, "3. Область применения");
+  drawSectionTitle(doc, en ? "3. Scope" : "3. Область применения");
   renderTextBlock(doc, sec("3"));
 
   // ── Section 4: Цели и задачи ─────────────────────────────────────────────
-  drawSectionTitle(doc, "4. Цели и задачи температурного картирования");
+  drawSectionTitle(doc, en ? "4. Temperature Mapping Objectives" : "4. Цели и задачи температурного картирования");
   renderTextBlock(doc, sec("4"));
 
   // ── Section 5: Общие сведения об объекте / оборудовании ────────────────────
   doc.addPage();
-  drawSectionTitle(doc, "5. Общие сведения об объекте квалификации");
+  drawSectionTitle(doc, en ? "5. General Information on the Qualification Object" : "5. Общие сведения об объекте квалификации");
   drawGeneralInfoTable(doc, input);
   drawRevisionHistorySection(doc, input);
 
@@ -4689,20 +4964,20 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
   const eqList = input.warehouseEquipment ?? [];
   if (eqList.length > 0) {
     doc.moveDown(0.8);
-    drawSubTitle(doc, "5.1. Перечень оборудования зоны хранения");
+    drawSubTitle(doc, en ? "5.1. Equipment Installed in the Storage Area" : "5.1. Перечень оборудования зоны хранения");
     eqList.forEach((eq, idx) => {
       ensureSpace(doc, 60);
       doc.font("bold").fontSize(10).fillColor(ACCENT)
-        .text(`Оборудование ${idx + 1}: ${eq.name}`, { underline: false });
+        .text(`${en ? "Equipment" : "Оборудование"} ${idx + 1}: ${eq.name}`, { underline: false });
       const safeValue = (v: string | null | undefined): string => {
         const s = (v ?? "").toString().trim();
         return s.length > 0 ? s : "—";
       };
       const rows: [string, string][] = [
-        ["Производитель", safeValue(eq.manufacturer)],
-        ["Модель", safeValue(eq.model)],
-        ["Серийный номер", safeValue(eq.serial)],
-        ["Назначение", safeValue(eq.purpose)],
+        [en ? "Manufacturer" : "Производитель", safeValue(eq.manufacturer)],
+        [en ? "Model" : "Модель", safeValue(eq.model)],
+        [en ? "Serial number" : "Серийный номер", safeValue(eq.serial)],
+        [en ? "Purpose" : "Назначение", safeValue(eq.purpose)],
       ];
       rows.forEach(([label, value]) => {
         doc.font("body").fontSize(10).fillColor(MUTED).text(`${label}: `, { continued: true })
@@ -4714,19 +4989,19 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
 
   // ── Section 6: Методология ───────────────────────────────────────────────
   doc.addPage();
-  drawSectionTitle(doc, "6. Методология проведения температурного картирования");
+  drawSectionTitle(doc, en ? "6. Temperature Mapping Methodology" : "6. Методология проведения температурного картирования");
 
   const methodSubs: Array<[string, string]> = [
-    ["6.1. Сведения о выборе типа регистратора данных", "6.1"],
-    ["6.2. Сведения об исполнителях", "6.2"],
-    ["6.3. Сведения об объекте исследования", "6.3"],
-    ["6.4. Сведения о критериях приемлемости", "6.4"],
-    ["6.5. Сведения об определении точек размещения", "6.5"],
-    ["6.6. Сведения о регистрации точек размещения", "6.6"],
-    ["6.7. Сведения о маркировке и программировании", "6.7"],
-    ["6.8. Сведения о размещении регистраторов", "6.8"],
-    ["6.9. Сведения об извлечении регистраторов", "6.9"],
-    ["6.10. Сведения о загрузке и объединении данных", "6.10"],
+    [en ? "6.1. Data Logger Type Selection" : "6.1. Сведения о выборе типа регистратора данных", "6.1"],
+    [en ? "6.2. Study Personnel" : "6.2. Сведения об исполнителях", "6.2"],
+    [en ? "6.3. Study Object Information" : "6.3. Сведения об объекте исследования", "6.3"],
+    [en ? "6.4. Acceptance Criteria" : "6.4. Сведения о критериях приемлемости", "6.4"],
+    [en ? "6.5. Definition of Logger Placement Points" : "6.5. Сведения об определении точек размещения", "6.5"],
+    [en ? "6.6. Registration of Placement Points" : "6.6. Сведения о регистрации точек размещения", "6.6"],
+    [en ? "6.7. Marking and Programming" : "6.7. Сведения о маркировке и программировании", "6.7"],
+    [en ? "6.8. Logger Placement" : "6.8. Сведения о размещении регистраторов", "6.8"],
+    [en ? "6.9. Logger Retrieval" : "6.9. Сведения об извлечении регистраторов", "6.9"],
+    [en ? "6.10. Data Download and Consolidation" : "6.10. Сведения о загрузке и объединении данных", "6.10"],
   ];
   methodSubs.forEach(([title, key]) => {
     ensureSpace(doc, 80);
@@ -4736,29 +5011,30 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
 
   // 6.11 IQ plan
   doc.addPage();
-  drawSubTitle(doc, "6.11. План IQ — Квалификация монтажа");
-  drawStageBlocks(doc, input.iq);
-  drawChecklistPlan(doc, input.iq.items);
+  drawSubTitle(doc, en ? "6.11. IQ Plan — Installation Qualification" : "6.11. План IQ — Квалификация монтажа");
+  drawStageBlocks(doc, input.iq, input);
+  drawChecklistPlan(doc, input.iq.items, input);
 
   // 6.12 OQ plan
   doc.addPage();
-  drawSubTitle(doc, "6.12. План OQ — Квалификация функционирования");
-  drawStageBlocks(doc, input.oq);
-  drawChecklistPlan(doc, input.oq.items);
+  drawSubTitle(doc, en ? "6.12. OQ Plan — Operational Qualification" : "6.12. План OQ — Квалификация функционирования");
+  drawStageBlocks(doc, input.oq, input);
+  drawChecklistPlan(doc, input.oq.items, input);
 
   // 6.13 PV plan
   doc.addPage();
-  drawSubTitle(doc, "6.13. План PV — Эксплуатационная квалификация");
-  drawStageBlocks(doc, input.pv);
+  drawSubTitle(doc, en ? "6.13. PV Plan — Performance Qualification" : "6.13. План PV — Эксплуатационная квалификация");
+  drawStageBlocks(doc, input.pv, input);
   drawPVPlan(doc, input.pv, input);
 
   // ── Section 7: Подписи к Протоколу ──────────────────────────────────────
   doc.addPage();
-  drawSectionTitle(doc, "7. Подписи к Протоколу");
+  drawSectionTitle(doc, en ? "7. Protocol Signatures" : "7. Подписи к Протоколу");
   drawSignaturesBlock(
     doc,
     getSignatoriesPart1(input),
-    "Настоящий протокол квалификации рассмотрен и утверждён:",
+    en ? "This qualification protocol has been reviewed and approved by:" : "Настоящий протокол квалификации рассмотрен и утверждён:",
+    input,
   );
 }
 

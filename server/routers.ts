@@ -347,6 +347,70 @@ function effectiveCustomRange(session?: { customMin?: unknown; customMax?: unkno
   };
 }
 
+const DEFAULT_IQ_QUESTIONS_WAREHOUSE_EN: string[] = [
+  "Is the room identified by a sign, label or room number?",
+  "Is technical documentation for the room / storage area available?",
+  "Does the actual location address correspond to the licensed / approved site address?",
+  "Is the room supplied by the main electrical power system?",
+  "Is backup power provided for equipment maintaining the temperature regime, where required?",
+  "Is a temperature monitoring system installed in the room (and humidity monitoring where applicable)?",
+  "Is access control implemented for the area to prevent unauthorized access?",
+  "Do the internal finishes and sanitary condition of the room meet applicable hygiene requirements?",
+];
+
+const DEFAULT_OQ_QUESTIONS_WAREHOUSE_EN: string[] = [
+  "Does all area equipment (HVAC units, refrigeration units, heaters) start in normal operating mode?",
+  "Do the control panels and equipment interfaces operate correctly?",
+  "Does the equipment respond to temperature setpoint changes within the defined limits?",
+  "Are temperature (and humidity where applicable) values displayed correctly on equipment indicators and monitoring systems?",
+  "Does the alarm system (audible/visual/notification) activate when temperature deviates outside the defined limits?",
+  "Is air distribution uniform across the area volume (fans and air ducts operate normally)?",
+  "Is the specified temperature regime maintained in the empty area during the test period?",
+  "Is backup equipment ready for activation if the primary equipment fails, where applicable?",
+  "Are monitoring data for temperature (and humidity where applicable) logged and archived correctly?",
+  "Are there no abnormal noises or vibrations indicating malfunction of area equipment?",
+];
+
+const WAREHOUSE_STAGE_TEMPLATES_EN = {
+  iq: {
+    purpose:
+      "To confirm that the storage room / storage area and supporting equipment are installed in accordance with design, regulatory and operational documentation and are suitable for the intended use.",
+    description:
+      "During Installation Qualification (IQ), identification, documentation, room condition, utilities, monitoring arrangements and compliance with intended operating requirements are verified.",
+    criteria:
+      "All IQ checklist items shall be answered “Yes” or “N/A”. If any item is answered “No”, the stage is considered failed, non-conformities are listed and progression to OQ is blocked until correction.",
+  },
+  oq: {
+    purpose:
+      "To confirm that the storage room / storage area and supporting systems operate in accordance with the defined operating requirements and specified temperature range.",
+    description:
+      "During Operational Qualification (OQ), equipment operation, controls, indication, alarms, air distribution and the ability to maintain the specified temperature regime are verified.",
+    criteria:
+      "All OQ checklist items shall be answered “Yes” or “N/A”. If any item is answered “No”, the stage is considered failed and progression to PV is blocked until correction.",
+  },
+  pv: {
+    purpose:
+      "To confirm that the storage room / storage area consistently maintains the specified temperature regime throughout the working volume during the study period, including hot and cold points.",
+    description:
+      "During Performance Qualification / Validation (PV), temperature mapping is performed using calibrated data loggers placed across the storage area volume. Temperature is recorded continuously during normal operating conditions.",
+    criteria:
+      "All internal loggers shall remain within the specified temperature range throughout the study period. MKT for each internal logger shall also remain within the specified range. Minimum, maximum, average temperature and MKT shall be calculated for each logger, with tabular data and graphical visualization included in the report.",
+  },
+} as const;
+
+function englishWarehouseChecklistItems<T extends { questionText: string }>(
+  items: T[],
+  stage: "iq" | "oq",
+  useEnglish: boolean,
+): T[] {
+  if (!useEnglish) return items;
+  const defaults = stage === "iq" ? DEFAULT_IQ_QUESTIONS_WAREHOUSE_EN : DEFAULT_OQ_QUESTIONS_WAREHOUSE_EN;
+  return items.map((item, index) => ({
+    ...item,
+    questionText: defaults[index] || item.questionText,
+  }));
+}
+
 function maxAccuracyForUsedInternalSensors(
   protocolSensors: Array<{ number: string; accuracyC?: unknown }>,
   loggers: Array<{ label: string | null; customName?: string | null; role?: string | null }>,
@@ -740,6 +804,7 @@ export const appRouter = router({
           tempMode: z.string().optional().nullable(),
           customMin: z.union([z.number(), z.string()]).optional().nullable(),
           customMax: z.union([z.number(), z.string()]).optional().nullable(),
+          reportLanguage: z.enum(["ru", "en"]).optional().nullable(),
           thermalContainerConfig: z.object({
             selectedModes: z.array(z.enum(["2-8", "8-15", "15-25"])).min(1),
             volumeLiters: z.union([z.number(), z.string()]).optional().nullable(),
@@ -1786,6 +1851,7 @@ export const appRouter = router({
         const reportInternalLoggers = preparedLoggers.filter(l => l.logger.role === "internal");
         const hasPVData = preparedLoggers.some(l => l.series.temp.length > 0);
         const isWarehouseProtocol = protocol.equipmentType === "warehouse";
+        const isEnglishWarehouseReport = isWarehouseProtocol && gi?.reportLanguage === "en";
         const isChamberProtocol =
           protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || gi?.equipmentType === "chamber";
         const isAutoRefrigeratorProtocol =
@@ -1793,7 +1859,7 @@ export const appRouter = router({
         const isThermalContainerProtocol =
           (protocol.equipmentType ?? gi?.equipmentType) === "thermal-container";
         const reportStageTemplates = isWarehouseProtocol
-          ? WAREHOUSE_STAGE_TEMPLATES
+          ? (isEnglishWarehouseReport ? WAREHOUSE_STAGE_TEMPLATES_EN : WAREHOUSE_STAGE_TEMPLATES)
           : isChamberProtocol
             ? CHAMBER_STAGE_TEMPLATES
             : isAutoRefrigeratorProtocol
@@ -1807,13 +1873,17 @@ export const appRouter = router({
             const devCount = item.deviations.length;
             if (devCount > 0) {
               reportFailureReasons.push(
-                `Датчик ${l.label}${l.customName ? " («" + l.customName + "»)" : ""}: ${devCount} отклонений за пределы режима ${min}…${max} °C.`,
+                isEnglishWarehouseReport
+                  ? `Logger ${l.label}${l.customName ? " (“" + l.customName + "”)" : ""}: ${devCount} excursion(s) outside the range ${min}…${max} °C.`
+                  : `Датчик ${l.label}${l.customName ? " («" + l.customName + "»)" : ""}: ${devCount} отклонений за пределы режима ${min}…${max} °C.`,
               );
             }
             const mkt = item.stats?.mkt ?? Number(l.mktVal || 0);
             if (mkt < min || mkt > max) {
               reportFailureReasons.push(
-                `Датчик ${l.label}${l.customName ? " («" + l.customName + "»)" : ""}: MKT ${mkt.toFixed(2)} °C вне режима ${min}…${max} °C.`,
+                isEnglishWarehouseReport
+                  ? `Logger ${l.label}${l.customName ? " (“" + l.customName + "”)" : ""}: MKT ${mkt.toFixed(2)} °C outside the range ${min}…${max} °C.`
+                  : `Датчик ${l.label}${l.customName ? " («" + l.customName + "»)" : ""}: MKT ${mkt.toFixed(2)} °C вне режима ${min}…${max} °C.`,
               );
             }
           }
@@ -1825,12 +1895,16 @@ export const appRouter = router({
           const minSensorCount = session?.minSensorCount ?? (isWarehouseProtocol ? 8 : 9);
           if (durationHours < minDurationHours) {
             reportFailureReasons.push(
-              `Длительность испытания ${durationHours.toFixed(1)} ч меньше минимальной (${minDurationHours} ч).`,
+              isEnglishWarehouseReport
+                ? `Test duration ${durationHours.toFixed(1)} h is less than the minimum required duration (${minDurationHours} h).`
+                : `Длительность испытания ${durationHours.toFixed(1)} ч меньше минимальной (${minDurationHours} ч).`,
             );
           }
           if (reportInternalLoggers.length < minSensorCount) {
             reportFailureReasons.push(
-              `Использовано ${reportInternalLoggers.length} внутренних датчиков, требуется не менее ${minSensorCount}.`,
+              isEnglishWarehouseReport
+                ? `${reportInternalLoggers.length} internal logger(s) used; not less than ${minSensorCount} are required.`
+                : `Использовано ${reportInternalLoggers.length} внутренних датчиков, требуется не менее ${minSensorCount}.`,
             );
           }
         }
@@ -1989,14 +2063,16 @@ export const appRouter = router({
               {
                 revision: "01",
                 date: revisionDate,
-                change: "Первичная редакция протокола и отчёта о квалификации.",
+                change: isEnglishWarehouseReport
+                  ? "Initial issue of the qualification protocol and report."
+                  : "Первичная редакция протокола и отчёта о квалификации.",
                 author: reportActor,
               },
             ],
           },
           iq: {
             ...reportStageTemplates.iq,
-            items: iqItems.map(i => ({
+            items: englishWarehouseChecklistItems(iqItems, "iq", isEnglishWarehouseReport).map(i => ({
               questionIndex: i.questionIndex,
               questionText: i.questionText,
               answer: i.answer,
@@ -2007,7 +2083,7 @@ export const appRouter = router({
           },
           oq: {
             ...reportStageTemplates.oq,
-            items: oqItems.map(i => ({
+            items: englishWarehouseChecklistItems(oqItems, "oq", isEnglishWarehouseReport).map(i => ({
               questionIndex: i.questionIndex,
               questionText: i.questionText,
               answer: i.answer,

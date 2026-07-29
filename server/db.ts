@@ -909,6 +909,7 @@ export async function ensureThermalContainerStorage() {
     for (const [column, definition] of [
       ["customMin", "decimal(6,2) NULL AFTER tempMode"],
       ["customMax", "decimal(6,2) NULL AFTER customMin"],
+      ["reportLanguage", "varchar(8) NULL AFTER customMax"],
     ] as const) {
       const result = await db.execute(sql.raw(`SHOW COLUMNS FROM generalInfo LIKE '${column}'`));
       const rows = (result as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
@@ -976,6 +977,7 @@ export async function upsertGeneralInfo(
         tempMode: null,
         customMin: null,
         customMax: null,
+        reportLanguage: null,
         location: null,
         purpose: null,
         validationDate: null,
