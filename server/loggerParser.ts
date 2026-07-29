@@ -38,6 +38,14 @@ const TEMP_EXCLUDE_TOKENS = [
   "serial", "name", "logger", "device", "id", "№", "index", "номер",
 ];
 
+// Humidity columns often contain realistic-looking values (45..70), so data
+// shape alone can mistake them for warm room temperature. Treat RH / humidity
+// / percent columns as hard excludes.
+const HUMIDITY_EXCLUDE_TOKENS = [
+  "humidity", "humid", "relativehumidity", "rh", "%rh", "rh%",
+  "Ð²Ð»Ð°Ð¶", "Ð²Ð»Ð°Ð¶Ð½", "Ð¾Ñ‚Ð½Ð¾ÑÐ¸Ñ‚ÐµÐ»ÑŒÐ½Ð°ÑÐ²Ð»Ð°Ð¶Ð½Ð¾ÑÑ‚ÑŒ",
+];
+
 function normKey(k: string): string {
   return String(k || "")
     .toLowerCase()
@@ -51,6 +59,41 @@ function containsAny(hay: string, needles: string[]): boolean {
     if (hay.includes(n)) return true;
   }
   return false;
+}
+
+function isTemperatureUnitCell(value: unknown): boolean {
+  const raw = String(value ?? "").trim().toLowerCase();
+  const key = normKey(raw);
+  return (
+    raw === "℃" ||
+    raw === "°c" ||
+    raw === "Â°c" ||
+    raw.includes("℃") ||
+    raw.includes("°c") ||
+    raw.includes("Â°c") ||
+    key === "c" ||
+    key === "celsius"
+  );
+}
+
+function isHumidityUnitCell(value: unknown): boolean {
+  const raw = String(value ?? "").trim().toLowerCase();
+  const key = normKey(raw);
+  return (
+    raw === "%" ||
+    raw.includes("%rh") ||
+    raw.includes("rh%") ||
+    containsAny(key, HUMIDITY_EXCLUDE_TOKENS)
+  );
+}
+
+function isHumidityHeader(header: string): boolean {
+  const raw = String(header || "").toLowerCase();
+  const key = normKey(raw);
+  return (
+    containsAny(key, HUMIDITY_EXCLUDE_TOKENS) ||
+    (raw.includes("%") && !isTemperatureUnitCell(raw))
+  );
 }
 
 function scoreAsTime(header: string, columnValues: any[]): number {
@@ -73,6 +116,7 @@ function scoreAsTime(header: string, columnValues: any[]): number {
 function scoreAsTemp(header: string, columnValues: any[]): number {
   const h = normKey(header);
   let s = 0;
+  if (isHumidityHeader(header)) return -100;
 
   // Disqualify limit/alarm/metadata columns outright — return a large negative.
   if (containsAny(h, TEMP_EXCLUDE_TOKENS)) {
@@ -518,6 +562,8 @@ function heuristicColumnsFromData(rows: any[][]): { timeIdx: number; tempIdx: nu
   const colCount = Math.max(...rows.map(r => (r ? r.length : 0)));
   const timeHits: number[] = new Array(colCount).fill(0);
   const tempHits: number[] = new Array(colCount).fill(0);
+  const unitTempHits: number[] = new Array(colCount).fill(0);
+  const unitHumidityHits: number[] = new Array(colCount).fill(0);
   const N = Math.min(rows.length, 40);
   for (let i = 0; i < N; i++) {
     const r = rows[i] || [];
@@ -525,6 +571,13 @@ function heuristicColumnsFromData(rows: any[][]): { timeIdx: number; tempIdx: nu
       const v = r[c];
       if (parseTimestamp(v) !== null) timeHits[c]++;
       const n = parseNumber(v);
+      const nextUnit = r[c + 1];
+      if (n !== null && n > -80 && n < 80 && isTemperatureUnitCell(nextUnit)) {
+        unitTempHits[c] += 4;
+      }
+      if (n !== null && n > -80 && n < 100 && isHumidityUnitCell(nextUnit)) {
+        unitHumidityHits[c] += 4;
+      }
       if (n !== null && n > -80 && n < 80 && !Number.isInteger(n * 1)) {
         // prefer non-integer (real measurements)
         tempHits[c] += 2;
@@ -540,7 +593,8 @@ function heuristicColumnsFromData(rows: any[][]): { timeIdx: number; tempIdx: nu
   let tempIdx = -1, bestV = 0;
   for (let c = 0; c < colCount; c++) {
     if (c === timeIdx) continue;
-    if (tempHits[c] > bestV) { bestV = tempHits[c]; tempIdx = c; }
+    const score = tempHits[c] + unitTempHits[c] - unitHumidityHits[c] * 2;
+    if (score > bestV) { bestV = score; tempIdx = c; }
   }
   return { timeIdx, tempIdx };
 }

@@ -163,6 +163,41 @@ describe("parseLoggerBuffer", () => {
     }
   });
 
+  it("does not treat humidity columns as temperature when headers contain percent/RH", () => {
+    const csv =
+      "Timestamp,Sensor (°C),Sensor (%RH)\n" +
+      "2026.07.26 23:45:00,24.20,51.80\n" +
+      "2026.07.26 23:30:00,24.30,51.65\n" +
+      "2026.07.26 23:15:00,24.40,51.40\n";
+    const res = parseLoggerBuffer(Buffer.from(csv), "sonor-rh.csv");
+    expect(res.ts.length).toBe(3);
+    expect(Math.min(...res.temp)).toBeCloseTo(24.2, 6);
+    expect(Math.max(...res.temp)).toBeCloseTo(24.4, 6);
+    for (const v of res.temp) {
+      expect(v).toBeLessThan(30);
+    }
+  });
+
+  it("picks the value before ℃, not the value before %, for headerless UTH exports", () => {
+    const aoa = [
+      [new Date(2026, 6, 19, 7, 9, 49), 21.5, "℃", 65.7, "%"],
+      [new Date(2026, 6, 19, 7, 24, 49), 21.6, "℃", 57.1, "%"],
+      [new Date(2026, 6, 19, 7, 39, 49), 21.2, "℃", 58.5, "%"],
+      [new Date(2026, 6, 19, 7, 54, 49), 21.2, "℃", 58.9, "%"],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+    const res = parseLoggerBuffer(buf, "uth-headerless.xlsx");
+    expect(res.ts.length).toBe(3);
+    expect(res.temp[0]).toBeCloseTo(21.6, 6);
+    expect(res.temp[1]).toBeCloseTo(21.2, 6);
+    for (const v of res.temp) {
+      expect(v).toBeLessThan(30);
+    }
+  });
+
   it("returns empty series for unrelated content", () => {
     const csv = "foo,bar\n1,2\n3,4\n";
     const res = parseLoggerBuffer(Buffer.from(csv), "junk.csv");
