@@ -1158,12 +1158,21 @@ async function ensurePVPlanBackgroundStorage() {
   pvPlanBackgroundSchemaPromise = (async () => {
     for (const [column, definition] of [
       ["planBackgroundImageKey", "varchar(512) NULL AFTER planImageUrl"],
-      ["planBackgroundImageUrl", "varchar(512) NULL AFTER planBackgroundImageKey"],
+      ["planBackgroundImageUrl", "LONGTEXT NULL AFTER planBackgroundImageKey"],
     ] as const) {
       const result = await db.execute(sql.raw(`SHOW COLUMNS FROM pvSessions LIKE '${column}'`));
       const rows = (result as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
       if (rows.length === 0) {
         await db.execute(sql.raw(`ALTER TABLE pvSessions ADD COLUMN ${column} ${definition}`));
+      }
+    }
+
+    for (const column of ["planImageUrl", "planBackgroundImageUrl"] as const) {
+      const result = await db.execute(sql.raw(`SHOW COLUMNS FROM pvSessions LIKE '${column}'`));
+      const rows = (result as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
+      const type = String(rows[0]?.Type ?? rows[0]?.type ?? "").toLowerCase();
+      if (rows.length > 0 && type && type !== "longtext") {
+        await db.execute(sql.raw(`ALTER TABLE pvSessions MODIFY COLUMN ${column} LONGTEXT NULL`));
       }
     }
   })().catch(error => {

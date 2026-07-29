@@ -236,9 +236,9 @@ export const pvSessions = mysqlTable("pvSessions", {
 	roomWidthM: decimal({ precision: 6, scale: 2 }),
 	roomHeightM: decimal({ precision: 6, scale: 2 }),
 	planImageKey: varchar({ length: 512 }),
-	planImageUrl: varchar({ length: 512 }),
+	planImageUrl: text(),
 	planBackgroundImageKey: varchar({ length: 512 }),
-	planBackgroundImageUrl: varchar({ length: 512 }),
+	planBackgroundImageUrl: text(),
 },
 (table) => [
 	index("pvSessions_protocolId_trialKey_idx").on(table.protocolId, table.trialKey),

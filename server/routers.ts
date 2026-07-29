@@ -226,6 +226,24 @@ async function storeUploadedSourceOrMetadata(
   }
 }
 
+async function storePlanImageOrInline(
+  relKey: string,
+  buffer: Buffer,
+  contentType: string,
+): Promise<{ key: string; url: string; stored: boolean }> {
+  try {
+    const { key, url } = await storagePut(relKey, buffer, contentType);
+    return { key, url, stored: true };
+  } catch (error) {
+    console.warn("[Plan] Image storage write failed; keeping inline image:", error);
+    return {
+      key: `inline:${relKey}`.slice(0, 512),
+      url: `data:${contentType};base64,${buffer.toString("base64")}`,
+      stored: false,
+    };
+  }
+}
+
 function normalizeUserEmail(email: string) {
   return email.trim().toLowerCase();
 }
@@ -1235,7 +1253,7 @@ export const appRouter = router({
         const ct = ext === "png" ? "image/png" : "image/jpeg";
         const buf = Buffer.from(base64, "base64");
         const fileKey = `protocol-${input.protocolId}/plan-${Date.now()}.${ext}`;
-        const { key, url } = await storagePut(fileKey, buf, ct);
+        const { key, url } = await storePlanImageOrInline(fileKey, buf, ct);
         await updatePVSession(input.protocolId, { planImageKey: key, planImageUrl: url } as any, trialKey);
         return { key, url };
       }),
@@ -1275,7 +1293,7 @@ export const appRouter = router({
           .replace(/\.[^.]+$/, "")
           .replace(/[^a-zA-Z0-9._-]+/g, "_")
           .slice(0, 80);
-        const { key, url } = await storagePut(
+        const { key, url } = await storePlanImageOrInline(
           `protocol-${input.protocolId}/plan-background-${Date.now()}-${safeName}.${ext}`,
           buf,
           ct,
@@ -1928,7 +1946,13 @@ export const appRouter = router({
         // Plan image (warehouse floor plan screenshot)
         let planImageBuffer: Buffer | null = null;
         const planImgKey = (session as any)?.planImageKey ?? null;
-        if (planImgKey) {
+        const planImgUrl = (session as any)?.planImageUrl ?? null;
+        const inlinePlanImage = typeof planImgUrl === "string"
+          ? planImgUrl.match(/^data:image\/(?:png|jpeg|jpg|webp);base64,(.+)$/)
+          : null;
+        if (inlinePlanImage) {
+          planImageBuffer = Buffer.from(inlinePlanImage[1], "base64");
+        } else if (planImgKey && !String(planImgKey).startsWith("inline:")) {
           try {
             planImageBuffer = (await storageReadBuffer(planImgKey)).data;
           } catch (e) {
