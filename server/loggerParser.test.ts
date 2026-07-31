@@ -163,6 +163,37 @@ describe("parseLoggerBuffer", () => {
     }
   });
 
+  it("uses the document name as sensor name when the file has no logger identity inside", () => {
+    const csv =
+      "Timestamp,Temperature\n" +
+      "2026.07.27 09:45:00,21.10\n" +
+      "2026.07.27 10:00:00,21.20\n";
+    const res = parseLoggerBuffer(Buffer.from(csv), "EF719BE00575_20260727095341.xls");
+    expect(res.ts.length).toBe(2);
+    expect(res.sensorName).toBe("EF719BE00575");
+  });
+
+  it("keeps the logger identity from file contents when it is present", () => {
+    const csv =
+      "Logger Name,ABC-123\n" +
+      "Timestamp,Temperature\n" +
+      "2026.07.27 09:45:00,21.10\n" +
+      "2026.07.27 10:00:00,21.20\n";
+    const res = parseLoggerBuffer(Buffer.from(csv), "fallback-name.csv");
+    expect(res.ts.length).toBe(2);
+    expect(res.sensorName).toBe("ABC-123");
+  });
+
+  it("extracts Sonor device serial from document name without the date range", () => {
+    const csv =
+      "Timestamp,Temperature\n" +
+      "2026.07.27 09:45:00,21.10\n" +
+      "2026.07.27 10:00:00,21.20\n";
+    const res = parseLoggerBuffer(Buffer.from(csv), "device_000B44BCADD2568_2026-07-19_to_2026-07-26.csv");
+    expect(res.ts.length).toBe(2);
+    expect(res.sensorName).toBe("000B44BCADD2568");
+  });
+
   it("does not treat humidity columns as temperature when headers contain percent/RH", () => {
     const csv =
       "Timestamp,Sensor (°C),Sensor (%RH)\n" +

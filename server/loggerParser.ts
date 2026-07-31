@@ -384,7 +384,7 @@ function extractSensorName(rows: any[][], headerIdx: number): string | undefined
         // Value is in the next non-empty cell in the same row
         for (let v = c + 1; v < r.length; v++) {
           const val = String(r[v] ?? "").trim();
-          if (val && parseNumber(r[v]) === null && parseTimestamp(r[v]) === null) {
+          if (val) {
             return val;
           }
         }
@@ -412,6 +412,37 @@ function extractSensorName(rows: any[][], headerIdx: number): string | undefined
   }
 
   return undefined;
+}
+
+function extractSensorNameFromFileName(fileName: string): string | undefined {
+  const leaf = String(fileName || "").trim().split(/[\\/]/).pop() || "";
+  if (!leaf) return undefined;
+
+  const withoutQuery = leaf.split(/[?#]/)[0] || leaf;
+  let base = withoutQuery.replace(/\.[^.]+$/, "").trim();
+  if (!base) return undefined;
+
+  // Sonor exports often look like:
+  // device_000B44BCADD2568_2026-07-19_to_2026-07-26.csv
+  // The logger serial is the part immediately after "device_".
+  const deviceMatch = base.match(/^device[_\-\s]+(.+?)(?:[_\-\s]+20\d{2}[-_.]\d{2}[-_.]\d{2}.*)?$/i);
+  if (deviceMatch?.[1]) {
+    base = deviceMatch[1];
+  } else {
+    // Elitech exports often append a generation timestamp:
+    // EF719BE00575_20260727095341.xls -> EF719BE00575
+    base = base
+      .replace(/[_\-\s]+20\d{12}$/i, "")
+      .replace(/[_\-\s]+20\d{6}[_\-\s]*\d{4,6}$/i, "")
+      .replace(/[_\-\s]+20\d{2}[-_.]\d{2}[-_.]\d{2}(?:[_\-\s]*(?:to|до|по)[_\-\s]*20\d{2}[-_.]\d{2}[-_.]\d{2})?$/i, "");
+  }
+
+  const cleaned = base
+    .replace(/\s+/g, " ")
+    .replace(/^[\s_.-]+|[\s_.-]+$/g, "")
+    .trim();
+
+  return cleaned ? cleaned.slice(0, 64) : undefined;
 }
 
 /* ------------------------------------------------------------------ */
@@ -516,8 +547,9 @@ export function parseLoggerBuffer(
   const header = rows[headerIdx] || [];
   const dataRows = rows.slice(headerIdx + 1).filter(r => Array.isArray(r) && r.length > 0);
 
-  // Extract sensor name from metadata block or header columns
-  const sensorName = extractSensorName(rows, headerIdx);
+  // Extract sensor name from metadata block/header columns. If the export does
+  // not contain logger identity, use the document name as a practical fallback.
+  const sensorName = extractSensorName(rows, headerIdx) ?? extractSensorNameFromFileName(fileName);
 
   let { timeIdx, tempIdx } = selectColumns(header, dataRows);
 
