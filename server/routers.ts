@@ -1415,6 +1415,20 @@ export const appRouter = router({
         await removeAutoLinkedSensorIfUnused(input.protocolId, deletedLogger?.label);
         return { success: true };
       }),
+    deleteAllLoggers: protectedProcedure
+      .input(z.object({ protocolId: z.number(), trialKey: z.string().max(32).optional() }))
+      .mutation(async ({ ctx, input }) => {
+        await ownProtocol(ctx.user.id, input.protocolId);
+        const trialKey = input.trialKey ?? "default";
+        const loggers = await listLoggers(input.protocolId, trialKey);
+        for (const logger of loggers) {
+          await deleteLogger(logger.id);
+        }
+        for (const logger of loggers) {
+          await removeAutoLinkedSensorIfUnused(input.protocolId, logger.label);
+        }
+        return { success: true, deletedCount: loggers.length };
+      }),
     autoDetectExternal: protectedProcedure
       .input(z.object({ protocolId: z.number(), trialKey: z.string().max(32).optional() }))
       .mutation(async ({ ctx, input }) => {

@@ -135,6 +135,15 @@ export default function PVStep({
     },
     onError: e => toast.error(e.message),
   });
+  const deleteAllLoggers = trpc.pv.deleteAllLoggers.useMutation({
+    onSuccess: ({ deletedCount }) => {
+      setSelectedLogger(null);
+      setCustomNames({});
+      utils.pv.get.invalidate({ protocolId, trialKey: activeTrialKey });
+      toast.success(`Удалено датчиков: ${deletedCount}`);
+    },
+    onError: e => toast.error(e.message),
+  });
   const autoDetect = trpc.pv.autoDetectExternal.useMutation({
     onSuccess: ({ externals }) => {
       utils.pv.get.invalidate({ protocolId, trialKey: activeTrialKey });
@@ -518,6 +527,25 @@ export default function PVStep({
                 disabled={autoDetect.isPending || loggers.length === 0}
               >
                 <Sparkles className="h-4 w-4" /> Авто‑определить внешние
+              </Button>
+              <Button
+                variant="outline"
+                className="bg-background text-destructive hover:text-destructive"
+                onClick={() => {
+                  const ok = window.confirm(
+                    `Удалить все загруженные датчики (${loggers.length})? Это действие нельзя отменить.`,
+                  );
+                  if (!ok) return;
+                  deleteAllLoggers.mutate({ protocolId, trialKey: activeTrialKey });
+                }}
+                disabled={deleteAllLoggers.isPending || loggers.length === 0}
+              >
+                {deleteAllLoggers.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                Удалить все
               </Button>
               <input
                 ref={fileRef}
