@@ -173,6 +173,17 @@ describe("parseLoggerBuffer", () => {
     expect(res.sensorName).toBe("EF719BE00575");
   });
 
+  it("prefers the document name over a suspicious measurement-like logger identity", () => {
+    const csv =
+      "Logger ID,57.0\n" +
+      "Timestamp,Temperature\n" +
+      "2026.07.27 09:45:00,20.50\n" +
+      "2026.07.27 10:00:00,20.60\n";
+    const res = parseLoggerBuffer(Buffer.from(csv), "4955.xlsx");
+    expect(res.ts.length).toBe(2);
+    expect(res.sensorName).toBe("4955");
+  });
+
   it("keeps the logger identity from file contents when it is present", () => {
     const csv =
       "Logger Name,ABC-123\n" +

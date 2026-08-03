@@ -145,6 +145,26 @@ function scoreAsTemp(header: string, columnValues: any[]): number {
   return s;
 }
 
+const SENSOR_NAME_EXACT_TOKENS = ["name", "id"];
+
+function isSensorNameKey(key: string): boolean {
+  if (!key) return false;
+  if (SENSOR_NAME_EXACT_TOKENS.includes(key)) return true;
+  return containsAny(
+    key,
+    SENSOR_NAME_TOKENS.filter(token => !SENSOR_NAME_EXACT_TOKENS.includes(token)),
+  );
+}
+
+function looksLikeMeasurementValue(value: string | undefined): boolean {
+  if (!value) return false;
+  const normalized = value.trim().replace(",", ".");
+  if (!/^-?\d+(?:\.\d+)?$/.test(normalized)) return false;
+  const n = Number(normalized);
+  if (!Number.isFinite(n)) return false;
+  return normalized.includes(".") || (n >= -80 && n <= 100);
+}
+
 /**
  * Select the best TIME and TEMPERATURE column indices for a grid of rows
  * whose first row is the header.
@@ -380,7 +400,7 @@ function extractSensorName(rows: any[][], headerIdx: number): string | undefined
     for (let c = 0; c < r.length - 1; c++) {
       const key = normKey(String(r[c] ?? ""));
       if (!key) continue;
-      if (containsAny(key, SENSOR_NAME_TOKENS)) {
+      if (isSensorNameKey(key)) {
         // Value is in the next non-empty cell in the same row
         for (let v = c + 1; v < r.length; v++) {
           const val = String(r[v] ?? "").trim();
@@ -399,7 +419,7 @@ function extractSensorName(rows: any[][], headerIdx: number): string | undefined
   for (let c = 0; c < header.length; c++) {
     const key = normKey(String(header[c] ?? ""));
     if (!key) continue;
-    if (containsAny(key, SENSOR_NAME_TOKENS)) {
+    if (isSensorNameKey(key)) {
       // Find first non-empty value in this column.
       // Accept numeric values too (e.g. Logger Name = 2048).
       for (const dr of dataRows.slice(0, 5)) {
@@ -443,6 +463,14 @@ function extractSensorNameFromFileName(fileName: string): string | undefined {
     .trim();
 
   return cleaned ? cleaned.slice(0, 64) : undefined;
+}
+
+function chooseSensorName(extractedName: string | undefined, fileName: string): string | undefined {
+  const fileNameSensor = extractSensorNameFromFileName(fileName);
+  if (fileNameSensor && looksLikeMeasurementValue(extractedName)) {
+    return fileNameSensor;
+  }
+  return extractedName ?? fileNameSensor;
 }
 
 /* ------------------------------------------------------------------ */
@@ -549,7 +577,7 @@ export function parseLoggerBuffer(
 
   // Extract sensor name from metadata block/header columns. If the export does
   // not contain logger identity, use the document name as a practical fallback.
-  const sensorName = extractSensorName(rows, headerIdx) ?? extractSensorNameFromFileName(fileName);
+  const sensorName = chooseSensorName(extractSensorName(rows, headerIdx), fileName);
 
   let { timeIdx, tempIdx } = selectColumns(header, dataRows);
 
