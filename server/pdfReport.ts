@@ -983,6 +983,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
       if (isReeferLike(eqType)) {
         drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, true, "Схема 1. Эталонные позиции ISPE (C1–C8, W1–W4, V1–V3)", null, null, eqType === "chamber" || eqType === "thermal-container" ? "chamber" : "truck");
       } else {
+        doc.addPage();
         drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, "Схема 1. Позиции размещения датчиков по полкам холодильника", "position", input.refrigeratorDrawerCount ?? 2);
       }
       // Schema 2: with serial numbers

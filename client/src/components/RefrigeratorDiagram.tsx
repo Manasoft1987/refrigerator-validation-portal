@@ -233,7 +233,7 @@ export default function RefrigeratorDiagram({
       )}
 
       <div className="grid lg:grid-cols-[minmax(0,1fr)_260px] gap-4 items-start">
-        <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-3xl mx-auto rounded-lg border bg-white">
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-5xl mx-auto rounded-lg border bg-white">
           <defs>
             <linearGradient id="rf-body" x1="0" x2="1" y1="0" y2="1">
               <stop offset="0%" stopColor="#ffffff" />

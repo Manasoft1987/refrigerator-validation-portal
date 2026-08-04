@@ -798,26 +798,27 @@ export function drawRefrigeratorDiagram(
     ? Math.max(0, Math.min(2, Math.round(rawDrawerCount)))
     : 2;
 
-  const diagH = 190;
-  const cabW = 200;
+  const diagH = 500;
+  const cabW = 330;
   const cabH = diagH;
   // Outer wall thickness (represents insulation)
-  const wallT = 10;
+  const wallT = 14;
   const outerW = cabW + wallT * 2;
   const outerH = cabH + wallT * 2;
   const showAvgInBadges = badgeMode === "serial" && sensors.some(s => formatSensorAvg(s.avg));
-  const BADGE_W = showAvgInBadges ? 68 : 36;
-  const BADGE_H = showAvgInBadges ? 22 : 20;
-  const badgeFontSize = showAvgInBadges ? 6.4 : 8;
-  const extBlockH = externals.length > 0 ? 30 + (externals.length - 1) * 45 + BADGE_H + 18 : 0;
-  const titleH = title ? 28 : 0;
+  const BADGE_W = showAvgInBadges ? 86 : 44;
+  const BADGE_H = showAvgInBadges ? 30 : 24;
+  const badgeFontSize = showAvgInBadges ? 8.6 : 10.5;
+  const extRowGap = 56;
+  const extBlockH = externals.length > 0 ? 36 + (externals.length - 1) * extRowGap + BADGE_H + 22 : 0;
+  const titleH = title ? 34 : 0;
   const blockH = titleH + Math.max(outerH, extBlockH) + 18;
 
   ensureSpace(doc, blockH);
 
   if (title) {
     doc.save();
-    doc.font("bold").fontSize(11).fillColor("#1f2937");
+    doc.font("bold").fontSize(13).fillColor("#1f2937");
     doc.text(title, pageMargin, doc.y, { width: doc.page.width - pageMargin * 2, lineBreak: false });
     doc.restore();
     doc.y = (doc.y as number) + 10;
@@ -825,7 +826,7 @@ export function drawRefrigeratorDiagram(
 
   // Outer body is larger than inner chamber by wallT on each side.
   // Coordinates must be calculated after ensureSpace because it can add a page.
-  const totalW = outerW + (externals.length > 0 ? 80 : 0);
+  const totalW = outerW + (externals.length > 0 ? 110 : 0);
   const outerX = pageMargin + Math.max(0, (doc.page.width - pageMargin * 2 - totalW) / 2);
   const outerY = doc.y;
   // Inner chamber starts at offset
@@ -833,11 +834,11 @@ export function drawRefrigeratorDiagram(
   const cabY = outerY + wallT;
 
   // Door strip
-  const doorW = 36;
+  const doorW = 48;
   const doorX = cabX + cabW - doorW;
 
   // Shelf Y positions
-  const drawerReserve = effectiveDrawerCount > 0 ? 30 : 12;
+  const drawerReserve = effectiveDrawerCount > 0 ? 58 : 22;
   const shelfY = (shelf: number) =>
     cabY + 16 + ((shelf - 1) / Math.max(1, shelfCount - 1)) * (cabH - 22 - drawerReserve);
 
@@ -846,8 +847,8 @@ export function drawRefrigeratorDiagram(
   doc.roundedRect(outerX, outerY, outerW, outerH, 6).fill("#e2e8f0");
   doc.roundedRect(outerX, outerY, outerW, outerH, 6).lineWidth(1.5).strokeColor("#64748b").stroke();
   // Label: outer body
-  doc.font("body").fontSize(6).fillColor("#94a3b8");
-  doc.text("Корпус", outerX + 2, outerY + 2, { lineBreak: false });
+  doc.font("body").fontSize(8).fillColor("#94a3b8");
+  doc.text("Корпус", outerX + 4, outerY + 4, { lineBreak: false });
   doc.restore();
 
   // --- Cabinet body (inner chamber) ---
@@ -871,7 +872,7 @@ export function drawRefrigeratorDiagram(
   doc.undash();
 
   // Shelf labels
-  doc.font("body").fontSize(7).fillColor("#94a3b8");
+  doc.font("body").fontSize(9).fillColor("#94a3b8");
   for (let shelf = 1; shelf <= shelfCount; shelf += 1) {
     const y = shelfY(shelf);
     const label = shelf === 1
@@ -879,12 +880,12 @@ export function drawRefrigeratorDiagram(
       : shelf === shelfCount
       ? `${shelf} полка (нижняя)`
       : `${shelf} полка`;
-    doc.text(label, cabX + 5, Math.max(cabY + 2, y - 9), { lineBreak: false });
+    doc.text(label, cabX + 8, Math.max(cabY + 3, y - 11), { lineBreak: false });
   }
 
   // Door label
-  doc.fontSize(7).fillColor("#94a3b8");
-  doc.text("Дверь", doorX + 2, cabY + cabH / 2 - 10, {
+  doc.fontSize(9).fillColor("#94a3b8");
+  doc.text("Дверь", doorX + 3, cabY + cabH / 2 - 12, {
     width: doorW - 4,
     align: "center",
     lineBreak: true,
@@ -953,7 +954,7 @@ export function drawRefrigeratorDiagram(
   externals.forEach((s, idx) => {
     const color = sensorBadgeColor(internals.length + idx);
     const name = refrigeratorBadgeText(s, idx, badgeMode);
-    const ey = cabY + 28 + idx * 45;
+    const ey = cabY + 40 + idx * extRowGap;
 
     // Connector line
     doc.save();
@@ -970,8 +971,8 @@ export function drawRefrigeratorDiagram(
       align: "center",
       lineBreak: false,
     });
-    doc.font("body").fontSize(6.5).fillColor("#64748b");
-    doc.text("Внешний", badgeCx - BADGE_W / 2, ey + BADGE_H / 2 + 2, {
+    doc.font("body").fontSize(8).fillColor("#64748b");
+    doc.text("Внешний", badgeCx - BADGE_W / 2, ey + BADGE_H / 2 + 3, {
       width: BADGE_W,
       align: "center",
       lineBreak: false,
