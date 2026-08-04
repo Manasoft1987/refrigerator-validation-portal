@@ -265,7 +265,7 @@ export default function EquipmentTypeSelector() {
                 <CardTitle className="text-xl">Помещение / зона (экспертное)</CardTitle>
               </div>
               <CardDescription className="text-sm">
-                Помещение хранения без вшитого авторасчёта ЕАЭК: количество датчиков задаёт специалист
+                Помещение хранения с ручным определением количества и точек размещения датчиков
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
