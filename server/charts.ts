@@ -841,6 +841,7 @@ export function drawRefrigeratorDiagram(
   const drawerReserve = effectiveDrawerCount > 0 ? 58 : 22;
   const shelfY = (shelf: number) =>
     cabY + 16 + ((shelf - 1) / Math.max(1, shelfCount - 1)) * (cabH - 22 - drawerReserve);
+  const isDrawerLevel = (shelf: number) => effectiveDrawerCount > 0 && shelf === shelfCount;
 
   // --- Outer refrigerator body (insulated walls) ---
   doc.save();
@@ -866,6 +867,7 @@ export function drawRefrigeratorDiagram(
   // Shelves (dashed)
   doc.lineWidth(1).strokeColor("#cbd5e1").dash(5, { space: 3 });
   for (let shelf = 1; shelf <= shelfCount; shelf += 1) {
+    if (isDrawerLevel(shelf)) continue;
     const y = shelfY(shelf);
     doc.moveTo(cabX + 4, y).lineTo(doorX - 4, y).stroke();
   }
@@ -874,6 +876,7 @@ export function drawRefrigeratorDiagram(
   // Shelf labels
   doc.font("body").fontSize(9).fillColor("#94a3b8");
   for (let shelf = 1; shelf <= shelfCount; shelf += 1) {
+    if (isDrawerLevel(shelf)) continue;
     const y = shelfY(shelf);
     const label = shelf === 1
       ? `${shelf} полка (верхняя)`
@@ -899,11 +902,16 @@ export function drawRefrigeratorDiagram(
     doc.lineWidth(0.7).strokeColor("#94a3b8").fillColor("#ffffff");
     if (effectiveDrawerCount === 1) {
       doc.roundedRect(drawerX, drawerY, drawerW, drawerH, 3).fillAndStroke("#ffffff", "#94a3b8");
+      doc.font("bold").fontSize(8).fillColor("#64748b");
+      doc.text("Лоток", drawerX, drawerY + drawerH / 2 - 4, { width: drawerW, align: "center", lineBreak: false });
     } else {
       const gap = 6;
       const w = (drawerW - gap) / 2;
       doc.roundedRect(drawerX, drawerY, w, drawerH, 3).fillAndStroke("#ffffff", "#94a3b8");
       doc.roundedRect(drawerX + w + gap, drawerY, w, drawerH, 3).fillAndStroke("#ffffff", "#94a3b8");
+      doc.font("bold").fontSize(8).fillColor("#64748b");
+      doc.text("Лоток", drawerX, drawerY + drawerH / 2 - 4, { width: w, align: "center", lineBreak: false });
+      doc.text("Лоток", drawerX + w + gap, drawerY + drawerH / 2 - 4, { width: w, align: "center", lineBreak: false });
     }
   }
   doc.restore();

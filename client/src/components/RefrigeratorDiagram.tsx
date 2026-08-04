@@ -99,7 +99,10 @@ function legacyPlacement(logger: Logger, index: number, total: number): Placemen
   return { shelf, zone: pattern[index % pattern.length] };
 }
 
-function shelfTitle(shelf: number, total: number): string {
+function shelfTitle(shelf: number, total: number, drawerCount = 0): string {
+  if (drawerCount > 0 && shelf === total) {
+    return drawerCount === 1 ? `${shelf} уровень (лоток)` : `${shelf} уровень (лотки)`;
+  }
   if (shelf === 1) return `${shelf} полка (верхняя)`;
   if (shelf === total) return `${shelf} полка (нижняя)`;
   return `${shelf} полка`;
@@ -130,6 +133,7 @@ export default function RefrigeratorDiagram({
   const shelfCount = Math.max(1, Math.min(9, Math.max(visibleShelves, maxPlacedShelf)));
   const effectiveDrawerCount = normalizeDrawerCount(drawerCount ?? localDrawerCount);
   const [assigningTo, setAssigningTo] = useState<Placement | null>(null);
+  const isDrawerLevel = (shelf: number) => effectiveDrawerCount > 0 && shelf === shelfCount;
 
   const placements = useMemo(() => {
     const map = new Map<string, Logger>();
@@ -200,7 +204,7 @@ export default function RefrigeratorDiagram({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Полок:</span>
+            <span className="text-xs text-muted-foreground">Уровней:</span>
             {[3, 5, 7, 9].map(count => (
               <Button
                 key={count}
@@ -260,8 +264,7 @@ export default function RefrigeratorDiagram({
           ))}
 
           {/* Shelf rails and shelves */}
-          {Array.from({ length: shelfCount }, (_, i) => {
-            const shelf = i + 1;
+          {Array.from({ length: shelfCount }, (_, i) => i + 1).filter(shelf => !isDrawerLevel(shelf)).map(shelf => {
             const y = shelfY(shelf);
             const frontY = y + cab.d * 0.30;
             const leftBackX = cab.x + 38;
@@ -286,12 +289,17 @@ export default function RefrigeratorDiagram({
 
           {/* Optional lower drawers */}
           {effectiveDrawerCount === 1 && (
-            <rect x={cab.x + 58} y={cab.y + cab.h - 74} width={320} height={46} rx={7} fill="#f8fafc" stroke="#94a3b8" opacity={0.9} />
+            <>
+              <rect x={cab.x + 58} y={cab.y + cab.h - 74} width={320} height={46} rx={7} fill="#f8fafc" stroke="#94a3b8" opacity={0.9} />
+              <text x={cab.x + 218} y={cab.y + cab.h - 47} textAnchor="middle" fontSize={11} fill="#64748b" fontWeight={700}>Лоток</text>
+            </>
           )}
           {effectiveDrawerCount === 2 && (
             <>
               <rect x={cab.x + 58} y={cab.y + cab.h - 74} width={150} height={46} rx={7} fill="#f8fafc" stroke="#94a3b8" opacity={0.9} />
               <rect x={cab.x + 228} y={cab.y + cab.h - 74} width={150} height={46} rx={7} fill="#f8fafc" stroke="#94a3b8" opacity={0.9} />
+              <text x={cab.x + 133} y={cab.y + cab.h - 47} textAnchor="middle" fontSize={11} fill="#64748b" fontWeight={700}>Лоток</text>
+              <text x={cab.x + 303} y={cab.y + cab.h - 47} textAnchor="middle" fontSize={11} fill="#64748b" fontWeight={700}>Лоток</text>
             </>
           )}
 
@@ -363,7 +371,7 @@ export default function RefrigeratorDiagram({
               .filter(row => row.logger);
             return (
               <div key={shelf} className="rounded-lg border bg-white p-3 text-sm">
-                <div className="font-semibold text-center mb-1">{shelfTitle(shelf, shelfCount)}</div>
+                <div className="font-semibold text-center mb-1">{shelfTitle(shelf, shelfCount, effectiveDrawerCount)}</div>
                 {rows.length === 0 ? (
                   <div className="text-center text-muted-foreground text-xs">(без логгеров)</div>
                 ) : (
@@ -388,7 +396,7 @@ export default function RefrigeratorDiagram({
           <div className="flex items-start justify-between gap-3 mb-3">
             <div>
               <div className="font-semibold text-sm">
-                {shelfTitle(assigningTo.shelf, shelfCount)} — {ZONES.find(z => z.code === assigningTo.zone)?.label}
+                {shelfTitle(assigningTo.shelf, shelfCount, effectiveDrawerCount)} — {ZONES.find(z => z.code === assigningTo.zone)?.label}
               </div>
               <div className="text-xs text-muted-foreground">Выберите логгер для этой точки.</div>
             </div>
