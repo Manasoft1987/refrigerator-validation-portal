@@ -262,6 +262,7 @@ export default function SensorPlacementPage() {
   const [coolingUnitPos, setCoolingUnitPos] = useState<{ x: number; y: number } | null>(null);
   const [doorPos, setDoorPos] = useState<{ x: number; y: number } | null>(null);
   const [floorPlanObjects, setFloorPlanObjects] = useState<FloorPlanObject[]>([]);
+  const [refrigeratorLevelCount, setRefrigeratorLevelCount] = useState<number>(7);
   const [refrigeratorDrawerCount, setRefrigeratorDrawerCount] = useState<0 | 1 | 2>(2);
   const [activeTier, setActiveTier] = useState<number>(1);
   const [showDimensions, setShowDimensions] = useState(false);
@@ -297,6 +298,10 @@ export default function SensorPlacementPage() {
     const savedDrawerCount = Number((session as any).refrigeratorDrawerCount);
     if (Number.isFinite(savedDrawerCount)) {
       setRefrigeratorDrawerCount(Math.max(0, Math.min(2, Math.round(savedDrawerCount))) as 0 | 1 | 2);
+    }
+    const savedLevelCount = Number((session as any).refrigeratorLevelCount);
+    if (Number.isFinite(savedLevelCount)) {
+      setRefrigeratorLevelCount(Math.max(3, Math.min(9, Math.round(savedLevelCount))));
     }
   }
 
@@ -491,6 +496,16 @@ export default function SensorPlacementPage() {
       protocolId,
       trialKey,
       refrigeratorDrawerCount: normalized,
+    } as any);
+  }, [protocolId, saveSession, trialKey]);
+
+  const handleRefrigeratorLevelCountChange = useCallback((count: number) => {
+    const normalized = Math.max(3, Math.min(9, Math.round(count)));
+    setRefrigeratorLevelCount(normalized);
+    saveSession.mutate({
+      protocolId,
+      trialKey,
+      refrigeratorLevelCount: normalized,
     } as any);
   }, [protocolId, saveSession, trialKey]);
 
@@ -770,6 +785,8 @@ export default function SensorPlacementPage() {
             <RefrigeratorDiagram
               loggers={loggers as any}
               protocolId={protocolId}
+              levelCount={refrigeratorLevelCount}
+              onLevelCountChange={handleRefrigeratorLevelCountChange}
               drawerCount={refrigeratorDrawerCount}
               onDrawerCountChange={handleRefrigeratorDrawerCountChange}
             />

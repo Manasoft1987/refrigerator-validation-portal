@@ -26,6 +26,8 @@ type Props = {
   loggers: Logger[];
   protocolId: number;
   readOnly?: boolean;
+  levelCount?: number | null;
+  onLevelCountChange?: (count: number) => void;
   drawerCount?: number | null;
   onDrawerCountChange?: (count: number) => void;
 };
@@ -114,10 +116,18 @@ function normalizeDrawerCount(value: number | null | undefined): 0 | 1 | 2 {
   return Math.max(0, Math.min(2, Math.round(n))) as 0 | 1 | 2;
 }
 
+function normalizeLevelCount(value: number | null | undefined): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 7;
+  return Math.max(3, Math.min(9, Math.round(n)));
+}
+
 export default function RefrigeratorDiagram({
   loggers,
   protocolId,
   readOnly = false,
+  levelCount,
+  onLevelCountChange,
   drawerCount,
   onDrawerCountChange,
 }: Props) {
@@ -128,9 +138,9 @@ export default function RefrigeratorDiagram({
   const internals = loggers.filter(l => l.role === "internal");
   const externals = loggers.filter(l => l.role === "external");
   const maxPlacedShelf = Math.max(0, ...internals.map(l => parsePlacement(l.position)?.shelf ?? 0));
-  const [visibleShelves, setVisibleShelves] = useState(Math.max(7, maxPlacedShelf));
+  const [visibleShelves, setVisibleShelves] = useState(normalizeLevelCount(levelCount ?? Math.max(7, maxPlacedShelf)));
   const [localDrawerCount, setLocalDrawerCount] = useState<0 | 1 | 2>(normalizeDrawerCount(drawerCount));
-  const shelfCount = Math.max(1, Math.min(9, visibleShelves));
+  const shelfCount = normalizeLevelCount(levelCount ?? visibleShelves);
   const effectiveDrawerCount = normalizeDrawerCount(drawerCount ?? localDrawerCount);
   const [assigningTo, setAssigningTo] = useState<Placement | null>(null);
   const isDrawerLevel = (shelf: number) => effectiveDrawerCount > 0 && shelf === shelfCount;
@@ -195,14 +205,16 @@ export default function RefrigeratorDiagram({
     onDrawerCountChange?.(count);
   };
   const setLevelCount = (count: number) => {
-    setVisibleShelves(count);
+    const normalized = normalizeLevelCount(count);
+    setVisibleShelves(normalized);
+    onLevelCountChange?.(normalized);
     internals.forEach(logger => {
       const parsed = parsePlacement(logger.position);
-      if (parsed && parsed.shelf > count) {
+      if (parsed && parsed.shelf > normalized) {
         updateLogger.mutate({
           protocolId,
           loggerId: logger.id,
-          position: placementCode({ ...parsed, shelf: count }) as any,
+          position: placementCode({ ...parsed, shelf: normalized }) as any,
           posX: null,
           posY: null,
         });
@@ -222,7 +234,7 @@ export default function RefrigeratorDiagram({
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Уровней:</span>
-            {[3, 5, 7, 9].map(count => (
+            {[3, 4, 5, 6, 7, 9].map(count => (
               <Button
                 key={count}
                 type="button"

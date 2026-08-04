@@ -233,6 +233,7 @@ export const pvSessions = mysqlTable("pvSessions", {
 	doorPos: json(),
 	floorPlanObjects: json(),
 	refrigeratorDrawerCount: int().default(2),
+	refrigeratorLevelCount: int().default(7),
 	roomLengthM: decimal({ precision: 6, scale: 2 }),
 	roomWidthM: decimal({ precision: 6, scale: 2 }),
 	roomHeightM: decimal({ precision: 6, scale: 2 }),

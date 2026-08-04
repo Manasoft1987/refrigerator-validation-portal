@@ -728,7 +728,13 @@ function parseFridgePlacement(position: string | null | undefined): { shelf: num
 function fridgeShelfCount(sensors: DiagramSensor[]): number {
   const internals = sensors.filter(s => s.role === "internal");
   const maxPlaced = Math.max(0, ...internals.map(s => parseFridgePlacement(s.position)?.shelf ?? 0));
-  return Math.max(3, Math.min(9, Math.max(7, internals.length, maxPlaced)));
+  return Math.max(3, Math.min(9, maxPlaced || 7));
+}
+
+function normalizeFridgeLevelCount(value: number | null | undefined): number {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 7;
+  return Math.max(3, Math.min(9, Math.round(n)));
 }
 
 const BADGE_PALETTE = [
@@ -789,10 +795,11 @@ export function drawRefrigeratorDiagram(
   title?: string,
   badgeMode: "serial" | "position" = "serial",
   drawerCount: number | null = 2,
+  levelCount: number | null = null,
 ): void {
   const internals = sensors.filter(s => s.role === "internal");
   const externals = sensors.filter(s => s.role === "external");
-  const shelfCount = fridgeShelfCount(sensors);
+  const shelfCount = normalizeFridgeLevelCount(levelCount ?? fridgeShelfCount(sensors));
   const rawDrawerCount = Number(drawerCount ?? 2);
   const effectiveDrawerCount = Number.isFinite(rawDrawerCount)
     ? Math.max(0, Math.min(2, Math.round(rawDrawerCount)))

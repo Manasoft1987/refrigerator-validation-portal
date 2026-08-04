@@ -787,6 +787,7 @@ export async function insertProtocol(data: InsertProtocol) {
         doorPos: null,
         floorPlanObjects: null,
         refrigeratorDrawerCount: 2,
+        refrigeratorLevelCount: 7,
         roomLengthM: null,
         roomWidthM: null,
         roomHeightM: null,
@@ -1163,6 +1164,7 @@ async function ensurePVPlanBackgroundStorage() {
       ["planBackgroundImageKey", "varchar(512) NULL AFTER planImageUrl"],
       ["planBackgroundImageUrl", "LONGTEXT NULL AFTER planBackgroundImageKey"],
       ["refrigeratorDrawerCount", "int NULL DEFAULT 2 AFTER floorPlanObjects"],
+      ["refrigeratorLevelCount", "int NULL DEFAULT 7 AFTER refrigeratorDrawerCount"],
     ] as const) {
       const result = await db.execute(sql.raw(`SHOW COLUMNS FROM pvSessions LIKE '${column}'`));
       const rows = (result as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
@@ -1242,6 +1244,7 @@ export async function updatePVSession(
         doorPos: null,
         floorPlanObjects: null,
         refrigeratorDrawerCount: 2,
+        refrigeratorLevelCount: 7,
         roomLengthM: null,
         roomWidthM: null,
         roomHeightM: null,

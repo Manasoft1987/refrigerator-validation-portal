@@ -1140,6 +1140,7 @@ export const appRouter = router({
           coolingUnitPos: z.object({ x: z.number(), y: z.number() }).nullable().optional(),
           doorPos: z.object({ x: z.number(), y: z.number() }).nullable().optional(),
           refrigeratorDrawerCount: z.number().int().min(0).max(2).nullable().optional(),
+          refrigeratorLevelCount: z.number().int().min(3).max(9).nullable().optional(),
           floorPlanObjects: z.array(z.object({
             id: z.string(),
             type: z.string(),
@@ -1169,7 +1170,7 @@ export const appRouter = router({
       )
       .mutation(async ({ ctx, input }) => {
         const protocol = await ownProtocol(ctx.user.id, input.protocolId);
-        const { protocolId, customMin, customMax, samplingStepMinutes, coolingUnitPos, doorPos, refrigeratorDrawerCount, floorPlanObjects, roomLengthM, roomWidthM, roomHeightM, planImageKey, planImageUrl, planBackgroundImageKey, planBackgroundImageUrl, ...rest } = input;
+        const { protocolId, customMin, customMax, samplingStepMinutes, coolingUnitPos, doorPos, refrigeratorDrawerCount, refrigeratorLevelCount, floorPlanObjects, roomLengthM, roomWidthM, roomHeightM, planImageKey, planImageUrl, planBackgroundImageKey, planBackgroundImageUrl, ...rest } = input;
         const trialKey = input.trialKey ?? "default";
         const patch: any = { ...rest };
         delete patch.trialKey;
@@ -1195,6 +1196,7 @@ export const appRouter = router({
         if (coolingUnitPos !== undefined) patch.coolingUnitPos = coolingUnitPos;
         if (doorPos !== undefined) patch.doorPos = doorPos;
         if (refrigeratorDrawerCount !== undefined) patch.refrigeratorDrawerCount = refrigeratorDrawerCount === null ? 2 : refrigeratorDrawerCount;
+        if (refrigeratorLevelCount !== undefined) patch.refrigeratorLevelCount = refrigeratorLevelCount === null ? 7 : refrigeratorLevelCount;
         if (floorPlanObjects !== undefined) patch.floorPlanObjects = floorPlanObjects;
         const coerceDec = (v: any) => v === undefined ? undefined : (v === null || v === "" ? null : String(v));
         const cL = coerceDec(roomLengthM);
@@ -2189,6 +2191,7 @@ export const appRouter = router({
           coolingUnitPos: session?.coolingUnitPos as any,
           doorPos: session?.doorPos as any,
           refrigeratorDrawerCount: Number((session as any)?.refrigeratorDrawerCount ?? 2),
+          refrigeratorLevelCount: Number((session as any)?.refrigeratorLevelCount ?? 7),
           floorPlanObjects: session?.floorPlanObjects as any,
           // Saved plan screenshot (preferred over vector drawing in PDF) — pass as Buffer for PDFKit
           planImageUrl: planImageBuffer,
