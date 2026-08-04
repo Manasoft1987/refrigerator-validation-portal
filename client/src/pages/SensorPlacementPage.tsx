@@ -16,16 +16,17 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
-import { ArrowLeft, Camera, FileImage, Info, MapPin, Save, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, Camera, FileImage, Info, MapPin, Save, Trash2, Upload, Wand2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useParams, useLocation } from "wouter";
 import { toPng } from "html-to-image";
+import { nanoid } from "nanoid";
 import ReeferTruckDiagram3D from "@/components/ReeferTruckDiagram3D";
 import RefrigeratorDiagram from "@/components/RefrigeratorDiagram";
 import FloorPlanEditor, { FloorPlanObject, SensorPosition, SensorLogger } from "@/components/FloorPlanEditor";
 import { buildWarehousePositions } from "@/components/WarehouseLayoutDiagram";
-import { computeWarehouseSensorCount, isWarehouseEaeu, isWarehouseLike } from "@shared/validation";
+import { computeWarehouseSensorCount, isWarehouseEaeu, isWarehouseLike, TEMP_MODES } from "@shared/validation";
 
 // --- Isometric helpers (same as ReeferTruckDiagram3D) -------------------------
 const SCALE   = 93.6;
@@ -72,6 +73,20 @@ const GROUP_COLORS = {
   wall:   "#16a34a",
   center: "#dc2626",
 };
+
+function loggerDisplayName(logger: SensorLogger): string {
+  return String(logger.customName || logger.label || `Датчик ${logger.id}`).trim();
+}
+
+function normalizeLoggerName(value: unknown): string {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function readNumber(value: unknown): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(String(value).replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
 
 // --- Read-only ISPE Position Diagram -----------------------------------------
 function ISPEPositionDiagram() {
@@ -234,6 +249,10 @@ export default function SensorPlacementPage() {
   const isWarehouse = isWarehouseLike(equipmentType);
   const isWarehouseByEaeu = isWarehouseEaeu(equipmentType);
   const isAutoRefrigerator = equipmentType === "auto-refrigerator" || equipmentType === "chamber" || equipmentType === "thermal-container";
+  const planTempMode = String((session as any)?.tempMode || giQ.data?.tempMode || "2-8");
+  const planModeDef = TEMP_MODES.find(mode => mode.id === planTempMode);
+  const planRangeMin = readNumber((session as any)?.customMin ?? (giQ.data as any)?.customMin) ?? planModeDef?.min ?? null;
+  const planRangeMax = readNumber((session as any)?.customMax ?? (giQ.data as any)?.customMax) ?? planModeDef?.max ?? null;
 
   const updateLogger = trpc.pv.updateLogger.useMutation({
     onSuccess: () => pvQ.refetch(),
@@ -348,6 +367,88 @@ export default function SensorPlacementPage() {
     } as any);
   }, [protocolId, saveSession]);
 
+  const handleAutoPlaceSensors = useCallback(() => {
+    if (!isWarehouse) return;
+    const internalLoggers = (loggers as SensorLogger[]).filter(logger => logger.role !== "external");
+    if (internalLoggers.length === 0) {
+      toast.warning("Сначала загрузите внутренние датчики");
+      return;
+    }
+
+    const nextObjects = [...floorPlanObjects];
+    const existingById = new Map(nextObjects.map(obj => [obj.id, obj]));
+    const sensorObjects = nextObjects.filter(obj => obj.type === "sensor_point");
+    const sensorByLabel = new Map<string, FloorPlanObject[]>();
+    sensorObjects.forEach(obj => {
+      const key = normalizeLoggerName(obj.label);
+      sensorByLabel.set(key, [...(sensorByLabel.get(key) ?? []), obj]);
+    });
+    const usedSensorObjectIds = new Set<string>();
+    const createdAssignments: Array<{ loggerId: number; objectId: string }> = [];
+    const missingLoggers: SensorLogger[] = [];
+
+    internalLoggers.forEach(logger => {
+      const existingPosition = logger.position ? existingById.get(logger.position) : undefined;
+      if (existingPosition?.type === "sensor_point") {
+        usedSensorObjectIds.add(existingPosition.id);
+        return;
+      }
+
+      const matchedByLabel = [
+        ...(sensorByLabel.get(normalizeLoggerName(loggerDisplayName(logger))) ?? []),
+        ...(sensorByLabel.get(normalizeLoggerName(logger.label)) ?? []),
+      ].find(obj => !usedSensorObjectIds.has(obj.id));
+      if (matchedByLabel) {
+        usedSensorObjectIds.add(matchedByLabel.id);
+        createdAssignments.push({ loggerId: logger.id, objectId: matchedByLabel.id });
+        return;
+      }
+
+      missingLoggers.push(logger);
+    });
+
+    const cols = Math.max(1, Math.ceil(Math.sqrt(Math.max(1, missingLoggers.length) * 1.4)));
+    const rows = Math.max(1, Math.ceil(Math.max(1, missingLoggers.length) / cols));
+    const sensorSizePct = 3;
+    missingLoggers.forEach((logger, idx) => {
+      const col = idx % cols;
+      const row = Math.floor(idx / cols);
+      const xPct = Math.min(96, Math.max(1, 10 + ((col + 0.5) * 80) / cols - sensorSizePct / 2));
+      const yPct = Math.min(96, Math.max(1, 12 + ((row + 0.5) * 76) / rows - sensorSizePct / 2));
+      const objectId = nanoid();
+      nextObjects.push({
+        id: objectId,
+        type: "sensor_point",
+        xPct,
+        yPct,
+        widthPct: sensorSizePct,
+        heightPct: sensorSizePct,
+        heightM: 0,
+        rotation: 0,
+        label: loggerDisplayName(logger),
+      });
+      createdAssignments.push({ loggerId: logger.id, objectId });
+    });
+
+    setFloorPlanObjects(nextObjects);
+    createdAssignments.forEach(item => {
+      updateLogger.mutate({ protocolId, loggerId: item.loggerId, position: item.objectId });
+    });
+    saveSession.mutate({
+      protocolId,
+      trialKey,
+      floorPlanObjects: nextObjects,
+      roomLengthM: readDim(lengthRef),
+      roomWidthM: readDim(widthRef),
+      roomHeightM: readDim(heightRef),
+    } as any);
+    toast.success(
+      missingLoggers.length > 0
+        ? `Добавлено точек датчиков: ${missingLoggers.length}. Теперь их можно перетащить на план.`
+        : "Все датчики уже есть на схеме. Привязки обновлены.",
+    );
+  }, [isWarehouse, loggers, floorPlanObjects, updateLogger, protocolId, saveSession, trialKey]);
+
   const handleSave = useCallback(async () => {
     const L = readDim(lengthRef);
     const W = readDim(widthRef);
@@ -441,9 +542,21 @@ export default function SensorPlacementPage() {
                     </p>
                   )}
                 </div>
-                <Button size="sm" onClick={handleSave} disabled={saveSession.isPending || savePlanImage.isPending || backgroundUploading || savePlanBackgroundImage.isPending}>
-                  <Save className="h-4 w-4 mr-1" /> Сохранить схему
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="bg-background"
+                    onClick={handleAutoPlaceSensors}
+                    disabled={saveSession.isPending || updateLogger.isPending || loggers.length === 0}
+                  >
+                    <Wand2 className="h-4 w-4 mr-1" /> Расставить датчики
+                  </Button>
+                  <Button size="sm" onClick={handleSave} disabled={saveSession.isPending || savePlanImage.isPending || backgroundUploading || savePlanBackgroundImage.isPending}>
+                    <Save className="h-4 w-4 mr-1" /> Сохранить схему
+                  </Button>
+                </div>
               </div>
 
               {/* ── Room dimension inputs (single source of truth) ── */}
@@ -597,6 +710,8 @@ export default function SensorPlacementPage() {
                   sensorLoggers={loggers as SensorLogger[]}
                   activeTier={activeTier}
                   backgroundImageUrl={planBackgroundImageUrl}
+                  rangeMin={planRangeMin}
+                  rangeMax={planRangeMax}
                   onAssignLogger={(objId: string, loggerId: number) => {
                     updateLogger.mutate({ protocolId, loggerId, position: objId ?? null });
                   }}

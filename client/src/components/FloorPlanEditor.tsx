@@ -123,6 +123,49 @@ export interface SensorLogger {
   customName?: string | null;
   role: string;
   position?: string | null;
+  minVal?: string | number | null;
+  avgVal?: string | number | null;
+  maxVal?: string | number | null;
+  mktVal?: string | number | null;
+}
+
+function numericValue(value: string | number | null | undefined): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(String(value).replace(",", "."));
+  return Number.isFinite(n) ? n : null;
+}
+
+function formatTemp(value: string | number | null | undefined): string | null {
+  const n = numericValue(value);
+  if (n == null) return null;
+  return n.toFixed(1).replace(".", ",");
+}
+
+function loggerName(logger: SensorLogger | undefined): string {
+  if (!logger) return "";
+  return String(logger.customName || logger.label || "").trim();
+}
+
+function sensorPointLogger(obj: FloorPlanObject, sensorLoggers: SensorLogger[]): SensorLogger | undefined {
+  const objectLabel = String(obj.label || "").trim().toLowerCase();
+  return sensorLoggers.find(logger => logger.position === obj.id)
+    || sensorLoggers.find(logger => loggerName(logger).toLowerCase() === objectLabel);
+}
+
+function sensorPointColors(
+  logger: SensorLogger | undefined,
+  rangeMin: number | null | undefined,
+  rangeMax: number | null | undefined,
+  selected: boolean,
+) {
+  if (!logger) return { fill: "#e0f2fe", stroke: selected ? "#f59e0b" : "#0369a1", text: "#1e3a8a", badge: "#0284c7" };
+  const avg = numericValue(logger?.avgVal);
+  const min = numericValue(rangeMin);
+  const max = numericValue(rangeMax);
+  const outOfRange = avg != null && min != null && max != null && (avg < min || avg > max);
+  if (outOfRange) return { fill: "#fee2e2", stroke: selected ? "#f59e0b" : "#dc2626", text: "#991b1b", badge: "#dc2626" };
+  if (logger?.role === "external") return { fill: "#f1f5f9", stroke: selected ? "#f59e0b" : "#64748b", text: "#334155", badge: "#64748b" };
+  return { fill: "#dcfce7", stroke: selected ? "#f59e0b" : "#16a34a", text: "#14532d", badge: "#16a34a" };
 }
 
 // ─── Object shape renderer ────────────────────────────────────────────────────
@@ -132,6 +175,9 @@ function ObjectShape({
   planX, planY, drawW, drawH,
   roomLengthM, roomWidthM,
   showDimensions,
+  sensorLoggers,
+  rangeMin,
+  rangeMax,
   selected,
   onPointerDown,
   onResizePointerDown,
@@ -141,6 +187,9 @@ function ObjectShape({
   planX: number; planY: number; drawW: number; drawH: number;
   roomLengthM: number; roomWidthM: number;
   showDimensions: boolean;
+  sensorLoggers: SensorLogger[];
+  rangeMin?: number | null;
+  rangeMax?: number | null;
   selected: boolean;
   onPointerDown: (id: string, e: React.PointerEvent) => void;
   onResizePointerDown: (id: string, corner: ResizeCorner, e: React.PointerEvent) => void;
@@ -170,10 +219,14 @@ function ObjectShape({
   // Sensor point: render as circle with ID label + height below
   if (obj.type === "sensor_point") {
     // Fixed radius: ~14px so 4 digits are readable but not huge
-    const r = 14;
+    const r = 17;
     const cx2 = x + w / 2;
     const cy2 = y + h / 2;
-    const shortId = (obj.label || "?").slice(0, 6);
+    const logger = sensorPointLogger(obj, sensorLoggers);
+    const displayTitle = loggerName(logger) || String(obj.label || "?").trim() || "?";
+    const shortId = displayTitle.length > 7 ? displayTitle.slice(-7) : displayTitle;
+    const avgLabel = formatTemp(logger?.avgVal);
+    const colors = sensorPointColors(logger, rangeMin, rangeMax, selected);
     const htLabel = (obj.heightM ?? 0) > 0 ? `${(obj.heightM as number).toFixed(1)}м` : "";
     return (
       <g
@@ -181,13 +234,19 @@ function ObjectShape({
         onPointerDown={e => { e.stopPropagation(); onPointerDown(obj.id, e); }}
         onDoubleClick={e => { e.stopPropagation(); onDoubleClick(obj.id); }}
       >
-        <circle cx={cx2} cy={cy2} r={r} fill="#0ea5e9" stroke={selected ? "#f59e0b" : "#0369a1"} strokeWidth={selected ? 2.5 : 1.5} />
+        <circle cx={cx2} cy={cy2} r={r} fill={colors.fill} stroke={colors.stroke} strokeWidth={selected ? 2.5 : 1.7} />
+        <circle cx={cx2 - r + 5} cy={cy2 - r + 5} r={4.2} fill={colors.badge} opacity={0.95} />
         {selected && <circle cx={cx2} cy={cy2} r={r + 4} fill="none" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4 2" />}
-        <text x={cx2} y={cy2 + 4} textAnchor="middle" fontSize={8} fontWeight={700} fill="#1e3a8a" style={{ pointerEvents: "none", userSelect: "none" }}>
+        <text x={cx2} y={cy2 + (avgLabel ? -1 : 4)} textAnchor="middle" fontSize={8} fontWeight={800} fill={colors.text} style={{ pointerEvents: "none", userSelect: "none" }}>
           {shortId}
         </text>
+        {avgLabel && (
+          <text x={cx2} y={cy2 + 9} textAnchor="middle" fontSize={7} fontWeight={700} fill={colors.text} style={{ pointerEvents: "none", userSelect: "none" }}>
+            {avgLabel}°C
+          </text>
+        )}
         {htLabel && (
-          <text x={cx2} y={cy2 + r + 9} textAnchor="middle" fontSize={7} fill="#1e3a8a" fontWeight={600} style={{ pointerEvents: "none", userSelect: "none" }}>
+          <text x={cx2} y={cy2 + r + 9} textAnchor="middle" fontSize={7} fill={colors.text} fontWeight={600} style={{ pointerEvents: "none", userSelect: "none" }}>
             {htLabel}
           </text>
         )}
@@ -560,6 +619,8 @@ export interface FloorPlanEditorProps {
   activeTier?: number;
   onAssignLogger?: (objId: string, loggerId: number) => void;
   backgroundImageUrl?: string | null;
+  rangeMin?: number | null;
+  rangeMax?: number | null;
 }
 
 export function FloorPlanEditor({
@@ -574,6 +635,8 @@ export function FloorPlanEditor({
   activeTier,
   onAssignLogger,
   backgroundImageUrl = null,
+  rangeMin = null,
+  rangeMax = null,
 }: FloorPlanEditorProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -910,22 +973,36 @@ export function FloorPlanEditor({
           </div>
 
           {toolbarOpen && (
-            <div className="grid grid-cols-4 gap-1.5 mb-2">
-              {OBJECT_DEFS.map(def => (
-                <button
-                  key={def.type}
-                  onClick={() => setPlacingType(def.type)}
-                  className={`px-2 py-1.5 text-xs rounded-md font-medium transition-all ${
-                    placingType === def.type
-                      ? "bg-primary text-primary-foreground ring-2 ring-primary/50"
-                      : "bg-white border hover:bg-gray-50"
-                  }`}
-                  title={def.ruLabel}
-                >
-                  {def.icon}
-                </button>
-              ))}
-            </div>
+            <>
+              <button
+                type="button"
+                onClick={() => setPlacingType("sensor_point")}
+                className={`w-full mb-2 px-3 py-2 text-xs rounded-md font-semibold transition-all flex items-center justify-center gap-2 ${
+                  placingType === "sensor_point"
+                    ? "bg-primary text-primary-foreground ring-2 ring-primary/50"
+                    : "bg-white border hover:bg-gray-50 text-primary"
+                }`}
+              >
+                <span>●</span>
+                Поставить датчик на план
+              </button>
+              <div className="grid grid-cols-4 gap-1.5 mb-2">
+                {OBJECT_DEFS.filter(def => def.type !== "sensor_point").map(def => (
+                  <button
+                    key={def.type}
+                    onClick={() => setPlacingType(def.type)}
+                    className={`px-2 py-1.5 text-xs rounded-md font-medium transition-all ${
+                      placingType === def.type
+                        ? "bg-primary text-primary-foreground ring-2 ring-primary/50"
+                        : "bg-white border hover:bg-gray-50"
+                    }`}
+                    title={def.ruLabel}
+                  >
+                    {def.icon}
+                  </button>
+                ))}
+              </div>
+            </>
           )}
 
           {placingType && (
@@ -1093,6 +1170,9 @@ export function FloorPlanEditor({
                 planX={planX} planY={planY} drawW={drawW} drawH={drawH}
                 roomLengthM={roomLengthM || 1} roomWidthM={roomWidthM || 1}
                 showDimensions={showDimensions}
+                sensorLoggers={sensorLoggers}
+                rangeMin={rangeMin}
+                rangeMax={rangeMax}
                 selected={selectedId === obj.id}
                 onPointerDown={handleObjectPointerDown}
                 onResizePointerDown={handleResizePointerDown}
