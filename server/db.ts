@@ -786,6 +786,7 @@ export async function insertProtocol(data: InsertProtocol) {
         coolingUnitPos: null,
         doorPos: null,
         floorPlanObjects: null,
+        refrigeratorDrawerCount: 2,
         roomLengthM: null,
         roomWidthM: null,
         roomHeightM: null,
@@ -1161,6 +1162,7 @@ async function ensurePVPlanBackgroundStorage() {
     for (const [column, definition] of [
       ["planBackgroundImageKey", "varchar(512) NULL AFTER planImageUrl"],
       ["planBackgroundImageUrl", "LONGTEXT NULL AFTER planBackgroundImageKey"],
+      ["refrigeratorDrawerCount", "int NULL DEFAULT 2 AFTER floorPlanObjects"],
     ] as const) {
       const result = await db.execute(sql.raw(`SHOW COLUMNS FROM pvSessions LIKE '${column}'`));
       const rows = (result as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
@@ -1239,6 +1241,7 @@ export async function updatePVSession(
         coolingUnitPos: null,
         doorPos: null,
         floorPlanObjects: null,
+        refrigeratorDrawerCount: 2,
         roomLengthM: null,
         roomWidthM: null,
         roomHeightM: null,
@@ -1252,6 +1255,7 @@ export async function updatePVSession(
     });
   }
   await ensurePVTrialStorage();
+  await ensurePVPlanBackgroundStorage();
   const existing = await getPVSession(protocolId, trialKey);
   if (existing) {
     await db.update(pvSessions).set(data).where(and(eq(pvSessions.protocolId, protocolId), eq(pvSessions.trialKey, trialKey)));

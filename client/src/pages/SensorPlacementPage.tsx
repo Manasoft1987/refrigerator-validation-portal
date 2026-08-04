@@ -262,6 +262,7 @@ export default function SensorPlacementPage() {
   const [coolingUnitPos, setCoolingUnitPos] = useState<{ x: number; y: number } | null>(null);
   const [doorPos, setDoorPos] = useState<{ x: number; y: number } | null>(null);
   const [floorPlanObjects, setFloorPlanObjects] = useState<FloorPlanObject[]>([]);
+  const [refrigeratorDrawerCount, setRefrigeratorDrawerCount] = useState<0 | 1 | 2>(2);
   const [activeTier, setActiveTier] = useState<number>(1);
   const [showDimensions, setShowDimensions] = useState(false);
   const [planBackgroundImageUrl, setPlanBackgroundImageUrl] = useState<string | null>(null);
@@ -292,6 +293,10 @@ export default function SensorPlacementPage() {
     }
     if ((session as any).planBackgroundImageUrl) {
       setPlanBackgroundImageUrl((session as any).planBackgroundImageUrl);
+    }
+    const savedDrawerCount = Number((session as any).refrigeratorDrawerCount);
+    if (Number.isFinite(savedDrawerCount)) {
+      setRefrigeratorDrawerCount(Math.max(0, Math.min(2, Math.round(savedDrawerCount))) as 0 | 1 | 2);
     }
   }
 
@@ -478,6 +483,16 @@ export default function SensorPlacementPage() {
       },
     });
   }, [protocolId, coolingUnitPos, doorPos, floorPlanObjects, saveSession, isWarehouse, captureAndSavePlan]);
+
+  const handleRefrigeratorDrawerCountChange = useCallback((count: number) => {
+    const normalized = Math.max(0, Math.min(2, Math.round(count))) as 0 | 1 | 2;
+    setRefrigeratorDrawerCount(normalized);
+    saveSession.mutate({
+      protocolId,
+      trialKey,
+      refrigeratorDrawerCount: normalized,
+    } as any);
+  }, [protocolId, saveSession, trialKey]);
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
@@ -752,7 +767,12 @@ export default function SensorPlacementPage() {
             </p>
           </CardHeader>
           <CardContent>
-            <RefrigeratorDiagram loggers={loggers as any} protocolId={protocolId} />
+            <RefrigeratorDiagram
+              loggers={loggers as any}
+              protocolId={protocolId}
+              drawerCount={refrigeratorDrawerCount}
+              onDrawerCountChange={handleRefrigeratorDrawerCountChange}
+            />
           </CardContent>
         </Card>
       )}

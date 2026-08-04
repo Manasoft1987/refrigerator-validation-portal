@@ -26,6 +26,8 @@ type Props = {
   loggers: Logger[];
   protocolId: number;
   readOnly?: boolean;
+  drawerCount?: number | null;
+  onDrawerCountChange?: (count: number) => void;
 };
 
 type ZoneCode = "BL" | "BC" | "BR" | "FL" | "FC" | "FR";
@@ -103,7 +105,19 @@ function shelfTitle(shelf: number, total: number): string {
   return `${shelf} полка`;
 }
 
-export default function RefrigeratorDiagram({ loggers, protocolId, readOnly = false }: Props) {
+function normalizeDrawerCount(value: number | null | undefined): 0 | 1 | 2 {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 2;
+  return Math.max(0, Math.min(2, Math.round(n))) as 0 | 1 | 2;
+}
+
+export default function RefrigeratorDiagram({
+  loggers,
+  protocolId,
+  readOnly = false,
+  drawerCount,
+  onDrawerCountChange,
+}: Props) {
   const utils = trpc.useUtils();
   const updateLogger = trpc.pv.updateLogger.useMutation({
     onSuccess: () => utils.pv.get.invalidate({ protocolId }),
@@ -112,7 +126,9 @@ export default function RefrigeratorDiagram({ loggers, protocolId, readOnly = fa
   const externals = loggers.filter(l => l.role === "external");
   const maxPlacedShelf = Math.max(0, ...internals.map(l => parsePlacement(l.position)?.shelf ?? 0));
   const [visibleShelves, setVisibleShelves] = useState(Math.max(7, maxPlacedShelf));
+  const [localDrawerCount, setLocalDrawerCount] = useState<0 | 1 | 2>(normalizeDrawerCount(drawerCount));
   const shelfCount = Math.max(1, Math.min(9, Math.max(visibleShelves, maxPlacedShelf)));
+  const effectiveDrawerCount = normalizeDrawerCount(drawerCount ?? localDrawerCount);
   const [assigningTo, setAssigningTo] = useState<Placement | null>(null);
 
   const placements = useMemo(() => {
@@ -156,7 +172,7 @@ export default function RefrigeratorDiagram({ loggers, protocolId, readOnly = fa
   const H = 640;
   const cab = { x: 70, y: 42, w: 420, h: 540, d: 82 };
   const topGap = 48;
-  const bottomGap = 68;
+  const bottomGap = effectiveDrawerCount > 0 ? 68 : 30;
   const shelfAreaH = cab.h - topGap - bottomGap;
   const shelfPitch = shelfCount > 1 ? shelfAreaH / (shelfCount - 1) : 0;
   const shelfY = (shelf: number) => cab.y + topGap + (shelf - 1) * shelfPitch;
@@ -167,6 +183,10 @@ export default function RefrigeratorDiagram({ loggers, protocolId, readOnly = fa
       x: cab.x + (z.x / 100) * cab.w - depthShift * 0.45,
       y: shelfY(shelf) + depthShift * 0.30,
     };
+  };
+  const setDrawerCount = (count: 0 | 1 | 2) => {
+    setLocalDrawerCount(count);
+    onDrawerCountChange?.(count);
   };
 
   return (
@@ -191,6 +211,21 @@ export default function RefrigeratorDiagram({ loggers, protocolId, readOnly = fa
                 onClick={() => setVisibleShelves(count)}
               >
                 {count}
+              </Button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Лотков:</span>
+            {([0, 1, 2] as const).map(count => (
+              <Button
+                key={count}
+                type="button"
+                size="sm"
+                variant={effectiveDrawerCount === count ? "default" : "outline"}
+                className={effectiveDrawerCount === count ? "" : "bg-background"}
+                onClick={() => setDrawerCount(count)}
+              >
+                {count === 0 ? "нет" : count}
               </Button>
             ))}
           </div>
@@ -249,9 +284,16 @@ export default function RefrigeratorDiagram({ loggers, protocolId, readOnly = fa
             );
           })}
 
-          {/* Drawers */}
-          <rect x={cab.x + 58} y={cab.y + cab.h - 74} width={150} height={46} rx={7} fill="#f8fafc" stroke="#94a3b8" opacity={0.9} />
-          <rect x={cab.x + 228} y={cab.y + cab.h - 74} width={150} height={46} rx={7} fill="#f8fafc" stroke="#94a3b8" opacity={0.9} />
+          {/* Optional lower drawers */}
+          {effectiveDrawerCount === 1 && (
+            <rect x={cab.x + 58} y={cab.y + cab.h - 74} width={320} height={46} rx={7} fill="#f8fafc" stroke="#94a3b8" opacity={0.9} />
+          )}
+          {effectiveDrawerCount === 2 && (
+            <>
+              <rect x={cab.x + 58} y={cab.y + cab.h - 74} width={150} height={46} rx={7} fill="#f8fafc" stroke="#94a3b8" opacity={0.9} />
+              <rect x={cab.x + 228} y={cab.y + cab.h - 74} width={150} height={46} rx={7} fill="#f8fafc" stroke="#94a3b8" opacity={0.9} />
+            </>
+          )}
 
           {/* Clickable slots */}
           {Array.from({ length: shelfCount }, (_, i) => i + 1).flatMap(shelf =>

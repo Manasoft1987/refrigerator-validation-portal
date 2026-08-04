@@ -788,10 +788,15 @@ export function drawRefrigeratorDiagram(
   doorPos?: { x: number; y: number } | null,
   title?: string,
   badgeMode: "serial" | "position" = "serial",
+  drawerCount: number | null = 2,
 ): void {
   const internals = sensors.filter(s => s.role === "internal");
   const externals = sensors.filter(s => s.role === "external");
   const shelfCount = fridgeShelfCount(sensors);
+  const rawDrawerCount = Number(drawerCount ?? 2);
+  const effectiveDrawerCount = Number.isFinite(rawDrawerCount)
+    ? Math.max(0, Math.min(2, Math.round(rawDrawerCount)))
+    : 2;
 
   const diagH = 190;
   const cabW = 200;
@@ -832,8 +837,9 @@ export function drawRefrigeratorDiagram(
   const doorX = cabX + cabW - doorW;
 
   // Shelf Y positions
+  const drawerReserve = effectiveDrawerCount > 0 ? 30 : 12;
   const shelfY = (shelf: number) =>
-    cabY + 16 + ((shelf - 1) / Math.max(1, shelfCount - 1)) * (cabH - 32);
+    cabY + 16 + ((shelf - 1) / Math.max(1, shelfCount - 1)) * (cabH - 22 - drawerReserve);
 
   // --- Outer refrigerator body (insulated walls) ---
   doc.save();
@@ -883,6 +889,22 @@ export function drawRefrigeratorDiagram(
     align: "center",
     lineBreak: true,
   });
+
+  if (effectiveDrawerCount > 0) {
+    const drawerY = cabY + cabH - drawerReserve + 5;
+    const drawerH = Math.max(14, drawerReserve - 10);
+    const drawerX = cabX + 12;
+    const drawerW = doorX - cabX - 24;
+    doc.lineWidth(0.7).strokeColor("#94a3b8").fillColor("#ffffff");
+    if (effectiveDrawerCount === 1) {
+      doc.roundedRect(drawerX, drawerY, drawerW, drawerH, 3).fillAndStroke("#ffffff", "#94a3b8");
+    } else {
+      const gap = 6;
+      const w = (drawerW - gap) / 2;
+      doc.roundedRect(drawerX, drawerY, w, drawerH, 3).fillAndStroke("#ffffff", "#94a3b8");
+      doc.roundedRect(drawerX + w + gap, drawerY, w, drawerH, 3).fillAndStroke("#ffffff", "#94a3b8");
+    }
+  }
   doc.restore();
 
   // --- Internal sensor badges (rectangles) ---
@@ -897,7 +919,7 @@ export function drawRefrigeratorDiagram(
       pctX = FRIDGE_ZONES[rf.zone].x;
       pctY = shelfCount <= 1
         ? 50
-        : 8 + ((rf.shelf - 1) / Math.max(1, shelfCount - 1)) * 84;
+        : ((16 + ((rf.shelf - 1) / Math.max(1, shelfCount - 1)) * (cabH - 22 - drawerReserve)) / cabH) * 100;
     } else if (s.posX != null && s.posY != null) {
       pctX = Number(s.posX);
       pctY = Number(s.posY);

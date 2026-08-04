@@ -278,6 +278,7 @@ export type ReportInput = {
   coolingUnitPos?: { x: number; y: number } | null;
   /** Позиция двери на интерактивной схеме */
   doorPos?: { x: number; y: number } | null;
+  refrigeratorDrawerCount?: number | null;
   /** Объекты плана помещения (мебель, оборудование) для схемы расстановки */
   floorPlanObjects?: Array<{
     id: string;
@@ -982,7 +983,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
       if (isReeferLike(eqType)) {
         drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, true, "Схема 1. Эталонные позиции ISPE (C1–C8, W1–W4, V1–V3)", null, null, eqType === "chamber" || eqType === "thermal-container" ? "chamber" : "truck");
       } else {
-        drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, "Схема 1. Позиции размещения датчиков по полкам холодильника", "position");
+        drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, "Схема 1. Позиции размещения датчиков по полкам холодильника", "position", input.refrigeratorDrawerCount ?? 2);
       }
       // Schema 2: with serial numbers
       doc.addPage();
@@ -992,7 +993,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
         const coldLabel = input.pv.coldIdx !== null && input.pv.loggers[input.pv.coldIdx] ? input.pv.loggers[input.pv.coldIdx].label : null;
         drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, false, "Схема 2. Расстановка датчиков (с серийными номерами)", hotLabel, coldLabel, eqType === "chamber" || eqType === "thermal-container" ? "chamber" : "truck");
       } else {
-        drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, "Схема 2. Расстановка датчиков (серийные номера и средняя температура)", "serial");
+        drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, "Схема 2. Расстановка датчиков (серийные номера и средняя температура)", "serial", input.refrigeratorDrawerCount ?? 2);
       }
     }
     drawSensorPlacementAnalysis(doc, input.pvLoggers as DiagramSensor[], input);
