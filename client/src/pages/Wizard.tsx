@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { EQUIPMENT_TYPES, TEMP_MODES, VALIDATION_BASIS } from "@shared/validation";
+import { EQUIPMENT_TYPES, TEMP_MODES, VALIDATION_BASIS, isWarehouseEaeu, isWarehouseLike } from "@shared/validation";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -71,7 +71,8 @@ export default function Wizard() {
 
   const p = protocolQ.data;
   const protocolEquipmentType = p?.customEquipmentName === "__equipmentType:chamber" ? "chamber" : p?.equipmentType;
-  const isWarehouse = protocolEquipmentType === "warehouse";
+  const isWarehouse = isWarehouseLike(protocolEquipmentType);
+  const isWarehouseByEaeu = isWarehouseEaeu(protocolEquipmentType);
   const isAutoRefrigerator = protocolEquipmentType === "auto-refrigerator";
   const isComputerizedSystem = protocolEquipmentType === "computerized-system";
   const equipment = equipmentQ.data ?? [];
@@ -84,17 +85,18 @@ export default function Wizard() {
   // Step 5: Single OQ for the entire object (all equipment listed inside)
   // Step 6: PQ/PV, Step 7: Excursion, Step 8: Final report
   const warehouseSteps = useMemo<WStep[]>(() => {
-    return [
+    const steps = [
       { id: 1, key: "general",   label: "Общие сведения об объекте",                     icon: FileText },
-      { id: 2, key: "sections",  label: "Разделы протокола",                            icon: FileText },
-      { id: 3, key: "equipment", label: "Оборудование в объекте",                     icon: Thermometer },
-      { id: 4, key: "iq",        label: "IQ · Квалификация монтажа",              icon: ClipboardCheck },
-      { id: 5, key: "oq",        label: "OQ · Квалификация функционирования", icon: ClipboardCheck },
-      { id: 6, key: "pv",        label: "PQ/PV · Эксплуатационная квалификация",   icon: Thermometer },
-      { id: 7, key: "excursion", label: "Испытания на отклонение",                   icon: Thermometer },
-      { id: 8, key: "final",     label: "Итоговый отчёт",                                icon: Download },
+      ...(isWarehouseByEaeu ? [{ id: 2, key: "sections",  label: "Разделы протокола", icon: FileText }] : []),
+      { id: isWarehouseByEaeu ? 3 : 2, key: "equipment", label: "Оборудование в объекте", icon: Thermometer },
+      { id: isWarehouseByEaeu ? 4 : 3, key: "iq",        label: "IQ · Квалификация монтажа", icon: ClipboardCheck },
+      { id: isWarehouseByEaeu ? 5 : 4, key: "oq",        label: "OQ · Квалификация функционирования", icon: ClipboardCheck },
+      { id: isWarehouseByEaeu ? 6 : 5, key: "pv",        label: "PQ/PV · Эксплуатационная квалификация", icon: Thermometer },
+      { id: isWarehouseByEaeu ? 7 : 6, key: "excursion", label: "Испытания на отклонение", icon: Thermometer },
+      { id: isWarehouseByEaeu ? 8 : 7, key: "final",     label: "Итоговый отчёт", icon: Download },
     ];
-  }, []);
+    return steps;
+  }, [isWarehouseByEaeu]);
 
   const autoRefrigeratorSteps = useMemo<WStep[]>(() => [
     { id: 1, key: "general", label: "Общие сведения", icon: FileText },
@@ -159,8 +161,9 @@ export default function Wizard() {
       return;
     }
     if (isWarehouse) {
-      if (p.iqVerdict === "pass" && p.oqVerdict !== "pass") setStep(5);
-      else if (p.iqVerdict !== "pass" && giQ.data) setStep(4);
+      const stepByKey = (key: string) => activeSteps.find(s => s.key === key)?.id ?? 1;
+      if (p.iqVerdict === "pass" && p.oqVerdict !== "pass") setStep(stepByKey("oq"));
+      else if (p.iqVerdict !== "pass" && giQ.data) setStep(stepByKey("iq"));
       else setStep(1);
     } else {
       if (p.iqVerdict === "pass" && p.oqVerdict !== "pass") setStep(3);

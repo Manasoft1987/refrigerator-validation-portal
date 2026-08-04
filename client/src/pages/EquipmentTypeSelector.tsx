@@ -6,7 +6,7 @@ import { Snowflake, Truck, Package, Warehouse } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
 
-type EquipmentType = "refrigerator" | "auto-refrigerator" | "chamber" | "thermal-container" | "warehouse" | "other";
+type EquipmentType = "refrigerator" | "auto-refrigerator" | "chamber" | "thermal-container" | "warehouse" | "warehouse-expert" | "other";
 
 export default function EquipmentTypeSelector() {
   const [, setLocation] = useLocation();
@@ -218,10 +218,10 @@ export default function EquipmentTypeSelector() {
                 <div className="p-3 bg-emerald-100 rounded-lg">
                   <Warehouse className="h-6 w-6 text-emerald-600" />
                 </div>
-                <CardTitle className="text-xl">Помещение / зона</CardTitle>
+                <CardTitle className="text-xl">Помещение / зона (ЕАЭК №8)</CardTitle>
               </div>
               <CardDescription className="text-sm">
-                Склад, холодильная камера или зона хранения по Рек. ЕАЭК №8
+                Склад, холодильная камера или зона хранения с авторасчётом по Рек. ЕАЭК №8
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -236,7 +236,7 @@ export default function EquipmentTypeSelector() {
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-primary mt-1">✓</span>
-                  <span>Картирование с сеткой регистраторов</span>
+                  <span>Картирование с расчётной сеткой регистраторов</span>
                 </li>
               </ul>
               <Button
@@ -245,6 +245,50 @@ export default function EquipmentTypeSelector() {
                 variant="outline"
               >
                 Выбрать помещение
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Expert Warehouse / Storage Zone Card */}
+          <Card
+            className={`relative overflow-hidden hover:shadow-lg transition-all cursor-pointer border-2 ${
+              selectedType === "warehouse-expert" ? "border-primary shadow-md" : "hover:border-primary/50"
+            }`}
+            onClick={() => handleSelectEquipment("warehouse-expert")}
+          >
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-teal-100 to-transparent opacity-50 rounded-full -mr-12 -mt-12" />
+            <CardHeader>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-3 bg-teal-100 rounded-lg">
+                  <Warehouse className="h-6 w-6 text-teal-600" />
+                </div>
+                <CardTitle className="text-xl">Помещение / зона (экспертное)</CardTitle>
+              </div>
+              <CardDescription className="text-sm">
+                Помещение хранения без вшитого авторасчёта ЕАЭК: количество датчиков задаёт специалист
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li className="flex items-start gap-2">
+                  <span className="text-primary mt-1">✓</span>
+                  <span>Количество внутренних датчиков задаётся вручную</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-primary mt-1">✓</span>
+                  <span>Можно загрузить фон схемы и расставить точки вручную</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-primary mt-1">✓</span>
+                  <span>Подходит для аптечных и складских помещений</span>
+                </li>
+              </ul>
+              <Button
+                className="w-full mt-6"
+                size="lg"
+                variant="outline"
+              >
+                Выбрать экспертное помещение
               </Button>
             </CardContent>
           </Card>

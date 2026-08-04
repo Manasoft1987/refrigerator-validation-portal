@@ -19,6 +19,8 @@ import {
   computeWarehouseSensorCount,
   getLocationPlaceholder,
   getPurposePlaceholder,
+  isWarehouseEaeu,
+  isWarehouseLike,
 } from "@shared/validation";
 import { ArrowRight, Plus, Save, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -132,7 +134,8 @@ export default function GeneralInfoStep({
     onError: e => toast.error(e.message),
   });
 
-  const isWarehouse = form.equipmentType === "warehouse";
+  const isWarehouse = isWarehouseLike(form.equipmentType);
+  const isWarehouseByEaeu = isWarehouseEaeu(form.equipmentType);
   const isThermalContainer = form.equipmentType === "thermal-container";
   const standardTempModes = TEMP_MODES.filter(m => m.id !== "custom");
   const tempModesForEquipment = form.equipmentType === "refrigerator"
@@ -175,7 +178,7 @@ export default function GeneralInfoStep({
     heightM: liveH ? Number(liveH) : null,
     externalEnv: !!form.whExternalEnv,
   });
-  const warehouseDimsValidLive = isWarehouse
+  const warehouseDimsValidLive = isWarehouseByEaeu
     ? Number(liveL) > 0 && Number(liveW) > 0 && Number(liveH) > 0
     : true;
 
@@ -418,13 +421,15 @@ export default function GeneralInfoStep({
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
                   <h3 className="font-semibold tracking-tight">
-                    Параметры зоны хранения (Рек. ЕАЭК №8)
+                    {isWarehouseByEaeu ? "Параметры зоны хранения (Рек. ЕАЭК №8)" : "Параметры зоны хранения (экспертное размещение)"}
                   </h3>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Размеры заполняются при необходимости и используются для расчёта сетки регистраторов.
+                    {isWarehouseByEaeu
+                      ? "Размеры используются для расчёта минимальной сетки регистраторов по Рек. ЕАЭК №8."
+                      : "Размеры можно указать для масштаба схемы; количество датчиков специалист задаёт вручную на этапе PV."}
                   </p>
                 </div>
-                {sensorCalc.total > 0 && (
+                {isWarehouseByEaeu && sensorCalc.total > 0 && (
                   <div className="text-right">
                     <div className="text-[11px] uppercase tracking-wide text-emerald-700 font-semibold">
                       Расчётное кол-во регистраторов
@@ -516,7 +521,7 @@ export default function GeneralInfoStep({
                     placeholder="Расположение стеллажей, охлаждающих элементов, вентиляции, зон приёмки/экспедиции и т.д." />
                 </Field>
               </div>
-              {sensorCalc.total > 0 && (
+              {isWarehouseByEaeu && sensorCalc.total > 0 && (
                 <div className="rounded-md bg-white border p-3 text-xs text-muted-foreground space-y-1">
                   <div>• Горизонталь: <b>{sensorCalc.nL}×{sensorCalc.nW}</b> — сетка в плане (равномерные интервалы).</div>
                   <div>• Вертикаль: <b>{sensorCalc.nV}</b> ярус(а): нижний уровень хранения, {sensorCalc.nV >= 2 ? "верхний ярус" : "(высота до 1.5 м)"}{sensorCalc.nV >= 3 ? ", и средний ярус (≥ 5 м)" : ""}.</div>
@@ -805,7 +810,9 @@ export default function GeneralInfoStep({
           <div className="text-xs text-muted-foreground">
             * обязательные поля
             {isWarehouse
-              ? " — адрес, температурный режим и размеры зоны обязательны."
+              ? isWarehouseByEaeu
+                ? " — адрес, температурный режим и размеры зоны обязательны."
+                : " — адрес и температурный режим обязательны; количество датчиков задаётся вручную на этапе PV."
               : " — без них нельзя перейти к IQ."}
           </div>
           <div className="flex gap-2">

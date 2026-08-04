@@ -25,7 +25,7 @@ import ReeferTruckDiagram3D from "@/components/ReeferTruckDiagram3D";
 import RefrigeratorDiagram from "@/components/RefrigeratorDiagram";
 import FloorPlanEditor, { FloorPlanObject, SensorPosition, SensorLogger } from "@/components/FloorPlanEditor";
 import { buildWarehousePositions } from "@/components/WarehouseLayoutDiagram";
-import { computeWarehouseSensorCount } from "@shared/validation";
+import { computeWarehouseSensorCount, isWarehouseEaeu, isWarehouseLike } from "@shared/validation";
 
 // --- Isometric helpers (same as ReeferTruckDiagram3D) -------------------------
 const SCALE   = 93.6;
@@ -231,7 +231,8 @@ export default function SensorPlacementPage() {
   const giQ = trpc.generalInfo.get.useQuery({ protocolId });
   const protocolEquipmentType = protocolQ.data?.customEquipmentName === "__equipmentType:chamber" ? "chamber" : protocolQ.data?.equipmentType;
   const equipmentType = (giQ.data?.equipmentType || protocolEquipmentType || "refrigerator") as string;
-  const isWarehouse = equipmentType === "warehouse";
+  const isWarehouse = isWarehouseLike(equipmentType);
+  const isWarehouseByEaeu = isWarehouseEaeu(equipmentType);
   const isAutoRefrigerator = equipmentType === "auto-refrigerator" || equipmentType === "chamber" || equipmentType === "thermal-container";
 
   const updateLogger = trpc.pv.updateLogger.useMutation({
@@ -395,7 +396,7 @@ export default function SensorPlacementPage() {
             Схема расстановки датчиков
           </h1>
           <p className="text-sm text-muted-foreground">
-            {"\u041f\u0440\u043e\u0442\u043e\u043a\u043e\u043b #"}{protocolId}{"\u0020\u2014\u0020"}{isWarehouse ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 / \u0437\u043e\u043d\u0430 \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : equipmentType === "chamber" ? "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430" : isAutoRefrigerator ? "\u0430\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440" : "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a"}
+            {"\u041f\u0440\u043e\u0442\u043e\u043a\u043e\u043b #"}{protocolId}{"\u0020\u2014\u0020"}{isWarehouse ? (isWarehouseByEaeu ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 / \u0437\u043e\u043d\u0430 \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f (\u0415\u0410\u042d\u041a \u21168)" : "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 / \u0437\u043e\u043d\u0430 \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f (\u044d\u043a\u0441\u043f\u0435\u0440\u0442\u043d\u043e\u0435)") : equipmentType === "chamber" ? "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430" : isAutoRefrigerator ? "\u0430\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440" : "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a"}
           </p>
         </div>
       </div>
@@ -409,7 +410,7 @@ export default function SensorPlacementPage() {
         const calc = computeWarehouseSensorCount({
           lengthM: liveL, widthM: liveW, heightM: liveH, externalEnv: !!giQ.data?.whExternalEnv,
         });
-        const ready = calc.total > 0;
+        const ready = isWarehouseByEaeu && calc.total > 0;
         const canShowDimensions = liveL > 0 && liveW > 0;
         const allSensorPositions: SensorPosition[] = ready
           ? buildWarehousePositions({ lengthM: liveL, widthM: liveW, heightM: liveH, nL: calc.nL, nW: calc.nW, nV: calc.nV, externalEnv: !!giQ.data?.whExternalEnv })
@@ -425,10 +426,14 @@ export default function SensorPlacementPage() {
                     <MapPin className="h-4 w-4 text-primary" />
                     Схема помещения — объекты и датчики
                   </CardTitle>
-                  {ready ? (
+                  {isWarehouseByEaeu && ready ? (
                     <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
                       Сетка по Рек. ЕАЭК №8 (п. 16д): {calc.nL}×{calc.nW}×{calc.nV}; всего <b>{calc.total}</b> регистраторов.
                       Кликните по кружку датчика для назначения. Перетащите объект мышью.
+                    </p>
+                  ) : !isWarehouseByEaeu ? (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Экспертный режим: количество и точки размещения датчиков задаются вручную специалистом. Размеры нужны только для масштаба схемы.
                     </p>
                   ) : (
                     <p className="text-sm text-muted-foreground mt-1">

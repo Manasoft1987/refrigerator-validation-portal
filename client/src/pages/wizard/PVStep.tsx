@@ -14,6 +14,8 @@ import {
   DEFAULT_SENSOR_ACCURACY_C,
   TEMP_MODES,
   applySensorAccuracyGuardBand,
+  isWarehouseEaeu,
+  isWarehouseLike,
 } from "@shared/validation";
 import {
   AlertTriangle,
@@ -66,7 +68,8 @@ export default function PVStep({
   const giQ = trpc.generalInfo.get.useQuery({ protocolId });
   const protocolQ = trpc.protocols.get.useQuery({ id: protocolId });
   const equipmentType = protocolQ.data?.equipmentType ?? "refrigerator";
-  const isWarehouse = equipmentType === "warehouse";
+  const isWarehouse = isWarehouseLike(equipmentType);
+  const isWarehouseByEaeu = isWarehouseEaeu(equipmentType);
   const isThermalContainer = equipmentType === "thermal-container";
   const tempModesForPV = equipmentType === "refrigerator"
     ? TEMP_MODES
@@ -235,7 +238,7 @@ export default function PVStep({
   const normalizedDurationHours = (value: unknown) => {
     const parsed = Number(value);
     const fallback = Number.isFinite(parsed) && parsed > 0 ? parsed : 72;
-    return isWarehouse ? Math.max(72, fallback) : fallback;
+    return isWarehouseByEaeu ? Math.max(72, fallback) : fallback;
   };
 
   if (pvQ.isLoading || !form) {
@@ -347,15 +350,15 @@ export default function PVStep({
             </Field>
             <Field
               label={isWarehouse ? "Минимальная длительность, ч" : "Мин. длит., ч"}
-              hint={isWarehouse ? "Для помещения хранения: от 72 ч (от 3 суток и далее)." : undefined}
+              hint={isWarehouseByEaeu ? "Для помещения хранения: от 72 ч (от 3 суток и далее)." : undefined}
             >
               <Input
                 type="number"
-                min={isWarehouse ? 72 : 1}
+                min={isWarehouseByEaeu ? 72 : 1}
                 value={form.minDurationHours}
                 onChange={e => setForm({ ...form, minDurationHours: e.target.value })}
                 onBlur={e => {
-                  if (isWarehouse) {
+                  if (isWarehouseByEaeu) {
                     setForm({ ...form, minDurationHours: normalizedDurationHours(e.target.value) });
                   }
                 }}

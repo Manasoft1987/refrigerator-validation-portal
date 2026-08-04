@@ -22,6 +22,7 @@ import {
   maxSensorAccuracyC,
   normalizeSensorAccuracyC,
   aggregateTrialVerdicts,
+  isWarehouseLike,
 } from "@shared/validation";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -445,7 +446,7 @@ function maxAccuracyForUsedInternalSensors(
 }
 
 function defaultQuestionsFor(stage: "iq" | "oq", equipmentType?: string | null): string[] {
-  if (equipmentType === "warehouse") {
+  if (isWarehouseLike(equipmentType)) {
     return stage === "iq" ? DEFAULT_IQ_QUESTIONS_WAREHOUSE : DEFAULT_OQ_QUESTIONS_WAREHOUSE;
   }
   if (equipmentType === "auto-refrigerator") {
@@ -737,7 +738,7 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .query(({ ctx, input }) => ownProtocol(ctx.user.id, input.id)),
     create: protectedProcedure
-      .input(z.object({ organizationId: z.number(), companyId: z.number().optional(), equipmentType: z.enum(["refrigerator", "auto-refrigerator", "chamber", "thermal-container", "computerized-system", "warehouse", "other"]).optional(), customEquipmentName: z.string().optional() }))
+      .input(z.object({ organizationId: z.number(), companyId: z.number().optional(), equipmentType: z.enum(["refrigerator", "auto-refrigerator", "chamber", "thermal-container", "computerized-system", "warehouse", "warehouse-expert", "other"]).optional(), customEquipmentName: z.string().optional() }))
       .mutation(async ({ ctx, input }) => {
         // Admins can always create; regular users must belong to an approved company
         if (ctx.user.role !== "admin") {
@@ -768,7 +769,11 @@ export const appRouter = router({
         // Use org.companyId if not provided (org already linked to company)
         const companyId = input.companyId ?? org.companyId ?? 0;
         const requestedEquipmentType = input.equipmentType ?? "refrigerator";
-        if (requestedEquipmentType === "thermal-container" || requestedEquipmentType === "computerized-system") await ensureThermalContainerStorage();
+        if (
+          requestedEquipmentType === "thermal-container" ||
+          requestedEquipmentType === "computerized-system" ||
+          requestedEquipmentType === "warehouse-expert"
+        ) await ensureThermalContainerStorage();
         const year = new Date().getFullYear();
         const number = await nextProtocolNumberForCompany(companyId, year, requestedEquipmentType);
         return insertProtocol({
@@ -950,6 +955,7 @@ export const appRouter = router({
           "refrigerator",
           "auto-refrigerator",
           "warehouse",
+          "warehouse-expert",
           "other",
         ]);
         if (
@@ -991,7 +997,7 @@ export const appRouter = router({
           if (dbTemplates.length > 0) {
             return dbTemplates.map(t => t.text);
           }
-          if (input.equipmentType === "warehouse" || input.equipmentType === "auto-refrigerator" || input.equipmentType === "chamber" || input.equipmentType === "thermal-container") {
+          if (isWarehouseLike(input.equipmentType) || input.equipmentType === "auto-refrigerator" || input.equipmentType === "chamber" || input.equipmentType === "thermal-container") {
             return defaultQuestionsFor(input.stage, input.equipmentType);
           }
           // If no equipment-specific templates, fall back to generic DB templates
@@ -1010,7 +1016,9 @@ export const appRouter = router({
       }),
     stageBlocks: publicProcedure
       .input(z.object({ stage: z.enum(["iq", "oq", "pv"]), equipmentType: z.string().optional() }))
-      .query(({ input }) => input.equipmentType === "chamber"
+      .query(({ input }) => isWarehouseLike(input.equipmentType)
+        ? WAREHOUSE_STAGE_TEMPLATES[input.stage]
+        : input.equipmentType === "chamber"
         ? CHAMBER_STAGE_TEMPLATES[input.stage]
         : input.equipmentType === "thermal-container"
           ? THERMAL_CONTAINER_STAGE_TEMPLATES[input.stage]
@@ -1267,7 +1275,7 @@ export const appRouter = router({
       )
       .mutation(async ({ ctx, input }) => {
         const protocol = await ownProtocol(ctx.user.id, input.protocolId);
-        if (protocol.equipmentType !== "warehouse") {
+        if (!isWarehouseLike(protocol.equipmentType)) {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: "Фоновая схема доступна только для помещения хранения",
@@ -1882,7 +1890,7 @@ export const appRouter = router({
         const reportFailureReasons: string[] = [];
         const reportInternalLoggers = preparedLoggers.filter(l => l.logger.role === "internal");
         const hasPVData = preparedLoggers.some(l => l.series.temp.length > 0);
-        const isWarehouseProtocol = protocol.equipmentType === "warehouse";
+        const isWarehouseProtocol = isWarehouseLike(protocol.equipmentType);
         const isEnglishWarehouseReport = isWarehouseProtocol && gi?.reportLanguage === "en";
         const isChamberProtocol =
           protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || gi?.equipmentType === "chamber";
@@ -2274,7 +2282,7 @@ export const appRouter = router({
         z.object({
           stage: z.enum(["iq", "oq"]),
           text: z.string().min(1),
-          equipmentType: z.enum(["refrigerator", "auto-refrigerator", "chamber", "thermal-container", "warehouse", "other"]).optional(),
+          equipmentType: z.enum(["refrigerator", "auto-refrigerator", "chamber", "thermal-container", "warehouse", "warehouse-expert", "other"]).optional(),
           /** For warehouse: which equipment kind these questions apply to */
           equipmentKind: z.enum(["conditioner", "ventilation", "heat_curtain", "chiller", "fan_coil", "other"]).nullable().optional(),
         }),
@@ -2322,7 +2330,7 @@ export const appRouter = router({
       }),
     seedDefaults: protectedProcedure
       .input(z.object({
-        equipmentType: z.enum(["refrigerator", "auto-refrigerator", "chamber", "thermal-container", "warehouse", "other"]),
+        equipmentType: z.enum(["refrigerator", "auto-refrigerator", "chamber", "thermal-container", "warehouse", "warehouse-expert", "other"]),
         overwrite: z.boolean().optional(),
       }))
       .mutation(async ({ input }) => {

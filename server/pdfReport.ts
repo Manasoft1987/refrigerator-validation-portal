@@ -24,6 +24,8 @@ import {
 import { calculateAllOperationalMetrics } from "./operationalMetrics";
 import {
   computeWarehouseSensorCount,
+  isWarehouseEaeu,
+  isWarehouseLike,
   normalizeSensorAccuracyC,
   WAREHOUSE_MAPPING_METHOD_NOTE,
 } from "../shared/validation";
@@ -345,6 +347,7 @@ const EQUIPMENT_LABEL: Record<string, string> = {
   freezer: "Морозильник",
   chamber: "Холодильная камера",
   warehouse: "Помещение (зона) хранения", // Note: use getEquipmentName() for proper display
+  "warehouse-expert": "Помещение (зона) хранения",
   other: "Оборудование",
 };
 
@@ -368,7 +371,7 @@ function getReportEquipmentType(input?: ReportInput): string | null {
 }
 
 function isEnglishWarehouse(input?: ReportInput): boolean {
-  return getReportEquipmentType(input) === "warehouse" && input?.generalInfo?.reportLanguage === "en";
+  return isWarehouseLike(getReportEquipmentType(input)) && input?.generalInfo?.reportLanguage === "en";
 }
 
 function hasCyrillic(text: string | null | undefined): boolean {
@@ -442,7 +445,7 @@ function getEquipmentName(input: ReportInput): string {
     return input.protocol.customEquipmentName;
   }
   // For warehouse, always use "помещение (зона) хранения" instead of "авторефрижератор"
-  if (type === "warehouse") {
+  if (isWarehouseLike(type)) {
     if (isEnglishWarehouse(input)) return "storage room / storage area";
     return "помещение (зона) хранения";
   }
@@ -455,7 +458,7 @@ function getEquipmentNameWithCase(input: ReportInput, gramCase: "nominative" | "
   if (type === "other" && input.protocol?.customEquipmentName) {
     return input.protocol.customEquipmentName;
   }
-  if (type === "warehouse") {
+  if (isWarehouseLike(type)) {
     switch (gramCase) {
       case "genitive": return "помещения (зоны) хранения";
       case "accusative": return "помещение (зону) хранения";
@@ -892,7 +895,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   /* ЧАСТЬ I — ПРОТОКОЛ КВАЛИФИКАЦИИ (ПЛАН)            */
   /* ============================================================ */
   drawPartCover(doc, input, "part1");
-  const isWarehouseDoc = getReportEquipmentType(input) === "warehouse";
+  const isWarehouseDoc = isWarehouseEaeu(getReportEquipmentType(input));
   if (isWarehouseDoc) {
     // ── WAREHOUSE PART I: sections 1–7 per EAEU Rec. #8 ──────────────────────
     drawWarehouseProtocolPart1(doc, input);
@@ -907,14 +910,19 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     // Historical protocol_sensors links can remain after a logger is deleted.
     const reportSensors = filterProtocolSensorsForReport(input);
     if (reportSensors && reportSensors.length > 0) {
-      doc.addPage();
-      drawSectionTitle(doc, "1.1. Датчики, используемые для валидации");
+        doc.addPage();
+        drawSectionTitle(doc, "1.1. Датчики, используемые для валидации");
       drawSensorTable(
         doc,
         reportSensors,
         input.pv.sensorAccuracy,
         resolveProtocolReferenceDate(input.generalInfo?.validationDate, input.protocol.createdAt),
       );
+    }
+
+    if (isWarehouseLike(getReportEquipmentType(input)) && input.warehouseEquipment && input.warehouseEquipment.length > 0) {
+      doc.addPage();
+      drawWarehouseEquipmentList(doc, input, "1.2.");
     }
     
     doc.addPage();
@@ -966,7 +974,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
 
   if (input.pvLoggers && input.pvLoggers.length > 0) {
     const eqType = getReportEquipmentType(input) || "";
-    if (eqType === "warehouse") {
+    if (isWarehouseLike(eqType)) {
       // Warehouse: single floor plan diagram only (no ISPE grid schema)
       drawWarehousePlanDiagram(doc, input, false, isEnglishWarehouse(input) ? "Diagram. Sensor placement on the storage area plan (ID and average temperature)" : "Схема. Расстановка датчиков на плане помещения (ID и средняя температура)");
     } else {
@@ -988,7 +996,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
       }
     }
     drawSensorPlacementAnalysis(doc, input.pvLoggers as DiagramSensor[], input);
-    if (eqType === "warehouse") {
+    if (isWarehouseEaeu(eqType)) {
       drawWarehouseAnnex1(doc, input);
       drawWarehouseAnnex2(doc, input);
     }
@@ -1108,7 +1116,7 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
 
   y += 24;
   const eqType = getReportEquipmentType(input) || "";
-  const equipmentTypeLabel = en && eqType === "warehouse"
+  const equipmentTypeLabel = en && isWarehouseLike(eqType)
     ? "Storage Room / Storage Area"
     : eqType === "chamber"
     ? "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430"
@@ -1116,7 +1124,7 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
       ? "\u0422\u0435\u0440\u043c\u043e\u043a\u043e\u043d\u0442\u0435\u0439\u043d\u0435\u0440"
     : eqType === "auto-refrigerator"
       ? "\u0422\u0440\u0430\u043d\u0441\u043f\u043e\u0440\u0442\u043d\u043e\u0435 \u0441\u0440\u0435\u0434\u0441\u0442\u0432\u043e"
-      : eqType === "warehouse"
+      : isWarehouseLike(eqType)
         ? getEquipmentName(input)
         : "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0435 \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435";
   doc
@@ -1132,7 +1140,7 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
   const cardW = right - left - 48;
   const cardY = y;
   const gi = input.generalInfo;
-  const objectLabel = eqType === "warehouse"
+  const objectLabel = isWarehouseLike(eqType)
     ? getEquipmentName(input)
     : EQUIPMENT_LABEL[eqType || ""] || "—";
   const refrigerationUnit = `${gi?.manufacturer || ""} ${gi?.model || ""}`.trim() || "—";
@@ -1339,7 +1347,7 @@ function drawThermalTrialsSummary(doc: PDFKit.PDFDocument, input: ReportInput) {
 function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
   const gi = input.generalInfo;
   const eqType = getReportEquipmentType(input) || "";
-  const isWarehouse = eqType === "warehouse";
+  const isWarehouse = isWarehouseLike(eqType);
   const en = isEnglishWarehouse(input);
   const loadPercentLabel = formatLoadPercent(gi?.loadPercent);
 
@@ -1361,7 +1369,7 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
       ? (en ? `Yes (${gi?.whHumidityMin ?? "—"} – ${gi?.whHumidityMax ?? "—"} % RH)` : `Да (${gi?.whHumidityMin ?? "—"} – ${gi?.whHumidityMax ?? "—"} % о.в.)`)
       : (en ? "Not controlled" : "Не контролируется");
     rows = [
-      [en ? "Object type" : "Тип объекта", eqType === "warehouse" ? getEquipmentName(input) : EQUIPMENT_LABEL[eqType || ""] || "—"],
+      [en ? "Object type" : "Тип объекта", isWarehouseLike(eqType) ? getEquipmentName(input) : EQUIPMENT_LABEL[eqType || ""] || "—"],
       [en ? "Room / area type" : "Тип помещения / зоны", en ? (WAREHOUSE_STUDY_LABEL_EN[gi?.whStudyType || ""] || "—") : (WAREHOUSE_STUDY_LABEL[gi?.whStudyType || ""] || "—")],
       [en ? "Object address" : "Адрес объекта", gi?.location || "—"],
       [en ? "Temperature mode" : "Температурный режим", temperatureModeLabel(gi?.tempMode, gi?.customMin, gi?.customMax, input)],
@@ -1386,7 +1394,7 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
   } else {
     // Refrigerator / auto-refrigerator: show equipment-specific fields
     rows = [
-      ["Тип оборудования", eqType === "warehouse" ? getEquipmentName(input) : EQUIPMENT_LABEL[eqType || ""] || "—"],
+      ["Тип оборудования", isWarehouseLike(eqType) ? getEquipmentName(input) : EQUIPMENT_LABEL[eqType || ""] || "—"],
       ["Производитель", gi?.manufacturer || "—"],
       ["Модель", gi?.model || "—"],
       ["Серийный номер", gi?.serial || "—"],
@@ -1796,7 +1804,7 @@ function drawStageVerdict(
 function drawPVParams(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: ReportInput) {
   const en = isEnglishWarehouse(input);
   const durationMs = pv.startAt && pv.endAt ? pv.endAt - pv.startAt : 0;
-  const durationRequirement = getReportEquipmentType(input) === "warehouse"
+  const durationRequirement = isWarehouseEaeu(getReportEquipmentType(input))
     ? (en ? `from 3 days onward (not less than 72 h); selected ${pv.minDurationHours} h` : `от 3 суток и далее (не менее 72 ч); выбрано ${pv.minDurationHours} ч`)
     : `${pv.minDurationHours} ч`;
   const rows: Array<[string, string]> = [
@@ -1943,7 +1951,7 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     );
     const externalChartText = en
       ? "The external logger chart shows ambient temperature outside the storage room / storage area. This logger is not included in the main PV acceptance calculation, but supports assessment of environmental influence."
-      : getReportEquipmentType(input) === "warehouse"
+      : isWarehouseLike(getReportEquipmentType(input))
       ? "\u0413\u0440\u0430\u0444\u0438\u043a \u0432\u043d\u0435\u0448\u043d\u0435\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0430\u0435\u0442 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u0443 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u044b \u0432\u043d\u0435 \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f (\u0437\u043e\u043d\u044b) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f. " +
         "\u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u043d\u0435 \u0432\u0445\u043e\u0434\u0438\u0442 \u0432 \u0440\u0430\u0441\u0447\u0451\u0442 \u043a\u0440\u0438\u0442\u0435\u0440\u0438\u0435\u0432 \u043f\u0440\u0438\u0435\u043c\u043b\u0435\u043c\u043e\u0441\u0442\u0438 PV, \u043d\u043e \u043f\u043e\u043c\u043e\u0433\u0430\u0435\u0442 \u043e\u0446\u0435\u043d\u0438\u0442\u044c \u0432\u043b\u0438\u044f\u043d\u0438\u0435 \u0441\u0440\u0435\u0434\u044b."
       : "\u0413\u0440\u0430\u0444\u0438\u043a \u0432\u043d\u0435\u0448\u043d\u0435\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0430\u0435\u0442 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u0443 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u044b \u0432\u043d\u0435 " + reeferAreaGenitive(getReportEquipmentType(input)) + ". " +
@@ -2163,7 +2171,7 @@ function drawStagePVVerdict(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], inpu
     fg = "#065f46";
     
     // Enhanced conclusion for warehouse protocols with sensor analysis
-    if (getReportEquipmentType(input) === "warehouse") {
+    if (isWarehouseLike(getReportEquipmentType(input))) {
       const hotSensor = pv.hotIdx !== null ? pv.loggers[pv.hotIdx] : null;
       const coldSensor = pv.coldIdx !== null ? pv.loggers[pv.coldIdx] : null;
       const hotLabel = hotSensor ? `${en ? "logger" : "датчик"} "${hotSensor.customName || hotSensor.label}"` : (en ? "logger" : "датчик");
@@ -2269,7 +2277,7 @@ function drawSensorPlacementAnalysis(
     });
 
     analysisText += "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0434\u0430\u0442\u0447\u0438\u043a\u0438 \u0440\u0430\u0441\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u044b \u0432 \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u043f\u043e\u0437\u0438\u0446\u0438\u044f\u0445 " +
-      (getReportEquipmentType(input) === "warehouse" ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f (\u0437\u043e\u043d\u044b) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : reeferAreaGenitive(getReportEquipmentType(input))) + ": ";
+      (isWarehouseLike(getReportEquipmentType(input)) ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f (\u0437\u043e\u043d\u044b) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : reeferAreaGenitive(getReportEquipmentType(input))) + ": ";
     const positions = [];
     if (hasTop) positions.push("верхняя полка");
     if (hasMiddle) positions.push("средняя часть");
@@ -2277,7 +2285,7 @@ function drawSensorPlacementAnalysis(
     if (hasDoor) positions.push("дверная зона");
     analysisText += positions.join(", ") + ".\n\n";
 
-    if (getReportEquipmentType(input) === "warehouse") {
+    if (isWarehouseLike(getReportEquipmentType(input))) {
       analysisText +=
         `Такая многоточечная расстановка позволяет выявить температурные градиенты внутри помещения (зоны) хранения и оценить ` +
         "равномерность распределения температуры по всему объёму помещения. Датчики на верхней и нижней полках фиксируют " +
@@ -2373,7 +2381,7 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
       thermalRetentionMinutes: thermalRetentionMinutes,
       warmupDescription:
         warmupMinutes !== null
-          ? (getReportEquipmentType(input) === "warehouse" ? "\u041f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : reeferSubject(getReportEquipmentType(input))) + " \u0432\u0445\u043e\u0434\u0438\u0442 \u0432 \u0442\u0440\u0435\u0431\u0443\u0435\u043c\u044b\u0439 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u043d\u044b\u0439 \u0440\u0435\u0436\u0438\u043c \u0437\u0430 " + warmupText + "."
+          ? (isWarehouseLike(getReportEquipmentType(input)) ? "\u041f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : reeferSubject(getReportEquipmentType(input))) + " \u0432\u0445\u043e\u0434\u0438\u0442 \u0432 \u0442\u0440\u0435\u0431\u0443\u0435\u043c\u044b\u0439 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u043d\u044b\u0439 \u0440\u0435\u0436\u0438\u043c \u0437\u0430 " + warmupText + "."
           : "Время входа в режим не определено.",
       doorOpeningDescription:
         doorOpeningMinutes !== null
@@ -2381,7 +2389,7 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
           : "Время открытия двери не определено.",
       thermalRetentionDescription:
         thermalRetentionMinutes !== null
-          ? "\u041f\u0440\u0438 \u0432\u044b\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0438 \u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0433\u043e \u0430\u0433\u0440\u0435\u0433\u0430\u0442\u0430 " + (getReportEquipmentType(input) === "warehouse" ? "\u043e\u0431\u044a\u0435\u043a\u0442" : reeferArea(getReportEquipmentType(input))) + " \u0441\u043f\u043e\u0441\u043e\u0431\u0435\u043d \u0441\u043e\u0445\u0440\u0430\u043d\u044f\u0442\u044c \u0442\u0440\u0435\u0431\u0443\u0435\u043c\u044b\u0439 \u0440\u0435\u0436\u0438\u043c \u0432 \u0442\u0435\u0447\u0435\u043d\u0438\u0435 " + thermalRetentionText + "."
+          ? "\u041f\u0440\u0438 \u0432\u044b\u043a\u043b\u044e\u0447\u0435\u043d\u0438\u0438 \u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0433\u043e \u0430\u0433\u0440\u0435\u0433\u0430\u0442\u0430 " + (isWarehouseLike(getReportEquipmentType(input)) ? "\u043e\u0431\u044a\u0435\u043a\u0442" : reeferArea(getReportEquipmentType(input))) + " \u0441\u043f\u043e\u0441\u043e\u0431\u0435\u043d \u0441\u043e\u0445\u0440\u0430\u043d\u044f\u0442\u044c \u0442\u0440\u0435\u0431\u0443\u0435\u043c\u044b\u0439 \u0440\u0435\u0436\u0438\u043c \u0432 \u0442\u0435\u0447\u0435\u043d\u0438\u0435 " + thermalRetentionText + "."
           : "Время сохранения режима не определено.",
     };
   }
@@ -2433,10 +2441,10 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
     const suitabilityWord = getReportEquipmentType(input) === "chamber" ? "пригодной" : "пригодным";
     text = en
       ? `Based on IQ, OQ and PV results, the commission recognizes the storage room / storage area as suitable for storage of medicinal products within the temperature regime ${pvTemperatureModeLabel(input.pv, input)} in accordance with GDP / GPP requirements. The HVAC/heating system provides stable temperature distribution throughout the room volume. Validation has been completed with a positive conclusion.${excNote}`
-      : "\u041d\u0430 \u043e\u0441\u043d\u043e\u0432\u0430\u043d\u0438\u0438 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u043e\u0432 IQ, OQ \u0438 PV \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u043f\u0440\u0438\u0437\u043d\u0430\u0451\u0442 " + (getReportEquipmentType(input) === "warehouse" ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 (\u0437\u043e\u043d\u0443) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : reeferConclusionObject(input)) + " " +
+      : "\u041d\u0430 \u043e\u0441\u043d\u043e\u0432\u0430\u043d\u0438\u0438 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u043e\u0432 IQ, OQ \u0438 PV \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u043f\u0440\u0438\u0437\u043d\u0430\u0451\u0442 " + (isWarehouseLike(getReportEquipmentType(input)) ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 (\u0437\u043e\u043d\u0443) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : reeferConclusionObject(input)) + " " +
         `${suitabilityWord} для хранения лекарственных средств ` +
         `в температурном режиме ${pvTemperatureModeLabel(input.pv, input)} в соответствии с требованиями GDP / GPP. ` +
-        (getReportEquipmentType(input) === "warehouse"
+        (isWarehouseLike(getReportEquipmentType(input))
           ? `Система кондиционирования/отопления обеспечивает стабильное распределение температуры по всему объёму помещения. ` 
           : "") +
         `Валидация завершена с положительным заключением.${excNote}`;
@@ -2618,7 +2626,7 @@ function drawChecklistPlan(doc: PDFKit.PDFDocument, items: ChecklistItem[], inpu
 
 function drawPVPlan(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: ReportInput) {
   const en = isEnglishWarehouse(input);
-  const durationRequirement = getReportEquipmentType(input) === "warehouse"
+  const durationRequirement = isWarehouseEaeu(getReportEquipmentType(input))
     ? (en ? `from 3 days onward (not less than 72 h); selected ${pv.minDurationHours} h` : `от 3 суток и далее (не менее 72 ч); выбрано ${pv.minDurationHours} ч`)
     : `не менее ${pv.minDurationHours} ч`;
   const rows: Array<[string, string]> = [
@@ -2629,7 +2637,7 @@ function drawPVPlan(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     [
       en ? "Logger placement points" : "Места установки датчиков",
       pv.sensorPlacement
-        || (getReportEquipmentType(input) === "warehouse"
+        || (isWarehouseLike(getReportEquipmentType(input))
           ? (en
               ? "Data loggers shall be arranged as a representative grid covering the storage area across its length, width and height. Where possible, loggers are positioned at comparable intervals. The external logger monitors the temperature outside the room."
               : "Регистраторы данных следует располагать в форме сетки и таким образом, чтобы они покрывать зону хранения по всей ее длине и ширине, а также высоте. Регистраторы данных размещаются по возможности с равными интервалами. Внешний датчик — для контроля температуры вне помещения.")
@@ -3833,6 +3841,7 @@ function drawWarehousePlanDiagram(
   title: string,
 ) {
   const gi = input.generalInfo;
+  const isEaeuWarehouse = isWarehouseEaeu(getReportEquipmentType(input));
   // Prefer pvSession room dims (saved by FloorPlanEditor), fall back to generalInfo
   const lengthM = input.pvRoomLengthM ?? (gi?.whLengthM ? Number(gi.whLengthM) : 0);
   const widthM  = input.pvRoomWidthM  ?? (gi?.whWidthM  ? Number(gi.whWidthM)  : 0);
@@ -3943,10 +3952,10 @@ function drawWarehousePlanDiagram(
     drawH = planMaxH;
     drawW = drawH / aspect;
   }
-  const missingDimensionsNoteHeight = calc.total === 0 ? 42 : 0;
+  const missingDimensionsNoteHeight = isEaeuWarehouse && calc.total === 0 ? 42 : 0;
   ensureSpace(doc, drawH + 110 + missingDimensionsNoteHeight);
   drawSubTitle(doc, title);
-  if (calc.total === 0) {
+  if (isEaeuWarehouse && calc.total === 0) {
     doc.fillColor(MUTED).font("body").fontSize(10)
       .text(
         "Размеры помещения не указаны. Схема приведена без масштаба; расчётная сетка " +
@@ -4004,11 +4013,11 @@ function drawWarehousePlanDiagram(
   // Grid lines (light)
   doc.save();
   doc.strokeColor("#e2e8f0").lineWidth(0.6).dash(3, { space: 3 });
-  for (let i = 0; i < calc.nL; i++) {
+  for (let i = 0; isEaeuWarehouse && i < calc.nL; i++) {
     const y = planY + (calc.nL === 1 ? 0.5 : i / (calc.nL - 1)) * drawH;
     doc.moveTo(planX, y).lineTo(planX + drawW, y).stroke();
   }
-  for (let j = 0; j < calc.nW; j++) {
+  for (let j = 0; isEaeuWarehouse && j < calc.nW; j++) {
     const x = planX + (calc.nW === 1 ? 0.5 : j / (calc.nW - 1)) * drawW;
     doc.moveTo(x, planY).lineTo(x, planY + drawH).stroke();
   }
@@ -4256,24 +4265,40 @@ function drawWarehousePlanDiagram(
   }
 
   // Caption
-  doc.fillColor(MUTED).font("body").fontSize(9)
-    .text(
-      `Размещено ${calc.nL} × ${calc.nW} точек на ${calc.nV} ярус(а), всего ${calc.base} внутренних регистраторов` +
-      (calc.external ? `; +${calc.external} внешний регистратор (контакт с внешней средой)` : "") + ".",
-      pageLeft,
-      doc.y,
-      { width: usableW, align: "center" },
-    );
-  doc.moveDown(0.4);
-  doc.fillColor(MUTED).font("body").fontSize(8)
-    .text(
-      "Сетка построена по таблицам п. 16д Рек. ЕАЭК №8 (горизонталь: 2/3/4/5 точек при ≤10/40/60/>60 м; " +
-      "вертикаль: 1/2/3 точки при ≤1.5 / <5 / ≥5 м).",
-      pageLeft,
-      doc.y,
-      { width: usableW, align: "justify" },
-    );
-  doc.moveDown(0.3);
+  if (isEaeuWarehouse) {
+    doc.fillColor(MUTED).font("body").fontSize(9)
+      .text(
+        `Размещено ${calc.nL} × ${calc.nW} точек на ${calc.nV} ярус(а), всего ${calc.base} внутренних регистраторов` +
+        (calc.external ? `; +${calc.external} внешний регистратор (контакт с внешней средой)` : "") + ".",
+        pageLeft,
+        doc.y,
+        { width: usableW, align: "center" },
+      );
+    doc.moveDown(0.4);
+    doc.fillColor(MUTED).font("body").fontSize(8)
+      .text(
+        "Сетка построена по таблицам п. 16д Рек. ЕАЭК №8 (горизонталь: 2/3/4/5 точек при ≤10/40/60/>60 м; " +
+        "вертикаль: 1/2/3 точки при ≤1.5 / <5 / ≥5 м).",
+        pageLeft,
+        doc.y,
+        { width: usableW, align: "justify" },
+      );
+    doc.moveDown(0.3);
+  } else {
+    const manualSensorCount = sensorPointObjs.length + floorObjs.reduce((count, obj) => (
+      count + (obj.sensors ?? []).filter((s: { sensorId: string }) => s.sensorId && s.sensorId.trim()).length
+    ), 0);
+    doc.fillColor(MUTED).font("body").fontSize(9)
+      .text(
+        manualSensorCount > 0
+          ? `Точки размещения датчиков заданы вручную специалистом; всего отмечено ${manualSensorCount}.`
+          : "Точки размещения датчиков задаются вручную специалистом на схеме помещения.",
+        pageLeft,
+        doc.y,
+        { width: usableW, align: "center" },
+      );
+    doc.moveDown(0.4);
+  }
 
   // ── Sensor placement table (height + comments) ──────────────────────────────
   // Only render when pvLoggers are available (second diagram call with template=false)
@@ -4898,6 +4923,34 @@ const WAREHOUSE_MAPPING_METHOD_NOTE_EN =
   "This protocol is adapted to its structure and approach. The study duration is established by the internal procedure as from 3 days onward " +
   "(not less than 72 hours), considering risk assessment, operating mode of the storage area and representativeness of the observation period.";
 
+function drawWarehouseEquipmentList(doc: PDFKit.PDFDocument, input: ReportInput, prefix = "5.1."): void {
+  const en = isEnglishWarehouse(input);
+  const eqList = input.warehouseEquipment ?? [];
+  if (eqList.length === 0) return;
+
+  drawSubTitle(doc, en ? `${prefix} Equipment Installed in the Storage Area` : `${prefix} Перечень оборудования зоны хранения`);
+  eqList.forEach((eq, idx) => {
+    ensureSpace(doc, 60);
+    doc.font("bold").fontSize(10).fillColor(ACCENT)
+      .text(`${en ? "Equipment" : "Оборудование"} ${idx + 1}: ${eq.name}`, { underline: false });
+    const safeValue = (v: string | null | undefined): string => {
+      const s = (v ?? "").toString().trim();
+      return s.length > 0 ? s : "—";
+    };
+    const rows: [string, string][] = [
+      [en ? "Manufacturer" : "Производитель", safeValue(eq.manufacturer)],
+      [en ? "Model" : "Модель", safeValue(eq.model)],
+      [en ? "Serial number" : "Серийный номер", safeValue(eq.serial)],
+      [en ? "Purpose" : "Назначение", safeValue(eq.purpose)],
+    ];
+    rows.forEach(([label, value]) => {
+      doc.font("body").fontSize(10).fillColor(MUTED).text(`${label}: `, { continued: true })
+        .fillColor(ACCENT).text(value);
+    });
+    doc.moveDown(0.5);
+  });
+}
+
 /**
  * Renders warehouse protocol Part I with sections 1–7 per EAEU Rec. #8.
  */
@@ -4964,27 +5017,7 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
   const eqList = input.warehouseEquipment ?? [];
   if (eqList.length > 0) {
     doc.moveDown(0.8);
-    drawSubTitle(doc, en ? "5.1. Equipment Installed in the Storage Area" : "5.1. Перечень оборудования зоны хранения");
-    eqList.forEach((eq, idx) => {
-      ensureSpace(doc, 60);
-      doc.font("bold").fontSize(10).fillColor(ACCENT)
-        .text(`${en ? "Equipment" : "Оборудование"} ${idx + 1}: ${eq.name}`, { underline: false });
-      const safeValue = (v: string | null | undefined): string => {
-        const s = (v ?? "").toString().trim();
-        return s.length > 0 ? s : "—";
-      };
-      const rows: [string, string][] = [
-        [en ? "Manufacturer" : "Производитель", safeValue(eq.manufacturer)],
-        [en ? "Model" : "Модель", safeValue(eq.model)],
-        [en ? "Serial number" : "Серийный номер", safeValue(eq.serial)],
-        [en ? "Purpose" : "Назначение", safeValue(eq.purpose)],
-      ];
-      rows.forEach(([label, value]) => {
-        doc.font("body").fontSize(10).fillColor(MUTED).text(`${label}: `, { continued: true })
-          .fillColor(ACCENT).text(value);
-      });
-      doc.moveDown(0.5);
-    });
+    drawWarehouseEquipmentList(doc, input, "5.1.");
   }
 
   // ── Section 6: Методология ───────────────────────────────────────────────

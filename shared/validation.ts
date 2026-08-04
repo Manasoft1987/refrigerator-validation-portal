@@ -78,13 +78,25 @@ export const EQUIPMENT_TYPES = [
   { id: "thermal-container", label: "Термоконтейнер" },
   { id: "computerized-system", label: "Компьютеризированная система" },
   { id: "warehouse", label: "Помещение / зона хранения" },
+  { id: "warehouse-expert", label: "Помещение / зона хранения (экспертное)" },
   { id: "other", label: "Другое" },
 ] as const;
+
+export const WAREHOUSE_EXPERT_EQUIPMENT_TYPE = "warehouse-expert";
+
+export function isWarehouseLike(type: string | null | undefined): boolean {
+  return type === "warehouse" || type === WAREHOUSE_EXPERT_EQUIPMENT_TYPE;
+}
+
+export function isWarehouseEaeu(type: string | null | undefined): boolean {
+  return type === "warehouse";
+}
 
 /** Returns a human-readable label for any equipmentType value */
 export function getEquipmentLabel(type: string | null | undefined, customName?: string | null): string {
   if (!type) return "Холодильник";
-  if (type === "warehouse") return "Помещение / зона хранения";
+  if (type === "warehouse") return "Помещение / зона хранения (ЕАЭК №8)";
+  if (type === WAREHOUSE_EXPERT_EQUIPMENT_TYPE) return "Помещение / зона хранения (экспертное)";
   if (type === "thermal-container") return "Термоконтейнер";
   if (type === "other") return customName || "Другое";
   const found = EQUIPMENT_TYPES.find(t => t.id === type);
@@ -97,7 +109,7 @@ export function getPurposePlaceholder(type: string | null | undefined): string {
   if (type === "thermal-container") return "Транспортировка термолабильной продукции в квалифицированной конфигурации упаковки…";
   if (type === "freezer") return "Хранение термолабильных лекарственных средств при −20 °C…";
   if (type === "chamber") return "Хранение термолабильных лекарственных средств и вакцин при 2–8 °C…";
-  if (type === "warehouse") return "Хранение лекарственных средств и медицинских изделий в помещении (зоне) с контролируемой средой…";
+  if (isWarehouseLike(type)) return "Хранение лекарственных средств и медицинских изделий в помещении (зоне) с контролируемой средой…";
   if (type === "other") return "Назначение оборудования…";
   return "Хранение термолабильных лекарственных средств при 2–8 °C…";
 }
@@ -107,7 +119,7 @@ export function getLocationPlaceholder(type: string | null | undefined): string 
   if (type === "auto-refrigerator") return "Маршрут / транспортное средство / гос. номер";
   if (type === "thermal-container") return "Место подготовки и эксплуатации термоконтейнера";
   if (type === "chamber") return "Склад / здание / помещение";
-  if (type === "warehouse") return "Здание / помещение / номер зоны хранения";
+  if (isWarehouseLike(type)) return "Здание / помещение / номер зоны хранения";
   return "Здание / помещение / номер кабинета";
 }
 

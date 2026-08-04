@@ -669,6 +669,7 @@ type ProtocolEquipmentTypeCode =
   | "thermal-container"
   | "computerized-system"
   | "warehouse"
+  | "warehouse-expert"
   | "other"
   | string
   | null
@@ -685,6 +686,7 @@ export function protocolObjectCode(equipmentType: ProtocolEquipmentTypeCode): st
     case "computerized-system":
       return "CS";
     case "warehouse":
+    case "warehouse-expert":
       return "STR";
     case "refrigerator":
       return "REF";
@@ -889,10 +891,10 @@ export async function ensureThermalContainerStorage() {
     ));
     const protocolRows = (protocolColumnResult as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
     const protocolType = String(protocolRows?.[0]?.Type ?? protocolRows?.[0]?.type ?? "");
-    if (!protocolType.includes("'thermal-container'") || !protocolType.includes("'computerized-system'")) {
+    if (!protocolType.includes("'thermal-container'") || !protocolType.includes("'computerized-system'") || !protocolType.includes("'warehouse-expert'")) {
       await db.execute(sql.raw(
         "ALTER TABLE protocols MODIFY COLUMN equipmentType " +
-        "enum('refrigerator','auto-refrigerator','thermal-container','computerized-system','warehouse','other') " +
+        "enum('refrigerator','auto-refrigerator','thermal-container','computerized-system','warehouse','warehouse-expert','other') " +
         "DEFAULT 'refrigerator'",
       ));
     }
@@ -1374,11 +1376,16 @@ export async function ensureChamberQuestionTemplateStorage(
     ));
     const rows = (result as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
     const columnType = String(rows?.[0]?.Type ?? rows?.[0]?.type ?? "");
-    if (columnType.includes("'chamber'") && columnType.includes("'thermal-container'")) return;
+    if (
+      columnType.includes("'chamber'") &&
+      columnType.includes("'thermal-container'") &&
+      columnType.includes("'computerized-system'") &&
+      columnType.includes("'warehouse-expert'")
+    ) return;
 
     await db.execute(sql.raw(
       "ALTER TABLE questionTemplates MODIFY COLUMN equipmentType " +
-      "enum('refrigerator','auto-refrigerator','chamber','thermal-container','warehouse','other') " +
+        "enum('refrigerator','auto-refrigerator','chamber','thermal-container','computerized-system','warehouse','warehouse-expert','other') " +
       "NOT NULL DEFAULT 'refrigerator'",
     ));
 
