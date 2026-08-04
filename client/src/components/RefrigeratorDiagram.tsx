@@ -111,9 +111,8 @@ export default function RefrigeratorDiagram({ loggers, protocolId, readOnly = fa
   const internals = loggers.filter(l => l.role === "internal");
   const externals = loggers.filter(l => l.role === "external");
   const maxPlacedShelf = Math.max(0, ...internals.map(l => parsePlacement(l.position)?.shelf ?? 0));
-  const autoShelfCount = Math.min(9, Math.max(7, internals.length || 1));
   const [visibleShelves, setVisibleShelves] = useState(Math.max(7, maxPlacedShelf));
-  const shelfCount = Math.max(1, Math.min(9, Math.max(visibleShelves, maxPlacedShelf, autoShelfCount)));
+  const shelfCount = Math.max(1, Math.min(9, Math.max(visibleShelves, maxPlacedShelf)));
   const [assigningTo, setAssigningTo] = useState<Placement | null>(null);
 
   const placements = useMemo(() => {
