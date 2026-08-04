@@ -708,6 +708,29 @@ const SNAP_POS: Record<string, { x: number; y: number }> = {
   door:   { x: 88, y: 50 },
 };
 
+type FridgeZoneCode = "BL" | "BC" | "BR" | "FL" | "FC" | "FR";
+
+const FRIDGE_ZONES: Record<FridgeZoneCode, { x: number; label: string; short: string }> = {
+  BL: { x: 18, label: "у задней стенки слева", short: "зад. слева" },
+  BC: { x: 50, label: "у задней стенки по середине", short: "зад. центр" },
+  BR: { x: 82, label: "у задней стенки справа", short: "зад. справа" },
+  FL: { x: 18, label: "у дверцы слева", short: "дверь слева" },
+  FC: { x: 50, label: "у дверцы по середине", short: "дверь центр" },
+  FR: { x: 82, label: "у дверцы справа", short: "дверь справа" },
+};
+
+function parseFridgePlacement(position: string | null | undefined): { shelf: number; zone: FridgeZoneCode } | null {
+  const match = String(position || "").match(/^RF:S(\d+):(BL|BC|BR|FL|FC|FR)$/);
+  if (!match) return null;
+  return { shelf: Math.max(1, Number(match[1])), zone: match[2] as FridgeZoneCode };
+}
+
+function fridgeShelfCount(sensors: DiagramSensor[]): number {
+  const internals = sensors.filter(s => s.role === "internal");
+  const maxPlaced = Math.max(0, ...internals.map(s => parseFridgePlacement(s.position)?.shelf ?? 0));
+  return Math.max(3, Math.min(9, Math.max(7, internals.length, maxPlaced)));
+}
+
 const BADGE_PALETTE = [
   "#2563eb", "#16a34a", "#dc2626", "#d97706",
   "#7c3aed", "#0891b2", "#be185d", "#65a30d",
@@ -741,6 +764,8 @@ function refrigeratorBadgeText(sensor: DiagramSensor, idx: number, badgeMode: "s
 
 function refrigeratorPositionLabel(sensor: DiagramSensor, idx: number): string {
   if (sensor.role === "external") return "внеш";
+  const rf = parseFridgePlacement(sensor.position);
+  if (rf) return `${rf.shelf}п ${FRIDGE_ZONES[rf.zone].short}`;
   switch (sensor.position) {
     case "top":
       return "верх";
@@ -766,6 +791,7 @@ export function drawRefrigeratorDiagram(
 ): void {
   const internals = sensors.filter(s => s.role === "internal");
   const externals = sensors.filter(s => s.role === "external");
+  const shelfCount = fridgeShelfCount(sensors);
 
   const diagH = 190;
   const cabW = 200;
@@ -806,8 +832,8 @@ export function drawRefrigeratorDiagram(
   const doorX = cabX + cabW - doorW;
 
   // Shelf Y positions
-  const shelf1Y = cabY + cabH * 0.33;
-  const shelf2Y = cabY + cabH * 0.66;
+  const shelfY = (shelf: number) =>
+    cabY + 16 + ((shelf - 1) / Math.max(1, shelfCount - 1)) * (cabH - 32);
 
   // --- Outer refrigerator body (insulated walls) ---
   doc.save();
@@ -832,14 +858,23 @@ export function drawRefrigeratorDiagram(
 
   // Shelves (dashed)
   doc.lineWidth(1).strokeColor("#cbd5e1").dash(5, { space: 3 });
-  doc.moveTo(cabX + 4, shelf1Y).lineTo(doorX - 4, shelf1Y).stroke();
-  doc.moveTo(cabX + 4, shelf2Y).lineTo(doorX - 4, shelf2Y).stroke();
+  for (let shelf = 1; shelf <= shelfCount; shelf += 1) {
+    const y = shelfY(shelf);
+    doc.moveTo(cabX + 4, y).lineTo(doorX - 4, y).stroke();
+  }
   doc.undash();
 
   // Shelf labels
   doc.font("body").fontSize(7).fillColor("#94a3b8");
-  doc.text("Верхняя полка", cabX + 5, shelf1Y - 10, { lineBreak: false });
-  doc.text("Нижняя полка", cabX + 5, shelf2Y - 10, { lineBreak: false });
+  for (let shelf = 1; shelf <= shelfCount; shelf += 1) {
+    const y = shelfY(shelf);
+    const label = shelf === 1
+      ? `${shelf} полка (верхняя)`
+      : shelf === shelfCount
+      ? `${shelf} полка (нижняя)`
+      : `${shelf} полка`;
+    doc.text(label, cabX + 5, Math.max(cabY + 2, y - 9), { lineBreak: false });
+  }
 
   // Door label
   doc.fontSize(7).fillColor("#94a3b8");
@@ -857,7 +892,13 @@ export function drawRefrigeratorDiagram(
 
     let pctX = 40;
     let pctY = 50;
-    if (s.posX != null && s.posY != null) {
+    const rf = parseFridgePlacement(s.position);
+    if (rf) {
+      pctX = FRIDGE_ZONES[rf.zone].x;
+      pctY = shelfCount <= 1
+        ? 50
+        : 8 + ((rf.shelf - 1) / Math.max(1, shelfCount - 1)) * 84;
+    } else if (s.posX != null && s.posY != null) {
       pctX = Number(s.posX);
       pctY = Number(s.posY);
     } else if (s.position && SNAP_POS[s.position]) {

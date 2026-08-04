@@ -1,20 +1,15 @@
 /**
  * RefrigeratorDiagram
  *
- * Renders an SVG schematic of a refrigerator with sensor badges.
- *
- * ≤ 2 internal sensors → snap-to-position buttons (top / bottom shelf)
- * ≥ 3 internal sensors → free drag-and-drop inside the cabinet
- * External sensor      → shown outside the cabinet (right side)
- *
- * Props:
- *   loggers        – array of pvLogger rows (need id, label, customName, role, position, posX, posY)
- *   protocolId     – used when calling updateLogger mutation
- *   readOnly       – if true, no editing (used in PDF preview mode)
+ * 3D-like refrigerator shelf diagram for sensor placement.
+ * Positions are stored in pvLoggers.position as short stable codes:
+ *   RF:S{shelf}:{zone}
+ * where zone is BL/BC/BR (back) or FL/FC/FR (front / door side).
  */
 
+import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
-import { useCallback, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 
 type Logger = {
   id: number;
@@ -24,6 +19,7 @@ type Logger = {
   position?: string | null;
   posX?: string | number | null;
   posY?: string | number | null;
+  avgVal?: string | number | null;
 };
 
 type Props = {
@@ -32,31 +28,79 @@ type Props = {
   readOnly?: boolean;
 };
 
-// Named snap positions inside the SVG viewport (0-100 %)
-const SNAP_POSITIONS: Record<string, { x: number; y: number; label: string }> = {
-  top:    { x: 50, y: 22, label: "Верхняя полка" },
-  middle: { x: 50, y: 50, label: "Средняя полка" },
-  bottom: { x: 50, y: 76, label: "Нижняя полка" },
-  door:   { x: 88, y: 50, label: "Дверь" },
-};
+type ZoneCode = "BL" | "BC" | "BR" | "FL" | "FC" | "FR";
+type Placement = { shelf: number; zone: ZoneCode };
 
-// Colours per sensor index
-const BADGE_COLORS = [
-  "#2563eb", "#16a34a", "#dc2626", "#d97706",
-  "#7c3aed", "#0891b2", "#be185d", "#65a30d",
+const ZONES: Array<{ code: ZoneCode; x: number; depth: number; label: string; short: string }> = [
+  { code: "BL", x: 14, depth: 84, label: "у задней стенки слева", short: "зад. слева" },
+  { code: "BC", x: 50, depth: 84, label: "у задней стенки по середине", short: "зад. центр" },
+  { code: "BR", x: 86, depth: 84, label: "у задней стенки справа", short: "зад. справа" },
+  { code: "FL", x: 14, depth: 20, label: "у дверцы слева", short: "дверь слева" },
+  { code: "FC", x: 50, depth: 20, label: "у дверцы по середине", short: "дверь центр" },
+  { code: "FR", x: 86, depth: 20, label: "у дверцы справа", short: "дверь справа" },
 ];
 
-function badgeColor(idx: number) {
-  return BADGE_COLORS[idx % BADGE_COLORS.length];
+const PALETTE = [
+  "#2563eb", "#16a34a", "#dc2626", "#d97706",
+  "#7c3aed", "#0891b2", "#be185d", "#65a30d", "#0f766e", "#b45309",
+];
+
+function colorFor(idx: number) {
+  return PALETTE[idx % PALETTE.length];
+}
+
+function loggerTitle(logger: Logger): string {
+  return String(logger.customName || logger.label || `Датчик ${logger.id}`).trim();
 }
 
 function badgeLabel(logger: Logger): string {
-  const serial = String(logger.label ?? "").trim();
-  const digits = serial.replace(/\D/g, "");
+  const src = loggerTitle(logger);
+  const digits = src.replace(/\D/g, "");
   if (digits.length >= 4) return digits.slice(-4);
-  if (serial.length > 0) return serial.length > 6 ? serial.slice(-6) : serial;
-  const fallback = String(logger.customName ?? "").trim();
-  return fallback.length > 6 ? fallback.slice(0, 6) : fallback;
+  return src.length > 6 ? src.slice(-6) : src;
+}
+
+function avgLabel(logger: Logger): string | null {
+  const raw = logger.avgVal;
+  if (raw == null || raw === "") return null;
+  const n = typeof raw === "number" ? raw : Number(String(raw).replace(",", "."));
+  if (!Number.isFinite(n)) return null;
+  return n.toFixed(1).replace(".", ",") + "°C";
+}
+
+function parsePlacement(position: string | null | undefined): Placement | null {
+  const match = String(position || "").match(/^RF:S(\d+):(BL|BC|BR|FL|FC|FR)$/);
+  if (!match) return null;
+  return { shelf: Math.max(1, Number(match[1])), zone: match[2] as ZoneCode };
+}
+
+function placementCode(p: Placement): string {
+  return `RF:S${p.shelf}:${p.zone}`;
+}
+
+function legacyPlacement(logger: Logger, index: number, total: number): Placement {
+  if (logger.position === "top") return { shelf: 1, zone: "FC" };
+  if (logger.position === "middle") return { shelf: Math.max(2, Math.ceil(total / 2)), zone: "FC" };
+  if (logger.position === "bottom") return { shelf: Math.max(3, total), zone: "FC" };
+  if (logger.position === "door") return { shelf: Math.max(1, Math.ceil(total / 2)), zone: "FR" };
+
+  if (logger.posX != null && logger.posY != null) {
+    const x = Number(logger.posX);
+    const y = Number(logger.posY);
+    const shelf = Math.max(1, Math.min(9, Math.round((y / 100) * Math.max(1, total - 1)) + 1));
+    const zone: ZoneCode = x < 33 ? "FL" : x > 66 ? "FR" : "FC";
+    return { shelf, zone };
+  }
+
+  const shelf = total <= 1 ? 1 : Math.round((index / (total - 1)) * Math.max(1, total - 1)) + 1;
+  const pattern: ZoneCode[] = ["FL", "FR", "BC"];
+  return { shelf, zone: pattern[index % pattern.length] };
+}
+
+function shelfTitle(shelf: number, total: number): string {
+  if (shelf === 1) return `${shelf} полка (верхняя)`;
+  if (shelf === total) return `${shelf} полка (нижняя)`;
+  return `${shelf} полка`;
 }
 
 export default function RefrigeratorDiagram({ loggers, protocolId, readOnly = false }: Props) {
@@ -64,234 +108,278 @@ export default function RefrigeratorDiagram({ loggers, protocolId, readOnly = fa
   const updateLogger = trpc.pv.updateLogger.useMutation({
     onSuccess: () => utils.pv.get.invalidate({ protocolId }),
   });
-
-  const svgRef = useRef<SVGSVGElement>(null);
-
-  // Dragging state for free-drag mode
-  const [dragging, setDragging] = useState<{ id: number; startX: number; startY: number } | null>(null);
-  const [localPos, setLocalPos] = useState<Record<number, { x: number; y: number }>>({});
-
   const internals = loggers.filter(l => l.role === "internal");
   const externals = loggers.filter(l => l.role === "external");
-  const freeMode = internals.length >= 3;
+  const maxPlacedShelf = Math.max(0, ...internals.map(l => parsePlacement(l.position)?.shelf ?? 0));
+  const autoShelfCount = Math.min(9, Math.max(7, internals.length || 1));
+  const [visibleShelves, setVisibleShelves] = useState(Math.max(7, maxPlacedShelf));
+  const shelfCount = Math.max(1, Math.min(9, Math.max(visibleShelves, maxPlacedShelf, autoShelfCount)));
+  const [assigningTo, setAssigningTo] = useState<Placement | null>(null);
 
-  // Convert SVG-relative mouse position to 0-100 % coordinates
-  const toPercent = useCallback((clientX: number, clientY: number) => {
-    if (!svgRef.current) return { x: 50, y: 50 };
-    const rect = svgRef.current.getBoundingClientRect();
-    // Cabinet occupies x: 5%-75%, y: 5%-95% of SVG
-    const cabLeft = rect.left + rect.width * 0.05;
-    const cabRight = rect.left + rect.width * 0.75;
-    const cabTop = rect.top + rect.height * 0.05;
-    const cabBottom = rect.top + rect.height * 0.95;
-    const x = Math.max(0, Math.min(100, ((clientX - cabLeft) / (cabRight - cabLeft)) * 100));
-    const y = Math.max(0, Math.min(100, ((clientY - cabTop) / (cabBottom - cabTop)) * 100));
-    return { x, y };
-  }, []);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!dragging || readOnly) return;
-    const pct = toPercent(e.clientX, e.clientY);
-    setLocalPos(prev => ({ ...prev, [dragging.id]: pct }));
-  }, [dragging, readOnly, toPercent]);
-
-  const handleMouseUp = useCallback(() => {
-    if (!dragging || readOnly) return;
-    const pos = localPos[dragging.id];
-    if (pos) {
-      updateLogger.mutate({
-        protocolId,
-        loggerId: dragging.id,
-        position: "unset",
-        posX: pos.x,
-        posY: pos.y,
-      });
-    }
-    setDragging(null);
-  }, [dragging, localPos, protocolId, readOnly, updateLogger]);
-
-  const handleSnapPosition = (loggerId: number, snap: string) => {
-    if (readOnly) return;
-    updateLogger.mutate({
-      protocolId,
-      loggerId,
-      position: snap as any,
-      posX: null,
-      posY: null,
+  const placements = useMemo(() => {
+    const map = new Map<string, Logger>();
+    internals.forEach((logger, idx) => {
+      const parsed = parsePlacement(logger.position);
+      const placement = parsed ?? legacyPlacement(logger, idx, Math.max(3, shelfCount));
+      map.set(placementCode(placement), logger);
     });
-  };
+    return map;
+  }, [internals, shelfCount]);
 
-  // Resolve display position for a logger (0-100 %)
-  const getDisplayPos = (l: Logger, idx: number): { x: number; y: number } => {
-    // Dragging override
-    if (localPos[l.id]) return localPos[l.id];
-    // Free-drag stored position
-    if (l.posX != null && l.posY != null) {
-      return { x: Number(l.posX), y: Number(l.posY) };
-    }
-    // Named snap position
-    if (l.position && l.position !== "unset" && SNAP_POSITIONS[l.position]) {
-      return SNAP_POSITIONS[l.position];
-    }
-    // Default: distribute vertically
-    const total = internals.length;
-    const rank = internals.findIndex(i => i.id === l.id);
-    return { x: 50, y: total <= 1 ? 50 : 15 + (rank / (total - 1)) * 70 };
-  };
-
-  // SVG viewport: 400 x 340
-  // Cabinet: x=20, y=17, w=300, h=306
-  // Door: x=290, y=17, w=50, h=306 (part of cabinet)
-  const W = 400;
-  const H = 340;
-  const CAB_X = 20, CAB_Y = 17, CAB_W = 300, CAB_H = 306;
-  const DOOR_X = CAB_X + CAB_W - 50;
-  const SHELF1_Y = CAB_Y + CAB_H * 0.33;
-  const SHELF2_Y = CAB_Y + CAB_H * 0.66;
-
-  // Convert 0-100% to SVG coords inside cabinet (excluding door area)
-  const toSvgXY = (px: number, py: number) => ({
-    sx: CAB_X + (px / 100) * (DOOR_X - CAB_X - 10),
-    sy: CAB_Y + (py / 100) * CAB_H,
+  const unassigned = internals.filter(logger => {
+    const parsed = parsePlacement(logger.position);
+    return !parsed || !placements.get(placementCode(parsed)) || placements.get(placementCode(parsed))?.id === logger.id;
   });
 
-  const BADGE_R = 18;
+  const assignLogger = (loggerId: number | null) => {
+    if (!assigningTo || readOnly) return;
+    const code = placementCode(assigningTo);
+    const already = placements.get(code);
+    if (already && loggerId !== already.id) {
+      updateLogger.mutate({ protocolId, loggerId: already.id, position: "unset" as any, posX: null, posY: null });
+    }
+    if (loggerId != null) {
+      updateLogger.mutate({ protocolId, loggerId, position: code as any, posX: null, posY: null });
+    }
+    setAssigningTo(null);
+  };
+
+  const clearPlacement = () => {
+    if (!assigningTo || readOnly) return;
+    const logger = placements.get(placementCode(assigningTo));
+    if (logger) {
+      updateLogger.mutate({ protocolId, loggerId: logger.id, position: "unset" as any, posX: null, posY: null });
+    }
+    setAssigningTo(null);
+  };
+
+  const W = 760;
+  const H = 640;
+  const cab = { x: 70, y: 42, w: 420, h: 540, d: 82 };
+  const topGap = 48;
+  const bottomGap = 68;
+  const shelfAreaH = cab.h - topGap - bottomGap;
+  const shelfPitch = shelfCount > 1 ? shelfAreaH / (shelfCount - 1) : 0;
+  const shelfY = (shelf: number) => cab.y + topGap + (shelf - 1) * shelfPitch;
+  const project = (shelf: number, zone: ZoneCode) => {
+    const z = ZONES.find(item => item.code === zone) ?? ZONES[0];
+    const depthShift = (z.depth / 100) * cab.d;
+    return {
+      x: cab.x + (z.x / 100) * cab.w - depthShift * 0.45,
+      y: shelfY(shelf) + depthShift * 0.30,
+    };
+  };
 
   return (
-    <div className="w-full select-none">
-      <svg
-        ref={svgRef}
-        viewBox={`0 0 ${W} ${H}`}
-        className="w-full max-w-lg mx-auto"
-        style={{ touchAction: "none" }}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-      >
-        {/* Cabinet body */}
-        <rect
-          x={CAB_X} y={CAB_Y} width={CAB_W} height={CAB_H}
-          rx={8} ry={8}
-          fill="#f1f5f9" stroke="#94a3b8" strokeWidth={2}
-        />
-        {/* Door */}
-        <rect
-          x={DOOR_X} y={CAB_Y} width={50} height={CAB_H}
-          rx={4} ry={4}
-          fill="#e2e8f0" stroke="#94a3b8" strokeWidth={1.5}
-        />
-        <text x={DOOR_X + 25} y={CAB_Y + CAB_H / 2} textAnchor="middle"
-          fontSize={10} fill="#64748b" transform={`rotate(-90,${DOOR_X + 25},${CAB_Y + CAB_H / 2})`}>
-          Дверь
-        </text>
-        {/* Door handle */}
-        <rect x={DOOR_X + 38} y={CAB_Y + CAB_H * 0.35} width={6} height={CAB_H * 0.3}
-          rx={3} fill="#94a3b8" />
-        {/* Shelves */}
-        <line x1={CAB_X + 4} y1={SHELF1_Y} x2={DOOR_X - 4} y2={SHELF1_Y}
-          stroke="#94a3b8" strokeWidth={2} strokeDasharray="6,3" />
-        <line x1={CAB_X + 4} y1={SHELF2_Y} x2={DOOR_X - 4} y2={SHELF2_Y}
-          stroke="#94a3b8" strokeWidth={2} strokeDasharray="6,3" />
-        {/* Shelf labels */}
-        <text x={CAB_X + 6} y={SHELF1_Y - 5} fontSize={9} fill="#94a3b8">Верхняя полка</text>
-        <text x={CAB_X + 6} y={SHELF2_Y - 5} fontSize={9} fill="#94a3b8">Нижняя полка</text>
+    <div className="w-full select-none space-y-3">
+      {!readOnly && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+          <div>
+            <div className="text-sm font-medium">3D-схема холодильника</div>
+            <div className="text-xs text-muted-foreground">
+              Выберите количество полок, затем кликайте по точкам на полках и назначайте датчики.
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Полок:</span>
+            {[3, 5, 7, 9].map(count => (
+              <Button
+                key={count}
+                type="button"
+                size="sm"
+                variant={shelfCount === count ? "default" : "outline"}
+                className={shelfCount === count ? "" : "bg-background"}
+                onClick={() => setVisibleShelves(count)}
+              >
+                {count}
+              </Button>
+            ))}
+          </div>
+        </div>
+      )}
 
-        {/* Internal sensor badges */}
-        {internals.map((l, idx) => {
-          const pos = getDisplayPos(l, idx);
-          const { sx, sy } = toSvgXY(pos.x, pos.y);
-          const color = badgeColor(idx);
-          const name = badgeLabel(l);
-          const isDragging = dragging?.id === l.id;
-          return (
-            <g
-              key={l.id}
-              style={{ cursor: freeMode && !readOnly ? "grab" : "default" }}
-              onMouseDown={freeMode && !readOnly ? (e) => {
-                e.preventDefault();
-                setDragging({ id: l.id, startX: e.clientX, startY: e.clientY });
-              } : undefined}
-            >
-              <circle
-                cx={sx} cy={sy} r={BADGE_R}
-                fill={color}
-                stroke={isDragging ? "#1e293b" : "white"}
-                strokeWidth={isDragging ? 2.5 : 2}
-                opacity={0.92}
-              />
-              <text x={sx} y={sy + 1} textAnchor="middle" dominantBaseline="middle"
-                fontSize={9} fontWeight="700" fill="white" style={{ pointerEvents: "none" }}>
-                {name.length > 6 ? name.slice(0, 5) + "…" : name}
-              </text>
-            </g>
-          );
-        })}
+      <div className="grid lg:grid-cols-[minmax(0,1fr)_260px] gap-4 items-start">
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-3xl mx-auto rounded-lg border bg-white">
+          <defs>
+            <linearGradient id="rf-body" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0%" stopColor="#ffffff" />
+              <stop offset="100%" stopColor="#e2e8f0" />
+            </linearGradient>
+            <linearGradient id="rf-shelf" x1="0" x2="1" y1="0" y2="1">
+              <stop offset="0%" stopColor="#ffffff" stopOpacity="0.92" />
+              <stop offset="100%" stopColor="#cbd5e1" stopOpacity="0.75" />
+            </linearGradient>
+          </defs>
 
-        {/* External sensor badges — outside the cabinet on the right */}
-        {externals.map((l, idx) => {
-          const color = badgeColor(internals.length + idx);
-          const name = badgeLabel(l);
-          const ey = CAB_Y + 40 + idx * 55;
-          return (
-            <g key={l.id}>
-              {/* Connector line */}
-              <line x1={CAB_X + CAB_W + 10} y1={ey} x2={CAB_X + CAB_W + 30} y2={ey}
-                stroke={color} strokeWidth={1.5} strokeDasharray="4,2" />
-              <circle cx={CAB_X + CAB_W + 48} cy={ey} r={BADGE_R}
-                fill={color} stroke="white" strokeWidth={2} opacity={0.92} />
-              <text x={CAB_X + CAB_W + 48} y={ey + 1} textAnchor="middle" dominantBaseline="middle"
-                fontSize={9} fontWeight="700" fill="white" style={{ pointerEvents: "none" }}>
-                {name.length > 6 ? name.slice(0, 5) + "…" : name}
-              </text>
-              <text x={CAB_X + CAB_W + 48} y={ey + BADGE_R + 10} textAnchor="middle"
-                fontSize={8} fill="#64748b">
-                Внешний
-              </text>
-            </g>
-          );
-        })}
-      </svg>
+          {/* Outer 3D cabinet */}
+          <polygon points={`${cab.x},${cab.y} ${cab.x + cab.w},${cab.y} ${cab.x + cab.w + cab.d * 0.55},${cab.y + cab.d * 0.25} ${cab.x + cab.d * 0.55},${cab.y + cab.d * 0.25}`}
+            fill="#f8fafc" stroke="#334155" strokeWidth={1.8} />
+          <polygon points={`${cab.x + cab.w},${cab.y} ${cab.x + cab.w + cab.d * 0.55},${cab.y + cab.d * 0.25} ${cab.x + cab.w + cab.d * 0.55},${cab.y + cab.h + cab.d * 0.25} ${cab.x + cab.w},${cab.y + cab.h}`}
+            fill="#e2e8f0" stroke="#334155" strokeWidth={1.8} />
+          <rect x={cab.x} y={cab.y} width={cab.w} height={cab.h} rx={5} fill="url(#rf-body)" stroke="#111827" strokeWidth={2.2} />
+          <rect x={cab.x + 18} y={cab.y + 24} width={cab.w - 36} height={cab.h - 42} rx={4} fill="#ffffff" stroke="#94a3b8" strokeWidth={1.4} />
 
-      {/* Snap-to-position buttons for ≤ 2 internal sensors */}
-      {!freeMode && !readOnly && internals.length > 0 && (
-        <div className="mt-3 space-y-2">
-          <p className="text-xs text-muted-foreground text-center">
-            Назначьте позицию каждому датчику:
-          </p>
-          {internals.map((l, idx) => {
-            const color = badgeColor(idx);
-            const name = l.customName || l.label;
+          {/* Cooling grill */}
+          <rect x={cab.x + cab.w * 0.38} y={cab.y + 42} width={cab.w * 0.25} height={30} rx={3} fill="#f1f5f9" stroke="#64748b" />
+          {Array.from({ length: 5 }, (_, i) => (
+            <line key={i} x1={cab.x + cab.w * 0.40} y1={cab.y + 49 + i * 5} x2={cab.x + cab.w * 0.61} y2={cab.y + 49 + i * 5} stroke="#64748b" strokeWidth={1.2} />
+          ))}
+
+          {/* Shelf rails and shelves */}
+          {Array.from({ length: shelfCount }, (_, i) => {
+            const shelf = i + 1;
+            const y = shelfY(shelf);
+            const frontY = y + cab.d * 0.30;
+            const leftBackX = cab.x + 38;
+            const rightBackX = cab.x + cab.w - 36;
+            const leftFrontX = leftBackX - cab.d * 0.45;
+            const rightFrontX = rightBackX - cab.d * 0.45;
             return (
-              <div key={l.id} className="flex items-center gap-2 flex-wrap justify-center">
-                <span
-                  className="inline-flex items-center justify-center rounded-full text-white text-xs font-bold px-2 py-0.5"
-                  style={{ background: color, minWidth: 60 }}
+              <g key={shelf}>
+                <polygon
+                  points={`${leftBackX},${y} ${rightBackX},${y} ${rightFrontX},${frontY} ${leftFrontX},${frontY}`}
+                  fill="url(#rf-shelf)"
+                  stroke="#64748b"
+                  strokeWidth={1.3}
+                />
+                <line x1={leftFrontX} y1={frontY + 5} x2={rightFrontX} y2={frontY + 5} stroke="#334155" strokeWidth={2} opacity={0.55} />
+                <text x={cab.x + cab.w + 34} y={frontY + 4} fontSize={12} fill="#64748b" fontWeight={700}>
+                  {shelf}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Drawers */}
+          <rect x={cab.x + 58} y={cab.y + cab.h - 74} width={150} height={46} rx={7} fill="#f8fafc" stroke="#94a3b8" opacity={0.9} />
+          <rect x={cab.x + 228} y={cab.y + cab.h - 74} width={150} height={46} rx={7} fill="#f8fafc" stroke="#94a3b8" opacity={0.9} />
+
+          {/* Clickable slots */}
+          {Array.from({ length: shelfCount }, (_, i) => i + 1).flatMap(shelf =>
+            ZONES.map(zone => {
+              const p = project(shelf, zone.code);
+              const code = placementCode({ shelf, zone: zone.code });
+              const logger = placements.get(code);
+              const loggerIdx = logger ? internals.findIndex(item => item.id === logger.id) : -1;
+              const color = logger ? colorFor(loggerIdx) : "#94a3b8";
+              const label = logger ? badgeLabel(logger) : "";
+              const avg = logger ? avgLabel(logger) : null;
+              const isFront = zone.code.startsWith("F");
+              return (
+                <g
+                  key={code}
+                  onClick={() => !readOnly && setAssigningTo({ shelf, zone: zone.code })}
+                  style={{ cursor: readOnly ? "default" : "pointer" }}
                 >
-                  {name}
-                </span>
-                {Object.entries(SNAP_POSITIONS).map(([key, sp]) => (
-                  <button
-                    key={key}
-                    onClick={() => handleSnapPosition(l.id, key)}
-                    className={`text-xs px-2 py-1 rounded border transition-colors ${
-                      l.position === key
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "bg-background text-foreground border-border hover:bg-accent"
-                    }`}
-                  >
-                    {sp.label}
-                  </button>
-                ))}
+                  {!logger && !readOnly && (
+                    <circle cx={p.x} cy={p.y} r={7} fill="#ffffff" stroke={color} strokeWidth={1.2} strokeDasharray={isFront ? "0" : "3 2"} opacity={0.85} />
+                  )}
+                  {logger && (
+                    <>
+                      <circle cx={p.x} cy={p.y} r={16} fill={color} stroke="white" strokeWidth={2.2} />
+                      <text x={p.x} y={p.y - (avg ? 1 : -4)} textAnchor="middle" fontSize={8} fontWeight={800} fill="white" pointerEvents="none">
+                        {label}
+                      </text>
+                      {avg && (
+                        <text x={p.x} y={p.y + 9} textAnchor="middle" fontSize={6.5} fontWeight={700} fill="white" pointerEvents="none">
+                          {avg}
+                        </text>
+                      )}
+                    </>
+                  )}
+                </g>
+              );
+            }),
+          )}
+
+          {/* Legend */}
+          <g transform={`translate(${cab.x + cab.w + 86}, ${cab.y + 14})`}>
+            <rect x={0} y={0} width={160} height={78} rx={8} fill="#ffffff" stroke="#cbd5e1" />
+            <circle cx={18} cy={22} r={7} fill="#2563eb" />
+            <text x={34} y={26} fontSize={12} fill="#0f172a">T — точка измерения</text>
+            <circle cx={18} cy={48} r={6} fill="#ffffff" stroke="#94a3b8" strokeWidth={1.2} />
+            <text x={34} y={52} fontSize={11} fill="#64748b">свободная позиция</text>
+          </g>
+
+          {externals.map((logger, idx) => {
+            const y = cab.y + 124 + idx * 42;
+            const color = colorFor(internals.length + idx);
+            return (
+              <g key={logger.id} transform={`translate(${cab.x + cab.w + 104}, ${y})`}>
+                <line x1={-52} y1={0} x2={-12} y2={0} stroke={color} strokeWidth={1.3} strokeDasharray="4 3" />
+                <circle cx={8} cy={0} r={15} fill={color} stroke="white" strokeWidth={2} />
+                <text x={8} y={4} textAnchor="middle" fontSize={8} fontWeight={800} fill="white">{badgeLabel(logger)}</text>
+                <text x={32} y={4} fontSize={11} fill="#64748b">внешний</text>
+              </g>
+            );
+          })}
+        </svg>
+
+        <div className="space-y-2">
+          {Array.from({ length: shelfCount }, (_, i) => i + 1).map(shelf => {
+            const rows = ZONES
+              .map(zone => ({ zone, logger: placements.get(placementCode({ shelf, zone: zone.code })) }))
+              .filter(row => row.logger);
+            return (
+              <div key={shelf} className="rounded-lg border bg-white p-3 text-sm">
+                <div className="font-semibold text-center mb-1">{shelfTitle(shelf, shelfCount)}</div>
+                {rows.length === 0 ? (
+                  <div className="text-center text-muted-foreground text-xs">(без логгеров)</div>
+                ) : (
+                  <div className="space-y-1">
+                    {rows.map(({ zone, logger }) => (
+                      <div key={zone.code} className="text-xs">
+                        <span className="font-semibold text-primary">{badgeLabel(logger!)}</span>
+                        {" — "}
+                        <span className="text-muted-foreground">{zone.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
-      )}
+      </div>
 
-      {freeMode && !readOnly && (
-        <p className="text-xs text-muted-foreground text-center mt-2">
-          Перетащите датчики на нужное место внутри холодильника
-        </p>
+      {assigningTo && !readOnly && (
+        <div className="rounded-lg border bg-white p-3 shadow-sm">
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div>
+              <div className="font-semibold text-sm">
+                {shelfTitle(assigningTo.shelf, shelfCount)} — {ZONES.find(z => z.code === assigningTo.zone)?.label}
+              </div>
+              <div className="text-xs text-muted-foreground">Выберите логгер для этой точки.</div>
+            </div>
+            <Button size="sm" variant="outline" className="bg-background" onClick={() => setAssigningTo(null)}>
+              Закрыть
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {unassigned.map((logger, idx) => {
+              const assignedHere = placements.get(placementCode(assigningTo))?.id === logger.id;
+              const alreadyAssigned = parsePlacement(logger.position) && !assignedHere;
+              return (
+                <Button
+                  key={logger.id}
+                  size="sm"
+                  variant={assignedHere ? "default" : "outline"}
+                  className={assignedHere ? "" : "bg-background"}
+                  disabled={!!alreadyAssigned}
+                  onClick={() => assignLogger(logger.id)}
+                >
+                  <span className="inline-block w-2.5 h-2.5 rounded-full mr-1.5" style={{ background: colorFor(idx) }} />
+                  {loggerTitle(logger)}
+                </Button>
+              );
+            })}
+            {placements.get(placementCode(assigningTo)) && (
+              <Button size="sm" variant="outline" className="bg-background text-destructive hover:text-destructive" onClick={clearPlacement}>
+                Очистить точку
+              </Button>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
