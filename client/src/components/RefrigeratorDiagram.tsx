@@ -130,7 +130,7 @@ export default function RefrigeratorDiagram({
   const maxPlacedShelf = Math.max(0, ...internals.map(l => parsePlacement(l.position)?.shelf ?? 0));
   const [visibleShelves, setVisibleShelves] = useState(Math.max(7, maxPlacedShelf));
   const [localDrawerCount, setLocalDrawerCount] = useState<0 | 1 | 2>(normalizeDrawerCount(drawerCount));
-  const shelfCount = Math.max(1, Math.min(9, Math.max(visibleShelves, maxPlacedShelf)));
+  const shelfCount = Math.max(1, Math.min(9, visibleShelves));
   const effectiveDrawerCount = normalizeDrawerCount(drawerCount ?? localDrawerCount);
   const [assigningTo, setAssigningTo] = useState<Placement | null>(null);
   const isDrawerLevel = (shelf: number) => effectiveDrawerCount > 0 && shelf === shelfCount;
@@ -139,7 +139,9 @@ export default function RefrigeratorDiagram({
     const map = new Map<string, Logger>();
     internals.forEach((logger, idx) => {
       const parsed = parsePlacement(logger.position);
-      const placement = parsed ?? legacyPlacement(logger, idx, Math.max(3, shelfCount));
+      const placement = parsed
+        ? { ...parsed, shelf: Math.min(parsed.shelf, shelfCount) }
+        : legacyPlacement(logger, idx, Math.max(3, shelfCount));
       map.set(placementCode(placement), logger);
     });
     return map;
@@ -192,6 +194,21 @@ export default function RefrigeratorDiagram({
     setLocalDrawerCount(count);
     onDrawerCountChange?.(count);
   };
+  const setLevelCount = (count: number) => {
+    setVisibleShelves(count);
+    internals.forEach(logger => {
+      const parsed = parsePlacement(logger.position);
+      if (parsed && parsed.shelf > count) {
+        updateLogger.mutate({
+          protocolId,
+          loggerId: logger.id,
+          position: placementCode({ ...parsed, shelf: count }) as any,
+          posX: null,
+          posY: null,
+        });
+      }
+    });
+  };
 
   return (
     <div className="w-full select-none space-y-3">
@@ -212,7 +229,7 @@ export default function RefrigeratorDiagram({
                 size="sm"
                 variant={shelfCount === count ? "default" : "outline"}
                 className={shelfCount === count ? "" : "bg-background"}
-                onClick={() => setVisibleShelves(count)}
+                onClick={() => setLevelCount(count)}
               >
                 {count}
               </Button>
