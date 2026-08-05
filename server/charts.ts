@@ -786,6 +786,260 @@ function refrigeratorPositionLabel(sensor: DiagramSensor, idx: number): string {
   }
 }
 
+function drawRefrigeratorDiagramPortalStyle(
+  doc: any,
+  sensors: DiagramSensor[],
+  pageMargin: number,
+  title: string | undefined,
+  badgeMode: "serial" | "position",
+  effectiveDrawerCount: number,
+  shelfCount: number,
+): void {
+  const internals = sensors.filter(s => s.role === "internal");
+  const externals = sensors.filter(s => s.role === "external");
+  const W = 760;
+  const H = 640;
+  const cab = { x: 70, y: 42, w: 420, h: 540, d: 82 };
+  const topGap = 48;
+  const bottomGap = effectiveDrawerCount > 0 ? 68 : 30;
+  const shelfAreaH = cab.h - topGap - bottomGap;
+  const shelfPitch = shelfCount > 1 ? shelfAreaH / (shelfCount - 1) : 0;
+  const zoneEntries: Array<{ code: FridgeZoneCode; x: number; depth: number }> = [
+    { code: "BL", x: 14, depth: 84 },
+    { code: "BC", x: 50, depth: 84 },
+    { code: "BR", x: 86, depth: 84 },
+    { code: "FL", x: 14, depth: 20 },
+    { code: "FC", x: 50, depth: 20 },
+    { code: "FR", x: 86, depth: 20 },
+  ];
+  const isDrawerLevel = (shelf: number) => effectiveDrawerCount > 0 && shelf === shelfCount;
+  const shelfY = (shelf: number) => cab.y + topGap + (shelf - 1) * shelfPitch;
+  const placementCode = (shelf: number, zone: FridgeZoneCode) => `RF:S${shelf}:${zone}`;
+  const project = (shelf: number, zone: FridgeZoneCode) => {
+    const z = zoneEntries.find(item => item.code === zone) ?? zoneEntries[0];
+    const depthShift = (z.depth / 100) * cab.d;
+    return {
+      x: cab.x + (z.x / 100) * cab.w - depthShift * 0.45,
+      y: shelfY(shelf) + depthShift * 0.30,
+    };
+  };
+
+  const slots = Array.from({ length: shelfCount }, (_, shelfIdx) => shelfIdx + 1)
+    .flatMap(shelf => zoneEntries.map(zone => ({ shelf, zone: zone.code })));
+  const placements = new Map<string, { sensor: DiagramSensor; idx: number }>();
+  const fallbackZonePattern: FridgeZoneCode[] = ["BL", "BR", "FC", "FL", "FR", "BC"];
+  const nearestShelf = (rawShelf: number) => Math.max(1, Math.min(shelfCount, Math.round(rawShelf)));
+  const fallbackPlacement = (sensor: DiagramSensor, idx: number): { shelf: number; zone: FridgeZoneCode } => {
+    if (sensor.position === "top") return { shelf: 1, zone: "FC" };
+    if (sensor.position === "middle") return { shelf: nearestShelf(Math.ceil(shelfCount / 2)), zone: "FC" };
+    if (sensor.position === "bottom") return { shelf: shelfCount, zone: "FC" };
+    if (sensor.position === "door") return { shelf: nearestShelf(Math.ceil(shelfCount / 2)), zone: "FR" };
+    const free = slots.find(slot => !placements.has(placementCode(slot.shelf, slot.zone)));
+    if (free) return free;
+    return {
+      shelf: nearestShelf(1 + Math.floor(idx / fallbackZonePattern.length)),
+      zone: fallbackZonePattern[idx % fallbackZonePattern.length],
+    };
+  };
+
+  internals.forEach((sensor, idx) => {
+    const parsed = parseFridgePlacement(sensor.position);
+    const placement = parsed
+      ? { shelf: nearestShelf(parsed.shelf), zone: parsed.zone }
+      : fallbackPlacement(sensor, idx);
+    placements.set(placementCode(placement.shelf, placement.zone), { sensor, idx });
+  });
+
+  const titleH = title ? 34 : 0;
+  const availableW = doc.page.width - pageMargin * 2;
+  const usableH = Math.max(240, doc.page.height - doc.page.margins.bottom - doc.y - titleH - 8);
+  const scale = Math.min(availableW / W, usableH / H, 1);
+  const blockH = titleH + H * scale + 14;
+
+  ensureSpace(doc, blockH);
+
+  if (title) {
+    doc.save();
+    doc.font("bold").fontSize(13).fillColor("#1f2937");
+    doc.text(title, pageMargin, doc.y, { width: doc.page.width - pageMargin * 2, lineBreak: false });
+    doc.restore();
+    doc.y = (doc.y as number) + 10;
+  }
+
+  const originX = pageMargin + Math.max(0, (availableW - W * scale) / 2);
+  const originY = doc.y;
+  const sx = (x: number) => originX + x * scale;
+  const sy = (y: number) => originY + y * scale;
+  const sv = (value: number) => value * scale;
+  const fs = (value: number) => Math.max(4.2, value * scale);
+  const polygon = (points: Array<[number, number]>, fill: string, stroke = "#334155", lineWidth = 1) => {
+    doc.save();
+    doc.lineWidth(sv(lineWidth));
+    doc.polygon(...points.map(([x, y]) => [sx(x), sy(y)]));
+    doc.fillAndStroke(fill, stroke);
+    doc.restore();
+  };
+  const text = (
+    value: string,
+    x: number,
+    y: number,
+    width: number,
+    size: number,
+    color = "#0f172a",
+    font: "body" | "bold" = "body",
+    align: "left" | "center" | "right" = "left",
+  ) => {
+    doc.font(font).fontSize(fs(size)).fillColor(color);
+    doc.text(value, sx(x), sy(y), { width: sv(width), align, lineBreak: false });
+  };
+  const drawCircle = (x: number, y: number, r: number, fill: string, stroke: string, lineWidth = 1, dash = false) => {
+    doc.save();
+    doc.lineWidth(sv(lineWidth)).strokeColor(stroke);
+    if (dash) doc.dash(sv(3), { space: sv(2) });
+    doc.circle(sx(x), sy(y), sv(r)).fillAndStroke(fill, stroke);
+    if (dash) doc.undash();
+    doc.restore();
+  };
+
+  polygon(
+    [
+      [cab.x, cab.y],
+      [cab.x + cab.w, cab.y],
+      [cab.x + cab.w + cab.d * 0.55, cab.y + cab.d * 0.25],
+      [cab.x + cab.d * 0.55, cab.y + cab.d * 0.25],
+    ],
+    "#f8fafc",
+    "#334155",
+    1.8,
+  );
+  polygon(
+    [
+      [cab.x + cab.w, cab.y],
+      [cab.x + cab.w + cab.d * 0.55, cab.y + cab.d * 0.25],
+      [cab.x + cab.w + cab.d * 0.55, cab.y + cab.h + cab.d * 0.25],
+      [cab.x + cab.w, cab.y + cab.h],
+    ],
+    "#e2e8f0",
+    "#334155",
+    1.8,
+  );
+
+  doc.save();
+  doc.lineWidth(sv(2.2));
+  doc.roundedRect(sx(cab.x), sy(cab.y), sv(cab.w), sv(cab.h), sv(5)).fillAndStroke("#f8fafc", "#111827");
+  doc.lineWidth(sv(1.4));
+  doc.roundedRect(sx(cab.x + 18), sy(cab.y + 24), sv(cab.w - 36), sv(cab.h - 42), sv(4)).fillAndStroke("#ffffff", "#94a3b8");
+  doc.restore();
+
+  doc.save();
+  doc.lineWidth(sv(1));
+  doc.roundedRect(sx(cab.x + cab.w * 0.38), sy(cab.y + 42), sv(cab.w * 0.25), sv(30), sv(3)).fillAndStroke("#f1f5f9", "#64748b");
+  for (let i = 0; i < 5; i += 1) {
+    doc.moveTo(sx(cab.x + cab.w * 0.40), sy(cab.y + 49 + i * 5))
+      .lineTo(sx(cab.x + cab.w * 0.61), sy(cab.y + 49 + i * 5))
+      .lineWidth(sv(1.2))
+      .strokeColor("#64748b")
+      .stroke();
+  }
+  doc.restore();
+
+  for (let shelf = 1; shelf <= shelfCount; shelf += 1) {
+    if (isDrawerLevel(shelf)) continue;
+    const y = shelfY(shelf);
+    const frontY = y + cab.d * 0.30;
+    const leftBackX = cab.x + 38;
+    const rightBackX = cab.x + cab.w - 36;
+    const leftFrontX = leftBackX - cab.d * 0.45;
+    const rightFrontX = rightBackX - cab.d * 0.45;
+    polygon(
+      [
+        [leftBackX, y],
+        [rightBackX, y],
+        [rightFrontX, frontY],
+        [leftFrontX, frontY],
+      ],
+      "#f8fafc",
+      "#64748b",
+      1.3,
+    );
+    doc.save();
+    doc.opacity(0.55);
+    doc.moveTo(sx(leftFrontX), sy(frontY + 5))
+      .lineTo(sx(rightFrontX), sy(frontY + 5))
+      .lineWidth(sv(2))
+      .strokeColor("#334155")
+      .stroke();
+    doc.restore();
+    text(String(shelf), cab.x + cab.w + 34, frontY - 7, 20, 12, "#64748b", "bold");
+  }
+
+  if (effectiveDrawerCount === 1) {
+    doc.save();
+    doc.roundedRect(sx(cab.x + 58), sy(cab.y + cab.h - 74), sv(320), sv(46), sv(7)).fillAndStroke("#f8fafc", "#94a3b8");
+    doc.restore();
+    text("Лоток", cab.x + 58, cab.y + cab.h - 47, 320, 11, "#64748b", "bold", "center");
+  } else if (effectiveDrawerCount === 2) {
+    doc.save();
+    doc.roundedRect(sx(cab.x + 58), sy(cab.y + cab.h - 74), sv(150), sv(46), sv(7)).fillAndStroke("#f8fafc", "#94a3b8");
+    doc.roundedRect(sx(cab.x + 228), sy(cab.y + cab.h - 74), sv(150), sv(46), sv(7)).fillAndStroke("#f8fafc", "#94a3b8");
+    doc.restore();
+    text("Лоток", cab.x + 58, cab.y + cab.h - 47, 150, 11, "#64748b", "bold", "center");
+    text("Лоток", cab.x + 228, cab.y + cab.h - 47, 150, 11, "#64748b", "bold", "center");
+  }
+
+  for (let shelf = 1; shelf <= shelfCount; shelf += 1) {
+    for (const zone of zoneEntries) {
+      const p = project(shelf, zone.code);
+      if (!placements.has(placementCode(shelf, zone.code))) {
+        drawCircle(p.x, p.y, 7, "#ffffff", "#94a3b8", 1.2, !zone.code.startsWith("F"));
+      }
+    }
+  }
+
+  placements.forEach(({ sensor, idx }, key) => {
+    const match = key.match(/^RF:S(\d+):(BL|BC|BR|FL|FC|FR)$/);
+    if (!match) return;
+    const p = project(Number(match[1]), match[2] as FridgeZoneCode);
+    const color = sensorBadgeColor(idx);
+    const avg = formatSensorAvg(sensor.avg);
+    const label = badgeMode === "position" ? `T${idx + 1}` : refrigeratorBadgeLabel(sensor);
+    const r = avg ? 16 : 14;
+    drawCircle(p.x, p.y, r, color, "#ffffff", 2.2);
+    text(label, p.x - r, p.y - (avg ? 6.3 : 4.4), r * 2, avg ? 8 : 8.6, "#ffffff", "bold", "center");
+    if (avg) text(`${avg}°C`, p.x - r, p.y + 3.4, r * 2, 6.5, "#ffffff", "bold", "center");
+  });
+
+  const legendX = cab.x + cab.w + 86;
+  const legendY = cab.y + 14;
+  doc.save();
+  doc.roundedRect(sx(legendX), sy(legendY), sv(160), sv(78), sv(8)).fillAndStroke("#ffffff", "#cbd5e1");
+  doc.restore();
+  drawCircle(legendX + 18, legendY + 22, 7, "#2563eb", "#2563eb", 1);
+  text("T — точка измерения", legendX + 34, legendY + 17, 116, 12, "#0f172a");
+  drawCircle(legendX + 18, legendY + 48, 6, "#ffffff", "#94a3b8", 1.2);
+  text("свободная позиция", legendX + 34, legendY + 43, 116, 11, "#64748b");
+
+  externals.forEach((sensor, idx) => {
+    const y = cab.y + 124 + idx * 42;
+    const color = sensorBadgeColor(internals.length + idx);
+    doc.save();
+    doc.moveTo(sx(cab.x + cab.w + 52), sy(y))
+      .lineTo(sx(cab.x + cab.w + 92), sy(y))
+      .lineWidth(sv(1.3))
+      .strokeColor(color)
+      .dash(sv(4), { space: sv(3) })
+      .stroke();
+    doc.undash();
+    doc.restore();
+    drawCircle(cab.x + cab.w + 112, y, 15, color, "#ffffff", 2);
+    text(refrigeratorBadgeLabel(sensor), cab.x + cab.w + 97, y - 4.7, 30, 8, "#ffffff", "bold", "center");
+    text("внешний", cab.x + cab.w + 136, y - 5, 70, 11, "#64748b");
+  });
+
+  doc.y = originY + H * scale + 12;
+  doc.fillColor("#000000");
+}
+
 export function drawRefrigeratorDiagram(
   doc: any,
   sensors: DiagramSensor[],
@@ -804,6 +1058,17 @@ export function drawRefrigeratorDiagram(
   const effectiveDrawerCount = Number.isFinite(rawDrawerCount)
     ? Math.max(0, Math.min(2, Math.round(rawDrawerCount)))
     : 2;
+
+  drawRefrigeratorDiagramPortalStyle(
+    doc,
+    sensors,
+    pageMargin,
+    title,
+    badgeMode,
+    effectiveDrawerCount,
+    shelfCount,
+  );
+  return;
 
   const diagH = 500;
   const cabW = 330;
