@@ -411,7 +411,7 @@ const WAREHOUSE_STAGE_TEMPLATES_EN = {
     purpose:
       "To confirm that the storage room / storage area consistently maintains the specified temperature regime throughout the working volume during the study period, including hot and cold points.",
     description:
-      "During Performance Qualification / Validation (PV), temperature mapping is performed using calibrated data loggers placed across the storage area volume. Temperature is recorded continuously during normal operating conditions.",
+      "During Performance Qualification / Validation (PV), temperature mapping is performed using verified data loggers placed across the storage area volume. Temperature is recorded continuously during normal operating conditions.",
     criteria:
       "All internal loggers shall remain within the specified temperature range throughout the study period. MKT for each internal logger shall also remain within the specified range. Minimum, maximum, average temperature and MKT shall be calculated for each logger, with tabular data and graphical visualization included in the report.",
   },
@@ -2927,7 +2927,7 @@ export const appRouter = router({
   }),
 
   /* -------------------------------------------------------------- */
-  /* Sensors (Calibration Tracking)                                  */
+  /* Sensors (Verification Tracking)                                 */
   /* -------------------------------------------------------------- */
   sensors: router({
     list: protectedProcedure

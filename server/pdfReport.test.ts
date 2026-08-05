@@ -64,7 +64,7 @@ const BASE_GI = {
   basis: "primary",
 };
 
-describe("sensor calibration status in PDF", () => {
+describe("sensor verification status in PDF", () => {
   it("uses the protocol validation date instead of today or the stored sensor status", () => {
     const protocolDate = resolveProtocolReferenceDate(
       "2024-07-15",
@@ -161,7 +161,7 @@ describe("generateProtocolPdf", () => {
           criteria: "Все позиции чек-листа должны иметь положительный ответ.",
           items: [
             { questionIndex: 1, questionText: "Оборудование доставлено в исправном виде", answer: "yes", comment: null },
-            { questionIndex: 2, questionText: "Имеется сертификат калибровки термодатчика", answer: "yes", comment: "К-2024-01" },
+            { questionIndex: 2, questionText: "Имеется свидетельство о поверке термодатчика", answer: "yes", comment: "П-2024-01" },
           ],
           verdict: "pass",
         },

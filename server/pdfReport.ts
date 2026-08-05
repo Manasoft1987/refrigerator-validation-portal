@@ -433,6 +433,27 @@ function answerLabel(answer: string | null | undefined, input?: ReportInput): st
   return ({ yes: "Yes", no: "No", na: "N/A", unset: "—" } as Record<string, string>)[answer || "unset"] || "—";
 }
 
+function verificationTerminology(text: string | null | undefined): string {
+  return String(text ?? "")
+    .replace(/поверку\s*\(калибровку\)/gi, "поверку")
+    .replace(/поверке\s*\/\s*калибровке/gi, "поверке")
+    .replace(/поверки\s*\/\s*калибровки/gi, "поверки")
+    .replace(/поверка\s*\/\s*калибровка/gi, "поверка")
+    .replace(/поверенными\s*\(калиброванными\)/gi, "поверенными")
+    .replace(/поверенных\s*\(калиброванных\)/gi, "поверенных")
+    .replace(/калиброванными\s+датчиками-логгерами/gi, "поверенными датчиками-логгерами")
+    .replace(/калиброванных\s+датчиков-логгеров/gi, "поверенных датчиков-логгеров")
+    .replace(/калиброванных\s+логгеров/gi, "поверенных логгеров")
+    .replace(/калиброванных\s+регистраторов\s+данных/gi, "поверенных регистраторов данных")
+    .replace(/сертификат\s+калибровки/gi, "свидетельство о поверке")
+    .replace(/сертификатов\s+калибровки\s*\/\s*поверки/gi, "свидетельств о поверке")
+    .replace(/сертификатов\s+калибровки\s+или\s+поверки/gi, "свидетельств о поверке")
+    .replace(/Calibration of Measuring Instruments/g, "Metrological Verification of Measuring Instruments")
+    .replace(/calibrated data loggers/gi, "verified data loggers")
+    .replace(/Last calibration date/g, "Last verification date")
+    .replace(/Calibration certificate No\./g, "Verification certificate No.");
+}
+
 function verdictLabelLocal(verdict: "pass" | "fail" | "none", input?: ReportInput): string {
   if (!isEnglishWarehouse(input)) return verdictLabel(verdict);
   if (verdict === "pass") return "Passed";
@@ -1047,8 +1068,8 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
 
   doc.addPage();
   drawCalibrationPage(doc, input.attachments?.some(item => item.includeInPdf !== false && item.includeInPdf !== 0)
-    ? (isEnglishWarehouse(input) ? (input.excursion?.enabled ? "17. Calibration of Measuring Instruments" : "16. Calibration of Measuring Instruments") : (input.excursion?.enabled ? "17. Поверка средств измерений" : "16. Поверка средств измерений"))
-    : (isEnglishWarehouse(input) ? "16. Calibration of Measuring Instruments" : undefined));
+    ? (isEnglishWarehouse(input) ? (input.excursion?.enabled ? "17. Metrological Verification of Measuring Instruments" : "16. Metrological Verification of Measuring Instruments") : (input.excursion?.enabled ? "17. Поверка средств измерений" : "16. Поверка средств измерений"))
+    : (isEnglishWarehouse(input) ? "16. Metrological Verification of Measuring Instruments" : undefined));
 
   /* ---------------- Footer / pagination ---------------- */
   addHeadersAndFooters(doc, input);
@@ -1624,9 +1645,9 @@ function drawStageBlocks(
   input?: ReportInput,
 ) {
   const blocks: Array<[string, string]> = [
-    [enRu(input, "Test objective", "Цель испытания"), stage.purpose],
-    [enRu(input, "Test description", "Описание испытания"), stage.description],
-    [enRu(input, "Acceptance criteria", "Критерии приемлемости"), stage.criteria],
+    [enRu(input, "Test objective", "Цель испытания"), verificationTerminology(stage.purpose)],
+    [enRu(input, "Test description", "Описание испытания"), verificationTerminology(stage.description)],
+    [enRu(input, "Acceptance criteria", "Критерии приемлемости"), verificationTerminology(stage.criteria)],
   ];
   blocks.forEach(([k, v]) => {
     ensureSpace(doc, 60);
@@ -1661,7 +1682,7 @@ function drawChecklistTable(doc: PDFKit.PDFDocument, items: ChecklistItem[], inp
   items.forEach((it, idx) => {
     const padding = 6;
     doc.font("body").fontSize(10);
-    const qText = it.questionText + (it.comment ? `\n${en ? "Comment" : "Комментарий"}: ${it.comment}` : "");
+    const qText = verificationTerminology(it.questionText) + (it.comment ? `\n${en ? "Comment" : "Комментарий"}: ${it.comment}` : "");
     const qH = doc.heightOfString(qText, { width: qW - 12 });
     const rowH = Math.max(22, qH + padding * 2);
     ensureSpace(doc, rowH);
@@ -1782,7 +1803,7 @@ function drawStageVerdict(
     bd = "#fecaca";
     fg = "#991b1b";
     const list = noItems
-      .map((it, i) => `${i + 1}. ${it.questionText}${it.comment ? ` (${it.comment})` : ""}`)
+      .map((it, i) => `${i + 1}. ${verificationTerminology(it.questionText)}${it.comment ? ` (${it.comment})` : ""}`)
       .join("\n");
     text = en
       ? `The ${name} stage failed. Non-conformities were identified:\n${list || "—"}`
@@ -2595,7 +2616,8 @@ function drawChecklistPlan(doc: PDFKit.PDFDocument, items: ChecklistItem[], inpu
   items.forEach((it, idx) => {
     const padding = 6;
     doc.font("body").fontSize(10);
-    const qH = doc.heightOfString(it.questionText, { width: qW - 12 });
+    const questionText = verificationTerminology(it.questionText);
+    const qH = doc.heightOfString(questionText, { width: qW - 12 });
     const rowH = Math.max(22, qH + padding * 2);
     ensureSpace(doc, rowH);
     const ry = doc.y;
@@ -2621,7 +2643,7 @@ function drawChecklistPlan(doc: PDFKit.PDFDocument, items: ChecklistItem[], inpu
       .fillColor("#1f2937")
       .font("body")
       .fontSize(10)
-      .text(it.questionText, left + numW + 6, ry + padding, { width: qW - 12 });
+      .text(questionText, left + numW + 6, ry + padding, { width: qW - 12 });
     doc.y = ry + rowH;
   });
   doc.moveDown(0.4);
@@ -3581,7 +3603,7 @@ function drawChartExplanation(doc: PDFKit.PDFDocument, text: string) {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Calibration / Verification Page                                            */
+/* Metrological Verification Page                                             */
 /* -------------------------------------------------------------------------- */
 function drawCalibrationPage(doc: PDFKit.PDFDocument, title = "16. Поверка средств измерений") {
   const left = PAGE_MARGIN;
@@ -3600,7 +3622,7 @@ function drawCalibrationPage(doc: PDFKit.PDFDocument, title = "16. Поверк�
     .fillColor(ACCENT)
     .text(
       "Средства измерений (датчики температуры), применённые при проведении квалификации, " +
-      "прошли метрологическую поверку (калибровку) в аккредитованной лаборатории. " +
+      "прошли метрологическую поверку в аккредитованной лаборатории. " +
       "Сведения о текущей поверке и дате следующей поверки доступны по QR-коду, " +
       "размещённому ниже.",
       left,
@@ -3680,7 +3702,7 @@ function drawCalibrationPage(doc: PDFKit.PDFDocument, title = "16. Поверк�
     .font("bold")
     .fontSize(9)
     .fillColor(ACCENT)
-    .text("Запрос сертификатов калибровки / поверки", left + boxPad, boxY + boxPad, {
+    .text("Запрос свидетельств о поверке", left + boxPad, boxY + boxPad, {
       width: contentW - boxPad * 2,
     });
   doc.moveDown(0.4);
@@ -3689,7 +3711,7 @@ function drawCalibrationPage(doc: PDFKit.PDFDocument, title = "16. Поверк�
     .fontSize(9)
     .fillColor(ACCENT)
     .text(
-      "Для получения оригиналов сертификатов калибровки или поверки средств измерений " +
+      "Для получения оригиналов свидетельств о поверке средств измерений " +
       "необходимо направить официальный запрос по телефону:",
       left + boxPad,
       doc.y,
@@ -4895,8 +4917,8 @@ e) to define or confirm monitoring sensor placement points.`,
 Measurement range: [specify]
 Accuracy: ±[specify] °C
 Recording interval: [specify] minutes
-Last calibration date: [specify]
-Calibration certificate No.: [specify]`,
+Last verification date: [specify]
+Verification certificate No.: [specify]`,
 
   "6.2": `Person responsible for temperature mapping: [full name, position]
 Performers: [list full names and positions]`,
@@ -5097,7 +5119,7 @@ function drawSubTitle2(doc: PDFKit.PDFDocument, title: string): void {
 
 
 /**
- * Draw table with sensor information (number, calibration date, next calibration date)
+ * Draw table with sensor information (number, verification date, next verification date)
  */
 function drawSensorTable(
   doc: PDFKit.PDFDocument,
