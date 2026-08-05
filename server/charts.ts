@@ -843,6 +843,8 @@ export function drawRefrigeratorDiagram(
   // Door strip
   const doorW = 48;
   const doorX = cabX + cabW - doorW;
+  const shelfDepthX = 22;
+  const shelfDepthY = 14;
 
   // Shelf Y positions
   const drawerReserve = effectiveDrawerCount > 0 ? 58 : 22;
@@ -852,6 +854,20 @@ export function drawRefrigeratorDiagram(
 
   // --- Outer refrigerator body (insulated walls) ---
   doc.save();
+  // Subtle 3D top/right faces make the PDF drawing read like a cabinet,
+  // not like a flat placeholder rectangle.
+  doc.polygon(
+    [outerX, outerY],
+    [outerX + outerW, outerY],
+    [outerX + outerW + wallT * 1.8, outerY + wallT * 0.9],
+    [outerX + wallT * 1.8, outerY + wallT * 0.9],
+  ).fill("#f8fafc").strokeColor("#94a3b8").lineWidth(0.8).stroke();
+  doc.polygon(
+    [outerX + outerW, outerY],
+    [outerX + outerW + wallT * 1.8, outerY + wallT * 0.9],
+    [outerX + outerW + wallT * 1.8, outerY + outerH + wallT * 0.9],
+    [outerX + outerW, outerY + outerH],
+  ).fill("#dbeafe").strokeColor("#94a3b8").lineWidth(0.8).stroke();
   doc.roundedRect(outerX, outerY, outerW, outerH, 6).fill("#e2e8f0");
   doc.roundedRect(outerX, outerY, outerW, outerH, 6).lineWidth(1.5).strokeColor("#64748b").stroke();
   // Label: outer body
@@ -871,14 +887,27 @@ export function drawRefrigeratorDiagram(
   // Door handle
   doc.roundedRect(doorX + doorW - 8, cabY + cabH * 0.35, 4, cabH * 0.3, 2).fill("#94a3b8");
 
-  // Shelves (dashed)
-  doc.lineWidth(1).strokeColor("#cbd5e1").dash(5, { space: 3 });
+  // Shelves as light 3D planes instead of dashed guide lines.
   for (let shelf = 1; shelf <= shelfCount; shelf += 1) {
     if (isDrawerLevel(shelf)) continue;
     const y = shelfY(shelf);
-    doc.moveTo(cabX + 4, y).lineTo(doorX - 4, y).stroke();
+    const leftBackX = cabX + 26;
+    const rightBackX = doorX - 14;
+    const leftFrontX = leftBackX - shelfDepthX;
+    const rightFrontX = rightBackX - shelfDepthX;
+    const frontY = y + shelfDepthY;
+    doc.polygon(
+      [leftBackX, y],
+      [rightBackX, y],
+      [rightFrontX, frontY],
+      [leftFrontX, frontY],
+    ).fill("#ffffff").strokeColor("#94a3b8").lineWidth(0.8).stroke();
+    doc.moveTo(leftFrontX, frontY + 3)
+      .lineTo(rightFrontX, frontY + 3)
+      .strokeColor("#64748b")
+      .lineWidth(1.1)
+      .stroke();
   }
-  doc.undash();
 
   // Shelf labels
   doc.font("body").fontSize(9).fillColor("#94a3b8");
@@ -949,18 +978,32 @@ export function drawRefrigeratorDiagram(
     }
 
     const innerW = doorX - cabX - 8;
-    const bx = cabX + (pctX / 100) * innerW;
-    const by = cabY + (pctY / 100) * cabH;
+    const frontOffsetX = rf && rf.zone.startsWith("F") ? -shelfDepthX : 0;
+    const frontOffsetY = rf && rf.zone.startsWith("F") ? shelfDepthY : 0;
+    const bx = cabX + (pctX / 100) * innerW + frontOffsetX;
+    const by = cabY + (pctY / 100) * cabH + frontOffsetY;
 
     doc.save();
-    doc.roundedRect(bx - BADGE_W / 2, by - BADGE_H / 2, BADGE_W, BADGE_H, 3).fill(color);
-    doc.roundedRect(bx - BADGE_W / 2, by - BADGE_H / 2, BADGE_W, BADGE_H, 3).lineWidth(1.5).strokeColor("white").stroke();
+    const radius = showAvgInBadges ? 20 : 14;
+    doc.circle(bx, by, radius + 2.5).fill("#ffffff");
+    doc.circle(bx, by, radius).fill(color);
+    doc.circle(bx, by, radius).lineWidth(1.5).strokeColor("white").stroke();
     doc.font("bold").fontSize(badgeFontSize).fillColor("white");
-    doc.text(name, bx - BADGE_W / 2, by - badgeFontSize / 2, {
-      width: BADGE_W,
-      align: "center",
-      lineBreak: false,
-    });
+    if (showAvgInBadges) {
+      const avg = formatSensorAvg(s.avg);
+      const base = refrigeratorBadgeLabel(s);
+      doc.text(base, bx - radius, by - 9, { width: radius * 2, align: "center", lineBreak: false });
+      if (avg) {
+        doc.font("bold").fontSize(6.6).fillColor("white");
+        doc.text(`${avg}°C`, bx - radius, by + 3, { width: radius * 2, align: "center", lineBreak: false });
+      }
+    } else {
+      doc.text(name, bx - radius, by - badgeFontSize / 2, {
+        width: radius * 2,
+        align: "center",
+        lineBreak: false,
+      });
+    }
     doc.restore();
   });
 
@@ -978,14 +1021,26 @@ export function drawRefrigeratorDiagram(
     doc.undash();
 
     const badgeCx = extStartX + 8 + BADGE_W / 2;
-    doc.roundedRect(badgeCx - BADGE_W / 2, ey - BADGE_H / 2, BADGE_W, BADGE_H, 3).fill(color);
-    doc.roundedRect(badgeCx - BADGE_W / 2, ey - BADGE_H / 2, BADGE_W, BADGE_H, 3).lineWidth(1.5).strokeColor("white").stroke();
+    const radius = showAvgInBadges ? 20 : 14;
+    doc.circle(badgeCx, ey, radius + 2.5).fill("#ffffff");
+    doc.circle(badgeCx, ey, radius).fill(color);
+    doc.circle(badgeCx, ey, radius).lineWidth(1.5).strokeColor("white").stroke();
     doc.font("bold").fontSize(badgeFontSize).fillColor("white");
-    doc.text(name, badgeCx - BADGE_W / 2, ey - badgeFontSize / 2, {
-      width: BADGE_W,
-      align: "center",
-      lineBreak: false,
-    });
+    if (showAvgInBadges) {
+      const avg = formatSensorAvg(s.avg);
+      const base = refrigeratorBadgeLabel(s);
+      doc.text(base, badgeCx - radius, ey - 9, { width: radius * 2, align: "center", lineBreak: false });
+      if (avg) {
+        doc.font("bold").fontSize(6.6).fillColor("white");
+        doc.text(`${avg}°C`, badgeCx - radius, ey + 3, { width: radius * 2, align: "center", lineBreak: false });
+      }
+    } else {
+      doc.text(name, badgeCx - radius, ey - badgeFontSize / 2, {
+        width: radius * 2,
+        align: "center",
+        lineBreak: false,
+      });
+    }
     doc.font("body").fontSize(8).fillColor("#64748b");
     doc.text("Внешний", badgeCx - BADGE_W / 2, ey + BADGE_H / 2 + 3, {
       width: BADGE_W,
