@@ -454,6 +454,24 @@ function verificationTerminology(text: string | null | undefined): string {
     .replace(/Calibration certificate No\./g, "Verification certificate No.");
 }
 
+function refrigeratorIqTerminology(text: string | null | undefined, input?: ReportInput): string {
+  const value = String(text ?? "");
+  if (getReportEquipmentType(input) !== "refrigerator") return value;
+  return value
+    .replace(
+      "Подтвердить, что холодильное оборудование смонтировано и установлено в соответствии с проектной, нормативной и эксплуатационной документацией, а также соответствует требованиям производителя и условиям предполагаемого использования.",
+      "Подтвердить, что холодильное оборудование как готовое изделие идентифицировано, укомплектовано, размещено в месте эксплуатации, подключено к электропитанию и находится в состоянии, пригодном для дальнейшей квалификации, в соответствии с эксплуатационной документацией производителя, требованиями пользователя и условиями предполагаемого использования.",
+    )
+    .replace(
+      "В ходе квалификации монтажа (IQ) проверяется наличие идентификационных бирок и сопроводительной документации, комплектность оборудования, корректность подключения к инженерным сетям, а также соответствие места установки требованиям эксплуатации и проектной документации.",
+      "В ходе квалификации монтажа (IQ) проверяется наличие идентификационных бирок и сопроводительной документации, комплектность и внешнее состояние оборудования, корректность размещения в выбранном месте эксплуатации, подключение к электропитанию, а также соответствие условий установки требованиям эксплуатационной документации производителя.",
+    )
+    .replace(
+      "Оборудование установлено, подключено и соответствует требованиям проектной, нормативной и эксплуатационной документации.",
+      "Оборудование идентифицировано, укомплектовано, размещено в месте эксплуатации, подключено к электропитанию и пригодно для дальнейшей квалификации в соответствии с эксплуатационной документацией производителя и требованиями пользователя.",
+    );
+}
+
 function verdictLabelLocal(verdict: "pass" | "fail" | "none", input?: ReportInput): string {
   if (!isEnglishWarehouse(input)) return verdictLabel(verdict);
   if (verdict === "pass") return "Passed";
@@ -1645,9 +1663,9 @@ function drawStageBlocks(
   input?: ReportInput,
 ) {
   const blocks: Array<[string, string]> = [
-    [enRu(input, "Test objective", "Цель испытания"), verificationTerminology(stage.purpose)],
-    [enRu(input, "Test description", "Описание испытания"), verificationTerminology(stage.description)],
-    [enRu(input, "Acceptance criteria", "Критерии приемлемости"), verificationTerminology(stage.criteria)],
+    [enRu(input, "Test objective", "Цель испытания"), refrigeratorIqTerminology(verificationTerminology(stage.purpose), input)],
+    [enRu(input, "Test description", "Описание испытания"), refrigeratorIqTerminology(verificationTerminology(stage.description), input)],
+    [enRu(input, "Acceptance criteria", "Критерии приемлемости"), refrigeratorIqTerminology(verificationTerminology(stage.criteria), input)],
   ];
   blocks.forEach(([k, v]) => {
     ensureSpace(doc, 60);
@@ -1749,7 +1767,7 @@ function drawStageVerdict(
       ? "All acceptance criteria are met. Installation Qualification (IQ) has been completed successfully. The storage area and supporting systems meet the protocol requirements."
       : "Все критерии приемлемости выполнены. Квалификация монтажа (IQ) пройдена успешно. " +
         "Оборудование установлено, подключено и соответствует требованиям проектной, нормативной и эксплуатационной документации.";
-  const sampleH = Math.max(60, doc.heightOfString(longestSample, { width: doc.page.width - PAGE_MARGIN * 2 - 28 }) + 28);
+  const sampleH = Math.max(60, doc.heightOfString(refrigeratorIqTerminology(longestSample, input), { width: doc.page.width - PAGE_MARGIN * 2 - 28 }) + 28);
   ensureSpace(doc, titleH + 8 + sampleH);
   doc.fillColor(ACCENT).font("bold").fontSize(12).text(
     verdictTitle,
@@ -1809,6 +1827,8 @@ function drawStageVerdict(
       ? `The ${name} stage failed. Non-conformities were identified:\n${list || "—"}`
       : `Этап ${name} не пройден. Выявлены несоответствия:\n${list || "—"}`;
   }
+
+  text = refrigeratorIqTerminology(text, input);
 
   const padding = 14;
   doc.font("body").fontSize(10);
