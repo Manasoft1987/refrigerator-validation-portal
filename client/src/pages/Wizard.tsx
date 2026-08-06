@@ -70,7 +70,7 @@ export default function Wizard() {
   );
 
   const p = protocolQ.data;
-  const protocolEquipmentType = p?.customEquipmentName === "__equipmentType:chamber" ? "chamber" : p?.equipmentType;
+  const protocolEquipmentType = giQ.data?.equipmentType || (p?.customEquipmentName === "__equipmentType:chamber" ? "chamber" : p?.equipmentType);
   const isWarehouse = isWarehouseLike(protocolEquipmentType);
   const isWarehouseByEaeu = isWarehouseEaeu(protocolEquipmentType);
   const isAutoRefrigerator = protocolEquipmentType === "auto-refrigerator";

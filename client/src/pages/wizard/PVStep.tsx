@@ -67,7 +67,7 @@ export default function PVStep({
   const utils = trpc.useUtils();
   const giQ = trpc.generalInfo.get.useQuery({ protocolId });
   const protocolQ = trpc.protocols.get.useQuery({ id: protocolId });
-  const equipmentType = protocolQ.data?.equipmentType ?? "refrigerator";
+  const equipmentType = giQ.data?.equipmentType || protocolQ.data?.equipmentType || "refrigerator";
   const isWarehouse = isWarehouseLike(equipmentType);
   const isWarehouseByEaeu = isWarehouseEaeu(equipmentType);
   const isThermalContainer = equipmentType === "thermal-container";
