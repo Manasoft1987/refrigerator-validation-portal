@@ -17,7 +17,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import { ArrowLeft, Camera, FileImage, Info, MapPin, Save, Trash2, Upload, Wand2 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useParams, useLocation } from "wouter";
 import { toPng } from "html-to-image";
@@ -242,6 +242,26 @@ export default function SensorPlacementPage() {
 
   const session = pvQ.data?.session;
   const loggers = pvQ.data?.loggers ?? [];
+  const refrigeratorCriticalLoggers = useMemo(() => {
+    let hotLoggerId: number | null = null;
+    let coldLoggerId: number | null = null;
+    let hotAvg = -Infinity;
+    let coldMin = Infinity;
+    for (const logger of loggers as any[]) {
+      if (logger.role !== "internal") continue;
+      const avg = readNumber(logger.avgVal);
+      const min = readNumber(logger.minVal);
+      if (avg !== null && avg > hotAvg) {
+        hotAvg = avg;
+        hotLoggerId = logger.id;
+      }
+      if (min !== null && min < coldMin) {
+        coldMin = min;
+        coldLoggerId = logger.id;
+      }
+    }
+    return { hotLoggerId, coldLoggerId };
+  }, [loggers]);
   const protocolQ = trpc.protocols.get.useQuery({ id: protocolId });
   const giQ = trpc.generalInfo.get.useQuery({ protocolId });
   const protocolEquipmentType = protocolQ.data?.customEquipmentName === "__equipmentType:chamber" ? "chamber" : protocolQ.data?.equipmentType;
@@ -789,6 +809,8 @@ export default function SensorPlacementPage() {
               onLevelCountChange={handleRefrigeratorLevelCountChange}
               drawerCount={refrigeratorDrawerCount}
               onDrawerCountChange={handleRefrigeratorDrawerCountChange}
+              hotLoggerId={refrigeratorCriticalLoggers.hotLoggerId}
+              coldLoggerId={refrigeratorCriticalLoggers.coldLoggerId}
             />
           </CardContent>
         </Card>

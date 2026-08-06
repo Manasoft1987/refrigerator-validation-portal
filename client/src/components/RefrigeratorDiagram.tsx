@@ -19,6 +19,7 @@ type Logger = {
   position?: string | null;
   posX?: string | number | null;
   posY?: string | number | null;
+  minVal?: string | number | null;
   avgVal?: string | number | null;
 };
 
@@ -30,6 +31,8 @@ type Props = {
   onLevelCountChange?: (count: number) => void;
   drawerCount?: number | null;
   onDrawerCountChange?: (count: number) => void;
+  hotLoggerId?: number | null;
+  coldLoggerId?: number | null;
 };
 
 type ZoneCode = "BL" | "BC" | "BR" | "FL" | "FC" | "FR";
@@ -70,6 +73,18 @@ function avgLabel(logger: Logger): string | null {
   const n = typeof raw === "number" ? raw : Number(String(raw).replace(",", "."));
   if (!Number.isFinite(n)) return null;
   return n.toFixed(1).replace(".", ",") + "°C";
+}
+
+function starPoints(cx: number, cy: number, outer: number, inner = outer * 0.42): string {
+  return Array.from({ length: 10 }, (_, i) => {
+    const angle = (i * Math.PI) / 5 - Math.PI / 2;
+    const r = i % 2 === 0 ? outer : inner;
+    return `${cx + Math.cos(angle) * r},${cy + Math.sin(angle) * r}`;
+  }).join(" ");
+}
+
+function diamondPoints(cx: number, cy: number, size: number): string {
+  return `${cx},${cy - size} ${cx + size},${cy} ${cx},${cy + size} ${cx - size},${cy}`;
 }
 
 function parsePlacement(position: string | null | undefined): Placement | null {
@@ -130,6 +145,8 @@ export default function RefrigeratorDiagram({
   onLevelCountChange,
   drawerCount,
   onDrawerCountChange,
+  hotLoggerId,
+  coldLoggerId,
 }: Props) {
   const utils = trpc.useUtils();
   const updateLogger = trpc.pv.updateLogger.useMutation({
@@ -342,6 +359,7 @@ export default function RefrigeratorDiagram({
               const color = logger ? colorFor(loggerIdx) : "#94a3b8";
               const label = logger ? badgeLabel(logger) : "";
               const avg = logger ? avgLabel(logger) : null;
+              const criticalKind = logger?.id === hotLoggerId ? "hot" : logger?.id === coldLoggerId ? "cold" : null;
               const isFront = zone.code.startsWith("F");
               return (
                 <g
@@ -354,6 +372,36 @@ export default function RefrigeratorDiagram({
                   )}
                   {logger && (
                     <>
+                      {criticalKind && (
+                        <>
+                          <circle
+                            cx={p.x}
+                            cy={p.y}
+                            r={18.8}
+                            fill="none"
+                            stroke={criticalKind === "hot" ? "#ef4444" : "#2563eb"}
+                            strokeWidth={2.6}
+                            pointerEvents="none"
+                          />
+                          {criticalKind === "hot" ? (
+                            <polygon
+                              points={starPoints(p.x + 20, p.y - 20, 7)}
+                              fill="#ef4444"
+                              stroke="#ffffff"
+                              strokeWidth={1.3}
+                              pointerEvents="none"
+                            />
+                          ) : (
+                            <polygon
+                              points={diamondPoints(p.x + 20, p.y - 20, 7)}
+                              fill="#2563eb"
+                              stroke="#ffffff"
+                              strokeWidth={1.3}
+                              pointerEvents="none"
+                            />
+                          )}
+                        </>
+                      )}
                       <circle cx={p.x} cy={p.y} r={16} fill={color} stroke="white" strokeWidth={2.2} />
                       <text x={p.x} y={p.y - (avg ? 1 : -4)} textAnchor="middle" fontSize={8} fontWeight={800} fill="white" pointerEvents="none">
                         {label}
@@ -372,11 +420,15 @@ export default function RefrigeratorDiagram({
 
           {/* Legend */}
           <g transform={`translate(${cab.x + cab.w + 86}, ${cab.y + 14})`}>
-            <rect x={0} y={0} width={160} height={78} rx={8} fill="#ffffff" stroke="#cbd5e1" />
+            <rect x={0} y={0} width={160} height={126} rx={8} fill="#ffffff" stroke="#cbd5e1" />
             <circle cx={18} cy={22} r={7} fill="#2563eb" />
             <text x={34} y={26} fontSize={12} fill="#0f172a">T — точка измерения</text>
             <circle cx={18} cy={48} r={6} fill="#ffffff" stroke="#94a3b8" strokeWidth={1.2} />
             <text x={34} y={52} fontSize={11} fill="#64748b">свободная позиция</text>
+            <polygon points={starPoints(18, 74, 6)} fill="#ef4444" stroke="#ffffff" strokeWidth={1.1} />
+            <text x={34} y={78} fontSize={11} fill="#64748b">{"\u0433\u043e\u0440\u044f\u0447\u0430\u044f \u0442\u043e\u0447\u043a\u0430"}</text>
+            <polygon points={diamondPoints(18, 100, 6)} fill="#2563eb" stroke="#ffffff" strokeWidth={1.1} />
+            <text x={34} y={104} fontSize={11} fill="#64748b">{"\u0445\u043e\u043b\u043e\u0434\u043d\u0430\u044f \u0442\u043e\u0447\u043a\u0430"}</text>
           </g>
 
           {externals.map((logger, idx) => {

@@ -786,6 +786,22 @@ function refrigeratorPositionLabel(sensor: DiagramSensor, idx: number): string {
   }
 }
 
+function sensorMatchesCriticalLabel(sensor: DiagramSensor, criticalLabel?: string | null): boolean {
+  if (!criticalLabel) return false;
+  const wanted = String(criticalLabel).trim();
+  if (!wanted) return false;
+  const candidates = [
+    sensor.label,
+    sensor.customName,
+    refrigeratorBadgeLabel(sensor),
+    shortLabelStr(sensor.label),
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .map(value => value.trim())
+    .filter(Boolean);
+  return candidates.some(value => value === wanted);
+}
+
 function drawRefrigeratorDiagramPortalStyle(
   doc: any,
   sensors: DiagramSensor[],
@@ -794,6 +810,8 @@ function drawRefrigeratorDiagramPortalStyle(
   badgeMode: "serial" | "position",
   effectiveDrawerCount: number,
   shelfCount: number,
+  hotLabel?: string | null,
+  coldLabel?: string | null,
 ): void {
   const internals = sensors.filter(s => s.role === "internal");
   const externals = sensors.filter(s => s.role === "external");
@@ -1003,21 +1021,53 @@ function drawRefrigeratorDiagramPortalStyle(
     const color = sensorBadgeColor(idx);
     const avg = formatSensorAvg(sensor.avg);
     const label = badgeMode === "position" ? `T${idx + 1}` : refrigeratorBadgeLabel(sensor);
+    const isCriticalHot = sensorMatchesCriticalLabel(sensor, hotLabel);
+    const isCriticalCold = sensorMatchesCriticalLabel(sensor, coldLabel);
+    const isCritical = isCriticalHot || isCriticalCold;
     const r = avg ? 16 : 14;
+    if (isCritical) {
+      doc.save();
+      doc.strokeColor("#ffffff").lineWidth(sv(1.4));
+      if (isCriticalHot) {
+        drawStar(doc, sx(p.x + r + 4), sy(p.y - r - 4), sv(7), "#ef4444");
+      } else {
+        drawDiamond(doc, sx(p.x + r + 4), sy(p.y - r - 4), sv(7), "#2563eb");
+      }
+      doc.restore();
+    }
     drawCircle(p.x, p.y, r, color, "#ffffff", 2.2);
+    if (isCritical) {
+      doc.save();
+      doc.circle(sx(p.x), sy(p.y), sv(r + 2.5))
+        .lineWidth(sv(2.2))
+        .strokeColor(isCriticalHot ? "#ef4444" : "#2563eb")
+        .stroke();
+      doc.restore();
+    }
     text(label, p.x - r, p.y - (avg ? 6.3 : 4.4), r * 2, avg ? 8 : 8.6, "#ffffff", "bold", "center");
     if (avg) text(`${avg}°C`, p.x - r, p.y + 3.4, r * 2, 6.5, "#ffffff", "bold", "center");
   });
 
   const legendX = cab.x + cab.w + 86;
   const legendY = cab.y + 14;
+  const showCriticalLegend = Boolean(hotLabel || coldLabel);
   doc.save();
-  doc.roundedRect(sx(legendX), sy(legendY), sv(160), sv(78), sv(8)).fillAndStroke("#ffffff", "#cbd5e1");
+  doc.roundedRect(sx(legendX), sy(legendY), sv(160), sv(showCriticalLegend ? 126 : 78), sv(8)).fillAndStroke("#ffffff", "#cbd5e1");
   doc.restore();
   drawCircle(legendX + 18, legendY + 22, 7, "#2563eb", "#2563eb", 1);
   text("T — точка измерения", legendX + 34, legendY + 17, 116, 12, "#0f172a");
   drawCircle(legendX + 18, legendY + 48, 6, "#ffffff", "#94a3b8", 1.2);
   text("свободная позиция", legendX + 34, legendY + 43, 116, 11, "#64748b");
+
+  if (showCriticalLegend) {
+    doc.save();
+    doc.strokeColor("#ffffff").lineWidth(sv(1.2));
+    drawStar(doc, sx(legendX + 18), sy(legendY + 74), sv(6), "#ef4444");
+    drawDiamond(doc, sx(legendX + 18), sy(legendY + 100), sv(6), "#2563eb");
+    doc.restore();
+    text("\u0433\u043e\u0440\u044f\u0447\u0430\u044f \u0442\u043e\u0447\u043a\u0430", legendX + 34, legendY + 69, 116, 11, "#64748b");
+    text("\u0445\u043e\u043b\u043e\u0434\u043d\u0430\u044f \u0442\u043e\u0447\u043a\u0430", legendX + 34, legendY + 95, 116, 11, "#64748b");
+  }
 
   externals.forEach((sensor, idx) => {
     const y = cab.y + 124 + idx * 42;
@@ -1050,6 +1100,8 @@ export function drawRefrigeratorDiagram(
   badgeMode: "serial" | "position" = "serial",
   drawerCount: number | null = 2,
   levelCount: number | null = null,
+  hotLabel?: string | null,
+  coldLabel?: string | null,
 ): void {
   const internals = sensors.filter(s => s.role === "internal");
   const externals = sensors.filter(s => s.role === "external");
@@ -1067,6 +1119,8 @@ export function drawRefrigeratorDiagram(
     badgeMode,
     effectiveDrawerCount,
     shelfCount,
+    hotLabel,
+    coldLabel,
   );
   return;
 
