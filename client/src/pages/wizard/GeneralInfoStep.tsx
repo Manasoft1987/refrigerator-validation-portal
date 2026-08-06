@@ -138,7 +138,8 @@ export default function GeneralInfoStep({
   const isWarehouseByEaeu = isWarehouseEaeu(form.equipmentType);
   const isThermalContainer = form.equipmentType === "thermal-container";
   const standardTempModes = TEMP_MODES.filter(m => m.id !== "custom");
-  const tempModesForEquipment = form.equipmentType === "refrigerator"
+  const supportsCustomTempMode = form.equipmentType === "refrigerator" || form.equipmentType === "freezer";
+  const tempModesForEquipment = supportsCustomTempMode
     ? TEMP_MODES
     : form.equipmentType === "chamber"
       ? standardTempModes.filter(m => m.id !== "15-25")
@@ -148,10 +149,10 @@ export default function GeneralInfoStep({
     if (form.equipmentType === "chamber" && form.tempMode === "15-25") {
       setForm((prev: any) => ({ ...prev, tempMode: "2-8" }));
     }
-    if (form.equipmentType !== "refrigerator" && form.tempMode === "custom") {
+    if (!supportsCustomTempMode && form.tempMode === "custom") {
       setForm((prev: any) => ({ ...prev, tempMode: "2-8", customMin: "", customMax: "" }));
     }
-  }, [form.equipmentType, form.tempMode]);
+  }, [form.equipmentType, form.tempMode, supportsCustomTempMode]);
 
   const parseCustomRangeNumber = (value: unknown) => {
     const text = String(value ?? "").trim().replace(",", ".");
@@ -562,7 +563,7 @@ export default function GeneralInfoStep({
                 </SelectContent>
               </Select>
             </Field>
-            {form.equipmentType === "refrigerator" && form.tempMode === "custom" && (
+            {supportsCustomTempMode && form.tempMode === "custom" && (
               <div className="md:col-span-2 grid md:grid-cols-2 gap-4 rounded-lg border border-blue-200 bg-blue-50/40 p-4">
                 <Field label="Минимум произвольного режима, °C">
                   <Input

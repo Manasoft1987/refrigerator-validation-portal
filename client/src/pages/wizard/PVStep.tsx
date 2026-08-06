@@ -71,7 +71,7 @@ export default function PVStep({
   const isWarehouse = isWarehouseLike(equipmentType);
   const isWarehouseByEaeu = isWarehouseEaeu(equipmentType);
   const isThermalContainer = equipmentType === "thermal-container";
-  const tempModesForPV = equipmentType === "refrigerator"
+  const tempModesForPV = equipmentType === "refrigerator" || equipmentType === "freezer"
     ? TEMP_MODES
     : TEMP_MODES.filter(m => m.id !== "custom");
   const thermalModes = ((giQ.data?.thermalContainerConfig as any)?.selectedModes || [giQ.data?.tempMode || "2-8"]) as string[];

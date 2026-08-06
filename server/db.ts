@@ -664,6 +664,7 @@ export async function getProtocol(userId: number, protocolId: number) {
 
 type ProtocolEquipmentTypeCode =
   | "refrigerator"
+  | "freezer"
   | "auto-refrigerator"
   | "chamber"
   | "thermal-container"
@@ -690,6 +691,8 @@ export function protocolObjectCode(equipmentType: ProtocolEquipmentTypeCode): st
       return "STR";
     case "refrigerator":
       return "REF";
+    case "freezer":
+      return "FRZ";
     default:
       return "EQP";
   }
@@ -893,10 +896,15 @@ export async function ensureThermalContainerStorage() {
     ));
     const protocolRows = (protocolColumnResult as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
     const protocolType = String(protocolRows?.[0]?.Type ?? protocolRows?.[0]?.type ?? "");
-    if (!protocolType.includes("'thermal-container'") || !protocolType.includes("'computerized-system'") || !protocolType.includes("'warehouse-expert'")) {
+    if (
+      !protocolType.includes("'freezer'") ||
+      !protocolType.includes("'thermal-container'") ||
+      !protocolType.includes("'computerized-system'") ||
+      !protocolType.includes("'warehouse-expert'")
+    ) {
       await db.execute(sql.raw(
         "ALTER TABLE protocols MODIFY COLUMN equipmentType " +
-        "enum('refrigerator','auto-refrigerator','thermal-container','computerized-system','warehouse','warehouse-expert','other') " +
+        "enum('refrigerator','freezer','auto-refrigerator','thermal-container','computerized-system','warehouse','warehouse-expert','other') " +
         "DEFAULT 'refrigerator'",
       ));
     }
@@ -1384,6 +1392,7 @@ export async function ensureChamberQuestionTemplateStorage(
     const rows = (result as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
     const columnType = String(rows?.[0]?.Type ?? rows?.[0]?.type ?? "");
     if (
+      columnType.includes("'freezer'") &&
       columnType.includes("'chamber'") &&
       columnType.includes("'thermal-container'") &&
       columnType.includes("'computerized-system'") &&
@@ -1392,7 +1401,7 @@ export async function ensureChamberQuestionTemplateStorage(
 
     await db.execute(sql.raw(
       "ALTER TABLE questionTemplates MODIFY COLUMN equipmentType " +
-        "enum('refrigerator','auto-refrigerator','chamber','thermal-container','computerized-system','warehouse','warehouse-expert','other') " +
+        "enum('refrigerator','freezer','auto-refrigerator','chamber','thermal-container','computerized-system','warehouse','warehouse-expert','other') " +
       "NOT NULL DEFAULT 'refrigerator'",
     ));
 

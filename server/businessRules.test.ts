@@ -28,6 +28,7 @@ describe("protocol number format", () => {
   it("matches VAL-{OBJECT}-{YYYY}-{###} for new protocols", () => {
     const cases: Array<[number, number, string, string]> = [
       [2026, 1, "refrigerator", "VAL-REF-2026-001"],
+      [2026, 2, "freezer", "VAL-FRZ-2026-002"],
       [2026, 42, "warehouse", "VAL-STR-2026-042"],
       [2026, 43, "warehouse-expert", "VAL-STR-2026-043"],
       [2026, 7, "auto-refrigerator", "VAL-TRK-2026-007"],
@@ -45,6 +46,7 @@ describe("protocol number format", () => {
 
   it("uses GxP object codes for all supported equipment types", () => {
     expect(protocolObjectCode("refrigerator")).toBe("REF");
+    expect(protocolObjectCode("freezer")).toBe("FRZ");
     expect(protocolObjectCode("warehouse")).toBe("STR");
     expect(protocolObjectCode("warehouse-expert")).toBe("STR");
     expect(protocolObjectCode("auto-refrigerator")).toBe("TRK");

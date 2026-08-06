@@ -27,11 +27,12 @@ import { toast } from "sonner";
 import { GripVertical, Pencil, Trash2, Plus, Check, X, Thermometer, Info } from "lucide-react";
 
 type Stage = "iq" | "oq";
-type EquipmentType = "refrigerator" | "auto-refrigerator" | "chamber" | "thermal-container" | "warehouse" | "warehouse-expert" | "other";
+type EquipmentType = "refrigerator" | "freezer" | "auto-refrigerator" | "chamber" | "thermal-container" | "warehouse" | "warehouse-expert" | "other";
 type EquipmentKind = "conditioner" | "ventilation" | "heat_curtain" | "chiller" | "fan_coil" | "other" | null;
 
 const EQUIPMENT_OPTIONS: { value: EquipmentType; label: string }[] = [
   { value: "refrigerator", label: "Холодильник" },
+  { value: "freezer", label: "Морозильник" },
   { value: "auto-refrigerator", label: "Авторефрижератор" },
   { value: "chamber", label: "Холодильная камера" },
   { value: "thermal-container", label: "Термоконтейнер" },

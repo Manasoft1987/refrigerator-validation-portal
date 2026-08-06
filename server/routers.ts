@@ -738,7 +738,7 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .query(({ ctx, input }) => ownProtocol(ctx.user.id, input.id)),
     create: protectedProcedure
-      .input(z.object({ organizationId: z.number(), companyId: z.number().optional(), equipmentType: z.enum(["refrigerator", "auto-refrigerator", "chamber", "thermal-container", "computerized-system", "warehouse", "warehouse-expert", "other"]).optional(), customEquipmentName: z.string().optional() }))
+      .input(z.object({ organizationId: z.number(), companyId: z.number().optional(), equipmentType: z.enum(["refrigerator", "freezer", "auto-refrigerator", "chamber", "thermal-container", "computerized-system", "warehouse", "warehouse-expert", "other"]).optional(), customEquipmentName: z.string().optional() }))
       .mutation(async ({ ctx, input }) => {
         // Admins can always create; regular users must belong to an approved company
         if (ctx.user.role !== "admin") {
@@ -770,6 +770,7 @@ export const appRouter = router({
         const companyId = input.companyId ?? org.companyId ?? 0;
         const requestedEquipmentType = input.equipmentType ?? "refrigerator";
         if (
+          requestedEquipmentType === "freezer" ||
           requestedEquipmentType === "thermal-container" ||
           requestedEquipmentType === "computerized-system" ||
           requestedEquipmentType === "warehouse-expert"
@@ -950,9 +951,13 @@ export const appRouter = router({
         if (usesProtocolEquipmentType) {
           delete coerced.equipmentType;
         }
+        if (requestedEquipmentType === "freezer") {
+          await ensureThermalContainerStorage();
+        }
         const saved = await upsertGeneralInfo(protocolId, coerced);
         const syncableProtocolEquipmentTypes = new Set([
           "refrigerator",
+          "freezer",
           "auto-refrigerator",
           "warehouse",
           "warehouse-expert",
@@ -2086,7 +2091,7 @@ export const appRouter = router({
           protocol: {
             number: protocol.number,
             createdAt: protocol.createdAt,
-            equipmentType: protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER ? "chamber" : protocol.equipmentType ?? null,
+            equipmentType: protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER ? "chamber" : ((gi?.equipmentType as string | null | undefined) || protocol.equipmentType || null),
             customEquipmentName: protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER ? null : protocol.customEquipmentName ?? null,
           },
           generalInfo: gi
@@ -2288,7 +2293,7 @@ export const appRouter = router({
         z.object({
           stage: z.enum(["iq", "oq"]),
           text: z.string().min(1),
-          equipmentType: z.enum(["refrigerator", "auto-refrigerator", "chamber", "thermal-container", "warehouse", "warehouse-expert", "other"]).optional(),
+          equipmentType: z.enum(["refrigerator", "freezer", "auto-refrigerator", "chamber", "thermal-container", "warehouse", "warehouse-expert", "other"]).optional(),
           /** For warehouse: which equipment kind these questions apply to */
           equipmentKind: z.enum(["conditioner", "ventilation", "heat_curtain", "chiller", "fan_coil", "other"]).nullable().optional(),
         }),
@@ -2336,7 +2341,7 @@ export const appRouter = router({
       }),
     seedDefaults: protectedProcedure
       .input(z.object({
-        equipmentType: z.enum(["refrigerator", "auto-refrigerator", "chamber", "thermal-container", "warehouse", "warehouse-expert", "other"]),
+        equipmentType: z.enum(["refrigerator", "freezer", "auto-refrigerator", "chamber", "thermal-container", "warehouse", "warehouse-expert", "other"]),
         overwrite: z.boolean().optional(),
       }))
       .mutation(async ({ input }) => {
