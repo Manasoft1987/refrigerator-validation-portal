@@ -359,7 +359,9 @@ export default function RefrigeratorDiagram({
               const color = logger ? colorFor(loggerIdx) : "#94a3b8";
               const label = logger ? badgeLabel(logger) : "";
               const avg = logger ? avgLabel(logger) : null;
-              const criticalKind = logger?.id === hotLoggerId ? "hot" : logger?.id === coldLoggerId ? "cold" : null;
+              const isCriticalHot = logger?.id === hotLoggerId;
+              const isCriticalCold = logger?.id === coldLoggerId;
+              const isCritical = isCriticalHot || isCriticalCold;
               const isFront = zone.code.startsWith("F");
               return (
                 <g
@@ -372,28 +374,42 @@ export default function RefrigeratorDiagram({
                   )}
                   {logger && (
                     <>
-                      {criticalKind && (
+                      {isCritical && (
                         <>
-                          <circle
-                            cx={p.x}
-                            cy={p.y}
-                            r={18.8}
-                            fill="none"
-                            stroke={criticalKind === "hot" ? "#ef4444" : "#2563eb"}
-                            strokeWidth={2.6}
-                            pointerEvents="none"
-                          />
-                          {criticalKind === "hot" ? (
+                          {isCriticalHot && (
+                            <circle
+                              cx={p.x}
+                              cy={p.y}
+                              r={18.8}
+                              fill="none"
+                              stroke="#ef4444"
+                              strokeWidth={2.6}
+                              pointerEvents="none"
+                            />
+                          )}
+                          {isCriticalCold && (
+                            <circle
+                              cx={p.x}
+                              cy={p.y}
+                              r={isCriticalHot ? 21.8 : 18.8}
+                              fill="none"
+                              stroke="#2563eb"
+                              strokeWidth={2.4}
+                              pointerEvents="none"
+                            />
+                          )}
+                          {isCriticalHot && (
                             <polygon
-                              points={starPoints(p.x + 20, p.y - 20, 7)}
+                              points={starPoints(p.x + 20, p.y - 22, 7)}
                               fill="#ef4444"
                               stroke="#ffffff"
                               strokeWidth={1.3}
                               pointerEvents="none"
                             />
-                          ) : (
+                          )}
+                          {isCriticalCold && (
                             <polygon
-                              points={diamondPoints(p.x + 20, p.y - 20, 7)}
+                              points={diamondPoints(p.x + 20, p.y + (isCriticalHot ? -8 : -22), 7)}
                               fill="#2563eb"
                               stroke="#ffffff"
                               strokeWidth={1.3}
@@ -432,7 +448,7 @@ export default function RefrigeratorDiagram({
           </g>
 
           {externals.map((logger, idx) => {
-            const y = cab.y + 124 + idx * 42;
+            const y = cab.y + 184 + idx * 42;
             const color = colorFor(internals.length + idx);
             return (
               <g key={logger.id} transform={`translate(${cab.x + cab.w + 104}, ${y})`}>

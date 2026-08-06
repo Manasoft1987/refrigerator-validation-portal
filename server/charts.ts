@@ -1029,18 +1029,27 @@ function drawRefrigeratorDiagramPortalStyle(
       doc.save();
       doc.strokeColor("#ffffff").lineWidth(sv(1.4));
       if (isCriticalHot) {
-        drawStar(doc, sx(p.x + r + 4), sy(p.y - r - 4), sv(7), "#ef4444");
-      } else {
-        drawDiamond(doc, sx(p.x + r + 4), sy(p.y - r - 4), sv(7), "#2563eb");
+        drawStar(doc, sx(p.x + r + 4), sy(p.y - r - 6), sv(7), "#ef4444");
+      }
+      if (isCriticalCold) {
+        drawDiamond(doc, sx(p.x + r + 4), sy(p.y + (isCriticalHot ? -8 : -r - 6)), sv(7), "#2563eb");
       }
       doc.restore();
     }
     drawCircle(p.x, p.y, r, color, "#ffffff", 2.2);
-    if (isCritical) {
+    if (isCriticalHot) {
       doc.save();
       doc.circle(sx(p.x), sy(p.y), sv(r + 2.5))
         .lineWidth(sv(2.2))
-        .strokeColor(isCriticalHot ? "#ef4444" : "#2563eb")
+        .strokeColor("#ef4444")
+        .stroke();
+      doc.restore();
+    }
+    if (isCriticalCold) {
+      doc.save();
+      doc.circle(sx(p.x), sy(p.y), sv(r + (isCriticalHot ? 5.2 : 2.5)))
+        .lineWidth(sv(2.0))
+        .strokeColor("#2563eb")
         .stroke();
       doc.restore();
     }
@@ -1069,8 +1078,9 @@ function drawRefrigeratorDiagramPortalStyle(
     text("\u0445\u043e\u043b\u043e\u0434\u043d\u0430\u044f \u0442\u043e\u0447\u043a\u0430", legendX + 34, legendY + 95, 116, 11, "#64748b");
   }
 
+  const externalStartY = showCriticalLegend ? legendY + 156 : cab.y + 124;
   externals.forEach((sensor, idx) => {
-    const y = cab.y + 124 + idx * 42;
+    const y = externalStartY + idx * 42;
     const color = sensorBadgeColor(internals.length + idx);
     doc.save();
     doc.moveTo(sx(cab.x + cab.w + 52), sy(y))
