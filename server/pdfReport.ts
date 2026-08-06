@@ -4381,10 +4381,30 @@ function drawWarehousePlanDiagram(
         .text("Таблица размещения регистраторов данных", { align: "left" });
       doc.moveDown(0.3);
       // Columns: №, ID (last 4), Serial, Position, Height (m), Comment
-      const sColW = [28, 50, 90, 90, 70, totalW2 - (28 + 50 + 90 + 90 + 70)];
-      const sHeaders = ["№", "ID", "Серийный №", "Позиция", "Высота, м", "Примечание"];
+      const sColW = [24, 42, 112, 160, 56, totalW2 - (24 + 42 + 112 + 160 + 56)];
+      const sHeaders = ["№", "ID", "Серийный №", "Позиция на схеме", "Высота, м", "Прим."];
+      const floorObjectById = new Map((input.floorPlanObjects ?? []).map(obj => [obj.id, obj]));
+      const formatGridPosition = (raw: string): string | null => {
+        const match = raw.match(/^L(\d+)-c(\d+)-t(\d+)$/i);
+        if (!match) return null;
+        return `\u0420\u044f\u0434 ${match[1]}, \u043a\u043e\u043b\u043e\u043d\u043a\u0430 ${match[2]}, \u044f\u0440\u0443\u0441 ${match[3]}`;
+      };
+      const compactRawPosition = (raw: string): string => {
+        if (raw.length <= 22) return raw;
+        return `${raw.slice(0, 8)}...${raw.slice(-5)}`;
+      };
+      const formatPlanPosition = (raw: unknown, isExt: boolean): string => {
+        const value = String(raw ?? "").trim();
+        if (isExt) return "\u0412\u043d\u0435\u0448\u043d\u0438\u0439";
+        if (!value || value === "unset") return "-";
+        const grid = formatGridPosition(value);
+        if (grid) return grid;
+        const obj = floorObjectById.get(value);
+        if (obj) return obj.label || (obj.type === "sensor_point" ? "\u0422\u043e\u0447\u043a\u0430 \u043d\u0430 \u0441\u0445\u0435\u043c\u0435" : obj.type);
+        return compactRawPosition(value);
+      };
       let sy = doc.y;
-      const sRowH = 16;
+      const sRowH = 18;
       // Header
       doc.save();
       doc.fillColor("#f1f5f9").rect(pageLeft2, sy, totalW2, sRowH).fill();
@@ -4410,7 +4430,7 @@ function drawWarehousePlanDiagram(
         doc.strokeColor("#e2e8f0").lineWidth(0.4).rect(pageLeft2, sy, totalW2, sRowH).stroke();
         doc.restore();
         const shortId = l.label.length > 4 ? l.label.slice(-4) : l.label;
-        const posLabel = l.position ?? (isExt ? "Внешний" : "—");
+        const posLabel = formatPlanPosition(l.position, isExt);
         // Approximate height from position id (tier)
         let heightStr = "—";
         if (l.position && l.position.startsWith("L")) {
@@ -4427,7 +4447,7 @@ function drawWarehousePlanDiagram(
           l.label,
           posLabel,
           heightStr,
-          isExt ? "Внешний регистратор" : "",
+          isExt ? "Внешний" : "",
         ];
         let scx2 = pageLeft2;
         cells.forEach((cell, ci) => {
@@ -4439,7 +4459,7 @@ function drawWarehousePlanDiagram(
       });
       doc.y = sy + 6;
       doc.fillColor(MUTED).font("body").fontSize(7)
-        .text("ID — последние 4 цифры идентификационного номера регистратора. Высота рассчитана автоматически по ярусу размещения.",
+        .text("ID — последние 4 цифры серийного №. Позиция — место регистратора на схеме.",
           { align: "left" });
       doc.moveDown(0.4);
     }
