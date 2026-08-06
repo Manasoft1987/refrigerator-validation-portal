@@ -1045,6 +1045,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     }
   }
 
+  ensureSpace(doc, 50 + 24 + input.pv.loggers.length * 26);
   drawSubTitle(doc, isEnglishWarehouse(input) ? "Sensor Summary Statistics" : "Сводная статистика по датчикам");
   drawStatsTable(doc, input.pv.loggers, input.pv.hotIdx, input.pv.coldIdx, input.pv.extIndices, input);
 
@@ -1899,22 +1900,32 @@ function drawStatsTable(
   const ROW_H = 26; // Increased by 10% from 24
   const HEADER_H = 24; // Increased by 10% from 22
 
-  ensureSpace(doc, HEADER_H + 2);
-  let y = doc.y;
-  doc.save();
-  doc.rect(left, y, w, HEADER_H).fill(ACCENT);
-  doc.restore();
-  let cx = left;
-  doc.fillColor("white").font("bold").fontSize(9);
-  cols.forEach(c => {
-    const cw = c.w * w;
-    doc.text(c.label, cx + 4, y + 5, { width: cw - 8, lineBreak: false });
-    cx += cw;
-  });
-  doc.y = y + HEADER_H;
+  const drawHeader = () => {
+    const y = doc.y;
+    doc.save();
+    doc.rect(left, y, w, HEADER_H).fill(ACCENT);
+    doc.restore();
+    let cx = left;
+    doc.fillColor("white").font("bold").fontSize(9);
+    cols.forEach(c => {
+      const cw = c.w * w;
+      doc.text(c.label, cx + 4, y + 5, { width: cw - 8, lineBreak: false });
+      cx += cw;
+    });
+    doc.y = y + HEADER_H;
+  };
+
+  const tableHeight = HEADER_H + loggers.length * ROW_H;
+  const maxTableHeight = doc.page.height - PAGE_MARGIN - HEADER_CONTENT_TOP;
+  ensureSpace(doc, tableHeight <= maxTableHeight ? tableHeight : HEADER_H + ROW_H);
+  drawHeader();
 
   loggers.forEach((l, idx) => {
-    ensureSpace(doc, ROW_H);
+    if (doc.y + ROW_H > doc.page.height - PAGE_MARGIN) {
+      doc.addPage();
+      doc.y = HEADER_CONTENT_TOP;
+      drawHeader();
+    }
     const ry = doc.y;
     if (idx % 2 === 0) {
       doc.save();
@@ -2321,14 +2332,20 @@ function drawSensorPlacementAnalysis(
       }
     });
 
-    analysisText += "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0434\u0430\u0442\u0447\u0438\u043a\u0438 \u0440\u0430\u0441\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u044b \u0432 \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u043f\u043e\u0437\u0438\u0446\u0438\u044f\u0445 " +
-      (isWarehouseLike(getReportEquipmentType(input)) ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f (\u0437\u043e\u043d\u044b) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : reeferAreaGenitive(getReportEquipmentType(input))) + ": ";
+    const placementArea = isWarehouseLike(getReportEquipmentType(input))
+      ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f (\u0437\u043e\u043d\u044b) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f"
+      : reeferAreaGenitive(getReportEquipmentType(input));
+    analysisText += "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0434\u0430\u0442\u0447\u0438\u043a\u0438 \u0440\u0430\u0441\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u044b \u0432 \u0441\u043b\u0435\u0434\u0443\u044e\u0449\u0438\u0445 \u043f\u043e\u0437\u0438\u0446\u0438\u044f\u0445 " + placementArea + ": ";
     const positions = [];
     if (hasTop) positions.push("верхняя полка");
     if (hasMiddle) positions.push("средняя часть");
     if (hasBottom) positions.push("нижняя полка");
     if (hasDoor) positions.push("дверная зона");
-    analysisText += positions.join(", ") + ".\n\n";
+    if (positions.length > 0) {
+      analysisText += positions.join(", ") + ".\n\n";
+    } else {
+      analysisText = "\u0412\u043d\u0443\u0442\u0440\u0435\u043d\u043d\u0438\u0435 \u0434\u0430\u0442\u0447\u0438\u043a\u0438 \u0440\u0430\u0441\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u044b \u043f\u043e \u0432\u044b\u0431\u0440\u0430\u043d\u043d\u043e\u0439 \u0441\u0445\u0435\u043c\u0435 \u0440\u0430\u0437\u043c\u0435\u0449\u0435\u043d\u0438\u044f " + placementArea + ".\n\n";
+    }
 
     if (isWarehouseLike(getReportEquipmentType(input))) {
       analysisText +=
