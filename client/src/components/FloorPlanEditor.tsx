@@ -146,10 +146,63 @@ function loggerName(logger: SensorLogger | undefined): string {
   return String(logger.customName || logger.label || "").trim();
 }
 
+function sensorTokenVariants(value: string | number | null | undefined): string[] {
+  const raw = String(value ?? "").trim();
+  if (!raw) return [];
+  const tokens = new Set<string>();
+  const compact = raw.toLowerCase().replace(/[^a-z0-9а-яё]/gi, "");
+  if (compact) tokens.add(compact);
+  const digits = raw.replace(/\D/g, "");
+  if (digits) tokens.add(digits);
+  if (digits.length >= 4) tokens.add(digits.slice(-4));
+  return Array.from(tokens);
+}
+
+function loggerTokens(logger: SensorLogger): string[] {
+  return [
+    ...sensorTokenVariants(logger.label),
+    ...sensorTokenVariants(logger.customName),
+  ];
+}
+
 function sensorPointLogger(obj: FloorPlanObject, sensorLoggers: SensorLogger[]): SensorLogger | undefined {
   const objectLabel = String(obj.label || "").trim().toLowerCase();
+  const objectTokens = sensorTokenVariants(obj.label);
   return sensorLoggers.find(logger => logger.position === obj.id)
-    || sensorLoggers.find(logger => loggerName(logger).toLowerCase() === objectLabel);
+    || sensorLoggers.find(logger => loggerName(logger).toLowerCase() === objectLabel)
+    || sensorLoggers.find(logger => {
+      const tokens = loggerTokens(logger);
+      return objectTokens.some(token => tokens.includes(token));
+    });
+}
+
+function criticalSensorIds(sensorLoggers: SensorLogger[]): { hotId: number | null; coldId: number | null } {
+  const internal = sensorLoggers.filter(logger => logger.role !== "external");
+  let hot: SensorLogger | null = null;
+  let cold: SensorLogger | null = null;
+  for (const logger of internal) {
+    const avg = numericValue(logger.avgVal);
+    if (avg != null && (!hot || avg > (numericValue(hot.avgVal) ?? Number.NEGATIVE_INFINITY))) {
+      hot = logger;
+    }
+    const min = numericValue(logger.minVal) ?? avg;
+    if (min != null && (!cold || min < (numericValue(cold.minVal) ?? numericValue(cold.avgVal) ?? Number.POSITIVE_INFINITY))) {
+      cold = logger;
+    }
+  }
+  return { hotId: hot?.id ?? null, coldId: cold?.id ?? null };
+}
+
+function starPoints(cx: number, cy: number, outer: number, inner = outer * 0.42): string {
+  return Array.from({ length: 10 }, (_, i) => {
+    const angle = (i * Math.PI) / 5 - Math.PI / 2;
+    const r = i % 2 === 0 ? outer : inner;
+    return `${cx + Math.cos(angle) * r},${cy + Math.sin(angle) * r}`;
+  }).join(" ");
+}
+
+function diamondPoints(cx: number, cy: number, size: number): string {
+  return `${cx},${cy - size} ${cx + size},${cy} ${cx},${cy + size} ${cx - size},${cy}`;
 }
 
 function sensorPointColors(
@@ -227,6 +280,9 @@ function ObjectShape({
     const shortId = displayTitle.length > 7 ? displayTitle.slice(-7) : displayTitle;
     const avgLabel = formatTemp(logger?.avgVal);
     const colors = sensorPointColors(logger, rangeMin, rangeMax, selected);
+    const critical = criticalSensorIds(sensorLoggers);
+    const isCriticalHot = !!logger && critical.hotId === logger.id;
+    const isCriticalCold = !!logger && critical.coldId === logger.id;
     const htLabel = (obj.heightM ?? 0) > 0 ? `${(obj.heightM as number).toFixed(1)}м` : "";
     return (
       <g
@@ -234,7 +290,27 @@ function ObjectShape({
         onPointerDown={e => { e.stopPropagation(); onPointerDown(obj.id, e); }}
         onDoubleClick={e => { e.stopPropagation(); onDoubleClick(obj.id); }}
       >
+        {isCriticalHot && <circle cx={cx2} cy={cy2} r={r + 3.2} fill="none" stroke="#ef4444" strokeWidth={2.2} />}
+        {isCriticalCold && <circle cx={cx2} cy={cy2} r={r + (isCriticalHot ? 6.1 : 3.2)} fill="none" stroke="#2563eb" strokeWidth={2} />}
         <circle cx={cx2} cy={cy2} r={r} fill={colors.fill} stroke={colors.stroke} strokeWidth={selected ? 2.5 : 1.7} />
+        {isCriticalHot && (
+          <polygon
+            points={starPoints(cx2 + r + 8, cy2 - r - 6, 6.4)}
+            fill="#ef4444"
+            stroke="white"
+            strokeWidth={1.1}
+            style={{ pointerEvents: "none" }}
+          />
+        )}
+        {isCriticalCold && (
+          <polygon
+            points={diamondPoints(cx2 + r + 8, cy2 + r + 6, 6)}
+            fill="#2563eb"
+            stroke="white"
+            strokeWidth={1.1}
+            style={{ pointerEvents: "none" }}
+          />
+        )}
         <circle cx={cx2 - r + 5} cy={cy2 - r + 5} r={4.2} fill={colors.badge} opacity={0.95} />
         {selected && <circle cx={cx2} cy={cy2} r={r + 4} fill="none" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4 2" />}
         <text x={cx2} y={cy2 + (avgLabel ? -1 : 4)} textAnchor="middle" fontSize={8} fontWeight={800} fill={colors.text} style={{ pointerEvents: "none", userSelect: "none" }}>

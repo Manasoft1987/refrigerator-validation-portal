@@ -836,6 +836,94 @@ function sensorLabelWithAverage(label: string | null | undefined, avgBySensor: M
   return avg ? `${shortId} (${avg})` : shortId;
 }
 
+function sensorTokenVariants(value: string | number | null | undefined): string[] {
+  const raw = String(value ?? "").trim();
+  if (!raw) return [];
+  const tokens = new Set<string>();
+  const compact = normalizeSensorNumber(raw);
+  if (compact) tokens.add(compact);
+  const digits = raw.replace(/\D/g, "");
+  if (digits) tokens.add(digits);
+  if (digits.length >= 4) tokens.add(digits.slice(-4));
+  return Array.from(tokens);
+}
+
+function tokenSetsIntersect(a: Iterable<string>, b: Iterable<string>): boolean {
+  const bSet = new Set(b);
+  for (const token of a) {
+    if (bSet.has(token)) return true;
+  }
+  return false;
+}
+
+function buildWarehouseCriticalSensorTokens(input: ReportInput): { hot: Set<string>; cold: Set<string> } {
+  const add = (set: Set<string>, value: string | number | null | undefined) => {
+    for (const token of sensorTokenVariants(value)) set.add(token);
+  };
+  const addSummaryLogger = (set: Set<string>, logger: LoggerSummary | undefined | null) => {
+    if (!logger) return;
+    add(set, logger.label);
+    add(set, logger.customName);
+  };
+  const addMatchingPvLoggerPositions = (set: Set<string>) => {
+    const current = Array.from(set);
+    for (const logger of input.pvLoggers ?? []) {
+      const tokens = [
+        ...sensorTokenVariants(logger.label),
+        ...sensorTokenVariants(logger.customName),
+      ];
+      if (tokenSetsIntersect(current, tokens)) {
+        add(set, logger.label);
+        add(set, logger.customName);
+        add(set, logger.position);
+      }
+    }
+  };
+
+  const hot = new Set<string>();
+  const cold = new Set<string>();
+  addSummaryLogger(hot, input.pv.hotIdx !== null ? input.pv.loggers[input.pv.hotIdx] : null);
+  addSummaryLogger(cold, input.pv.coldIdx !== null ? input.pv.loggers[input.pv.coldIdx] : null);
+  addMatchingPvLoggerPositions(hot);
+  addMatchingPvLoggerPositions(cold);
+  return { hot, cold };
+}
+
+function floorSensorPointMatchesTokens(
+  sp: { id?: string; label?: string | null },
+  tokens: Set<string>,
+): boolean {
+  if (tokens.size === 0) return false;
+  return tokenSetsIntersect([
+    ...sensorTokenVariants(sp.id),
+    ...sensorTokenVariants(sp.label),
+  ], tokens);
+}
+
+function drawPdfStar(doc: PDFKit.PDFDocument, cx: number, cy: number, size: number, color: string): void {
+  const points: [number, number][] = [];
+  for (let i = 0; i < 10; i++) {
+    const angle = (i * Math.PI) / 5 - Math.PI / 2;
+    const radius = i % 2 === 0 ? size : size * 0.42;
+    points.push([cx + radius * Math.cos(angle), cy + radius * Math.sin(angle)]);
+  }
+  doc.save();
+  doc.fillColor(color).strokeColor("#ffffff").lineWidth(0.9).polygon(...points).fillAndStroke();
+  doc.restore();
+}
+
+function drawPdfDiamond(doc: PDFKit.PDFDocument, cx: number, cy: number, size: number, color: string): void {
+  const points: [number, number][] = [
+    [cx, cy - size],
+    [cx + size, cy],
+    [cx, cy + size],
+    [cx - size, cy],
+  ];
+  doc.save();
+  doc.fillColor(color).strokeColor("#ffffff").lineWidth(0.9).polygon(...points).fillAndStroke();
+  doc.restore();
+}
+
 function buildActiveSensorTokens(input: ReportInput): Set<string> {
   const tokens = new Set<string>();
   const add = (value: string | null | undefined) => {
@@ -4094,6 +4182,7 @@ function drawWarehousePlanDiagram(
   const floorObjs = allFloorObjs.filter((o: { type: string }) => o.type !== "sensor_point");
   const sensorPointObjs = allFloorObjs.filter((o: { type: string }) => o.type === "sensor_point");
   const avgBySensor = buildSensorAverageMap(input);
+  const criticalSensorTokens = buildWarehouseCriticalSensorTokens(input);
   if (floorObjs.length > 0) {
     // Object type visual properties
     const OBJ_STYLES: Record<string, { fill: string; stroke: string; text: string }> = {
@@ -4246,9 +4335,17 @@ function drawWarehousePlanDiagram(
     const r = Math.max(8, Math.min(16, spR));
     const label = sensorLabelWithAverage(sp.label, avgBySensor);
     const labelFont = label.includes("(") ? 6.2 : Math.max(5, Math.min(8, r * 0.7));
+    const isCriticalHot = floorSensorPointMatchesTokens(sp, criticalSensorTokens.hot);
+    const isCriticalCold = floorSensorPointMatchesTokens(sp, criticalSensorTokens.cold);
     doc.save();
     doc.font("bold").fontSize(labelFont);
     const labelW = Math.min(78, Math.max(r * 2, doc.widthOfString(label) + 8));
+    if (isCriticalHot) {
+      doc.circle(spX, spY, r + 2.5).lineWidth(2.0).strokeColor("#ef4444").stroke();
+    }
+    if (isCriticalCold) {
+      doc.circle(spX, spY, r + (isCriticalHot ? 5.2 : 2.5)).lineWidth(1.8).strokeColor("#2563eb").stroke();
+    }
     doc.fillColor("#7dd3fc").strokeColor("#0369a1").lineWidth(1.5).circle(spX, spY, r).fillAndStroke();
     if (label.includes("(")) {
       const labelX = Math.max(planX + 2, Math.min(planX + drawW - labelW - 2, spX - labelW / 2));
@@ -4260,6 +4357,16 @@ function drawWarehousePlanDiagram(
     } else {
       doc.fillColor("#0c4a6e")
         .text(label, spX - r, spY - 4, { width: r * 2, align: "center" });
+    }
+    if (isCriticalHot) {
+      const markerX = Math.max(planX + 7, Math.min(planX + drawW - 7, spX + r + 8));
+      const markerY = Math.max(planY + 7, Math.min(planY + drawH - 7, spY - r - 7));
+      drawPdfStar(doc, markerX, markerY, 6.4, "#ef4444");
+    }
+    if (isCriticalCold) {
+      const markerX = Math.max(planX + 7, Math.min(planX + drawW - 7, spX + r + 8));
+      const markerY = Math.max(planY + 7, Math.min(planY + drawH - 7, spY + r + 7));
+      drawPdfDiamond(doc, markerX, markerY, 6.0, "#2563eb");
     }
     doc.restore();
   }
