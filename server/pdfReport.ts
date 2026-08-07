@@ -924,6 +924,35 @@ function drawPdfDiamond(doc: PDFKit.PDFDocument, cx: number, cy: number, size: n
   doc.restore();
 }
 
+type WarehouseMarkerBox = { x: number; y: number; w: number; h: number };
+
+function warehouseMarkerBox(cx: number, cy: number, radius: number): WarehouseMarkerBox {
+  return { x: cx - radius, y: cy - radius, w: radius * 2, h: radius * 2 };
+}
+
+function warehouseBoxesOverlap(a: WarehouseMarkerBox, b: WarehouseMarkerBox): boolean {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+function chooseWarehouseCriticalMarkerPosition(
+  candidates: Array<[number, number]>,
+  plan: WarehouseMarkerBox,
+  occupied: WarehouseMarkerBox[],
+  markerRadius: number,
+): [number, number] {
+  let fallback: [number, number] | null = null;
+  for (const [rawX, rawY] of candidates) {
+    const x = Math.max(plan.x + markerRadius, Math.min(plan.x + plan.w - markerRadius, rawX));
+    const y = Math.max(plan.y + markerRadius, Math.min(plan.y + plan.h - markerRadius, rawY));
+    fallback ??= [x, y];
+    const box = warehouseMarkerBox(x, y, markerRadius + 1);
+    if (!occupied.some(item => warehouseBoxesOverlap(box, item))) {
+      return [x, y];
+    }
+  }
+  return fallback ?? [plan.x + markerRadius, plan.y + markerRadius];
+}
+
 function buildActiveSensorTokens(input: ReportInput): Set<string> {
   const tokens = new Set<string>();
   const add = (value: string | null | undefined) => {
@@ -4340,6 +4369,13 @@ function drawWarehousePlanDiagram(
     doc.save();
     doc.font("bold").fontSize(labelFont);
     const labelW = Math.min(78, Math.max(r * 2, doc.widthOfString(label) + 8));
+    const hasFloatingLabel = label.includes("(");
+    const labelX = hasFloatingLabel ? Math.max(planX + 2, Math.min(planX + drawW - labelW - 2, spX - labelW / 2)) : 0;
+    const labelY = hasFloatingLabel ? Math.max(planY + 2, spY - r - 14) : 0;
+    const markerPlanBox = { x: planX, y: planY, w: drawW, h: drawH };
+    const occupiedMarkerBoxes: WarehouseMarkerBox[] = hasFloatingLabel
+      ? [{ x: labelX - 2, y: labelY - 2, w: labelW + 4, h: 16 }]
+      : [];
     if (isCriticalHot) {
       doc.circle(spX, spY, r + 2.5).lineWidth(2.0).strokeColor("#ef4444").stroke();
     }
@@ -4347,9 +4383,7 @@ function drawWarehousePlanDiagram(
       doc.circle(spX, spY, r + (isCriticalHot ? 5.2 : 2.5)).lineWidth(1.8).strokeColor("#2563eb").stroke();
     }
     doc.fillColor("#7dd3fc").strokeColor("#0369a1").lineWidth(1.5).circle(spX, spY, r).fillAndStroke();
-    if (label.includes("(")) {
-      const labelX = Math.max(planX + 2, Math.min(planX + drawW - labelW - 2, spX - labelW / 2));
-      const labelY = Math.max(planY + 2, spY - r - 14);
+    if (hasFloatingLabel) {
       doc.fillColor("white").strokeColor("#0369a1").lineWidth(0.5)
         .roundedRect(labelX, labelY, labelW, 12, 3).fillAndStroke();
       doc.fillColor("#0c4a6e")
@@ -4359,14 +4393,28 @@ function drawWarehousePlanDiagram(
         .text(label, spX - r, spY - 4, { width: r * 2, align: "center" });
     }
     if (isCriticalHot) {
-      const markerX = Math.max(planX + 7, Math.min(planX + drawW - 7, spX + r + 8));
-      const markerY = Math.max(planY + 7, Math.min(planY + drawH - 7, spY - r - 7));
+      const [markerX, markerY] = chooseWarehouseCriticalMarkerPosition([
+        [spX + r + 9, spY + r + 10],
+        [spX - r - 9, spY + r + 10],
+        [spX + r + 9, spY],
+        [spX - r - 9, spY],
+        [spX + r + 9, spY - r - 10],
+        [spX - r - 9, spY - r - 10],
+      ], markerPlanBox, occupiedMarkerBoxes, 7);
       drawPdfStar(doc, markerX, markerY, 6.4, "#ef4444");
+      occupiedMarkerBoxes.push(warehouseMarkerBox(markerX, markerY, 8));
     }
     if (isCriticalCold) {
-      const markerX = Math.max(planX + 7, Math.min(planX + drawW - 7, spX + r + 8));
-      const markerY = Math.max(planY + 7, Math.min(planY + drawH - 7, spY + r + 7));
+      const [markerX, markerY] = chooseWarehouseCriticalMarkerPosition([
+        [spX + r + 9, spY + r + 10],
+        [spX - r - 9, spY + r + 10],
+        [spX + r + 9, spY],
+        [spX - r - 9, spY],
+        [spX + r + 9, spY - r - 10],
+        [spX - r - 9, spY - r - 10],
+      ], markerPlanBox, occupiedMarkerBoxes, 7);
       drawPdfDiamond(doc, markerX, markerY, 6.0, "#2563eb");
+      occupiedMarkerBoxes.push(warehouseMarkerBox(markerX, markerY, 8));
     }
     doc.restore();
   }
