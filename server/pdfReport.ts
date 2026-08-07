@@ -4548,6 +4548,40 @@ function drawWarehousePlanDiagram(
         if (raw.length <= 22) return raw;
         return `${raw.slice(0, 8)}...${raw.slice(-5)}`;
       };
+      const floorSensorHeightByToken = new Map<string, string>();
+      const floorSensorPointTokens = new Set<string>();
+      const addFloorSensorHeight = (
+        value: string | number | null | undefined,
+        heightValue: number | null | undefined,
+      ) => {
+        if (!heightValue || heightValue <= 0) return;
+        const formatted = heightValue.toFixed(2);
+        for (const token of sensorTokenVariants(value)) {
+          floorSensorHeightByToken.set(token, formatted);
+          floorSensorPointTokens.add(token);
+        }
+      };
+      sensorPointObjs.forEach(sp => {
+        addFloorSensorHeight(sp.id, sp.heightM as number | null | undefined);
+        addFloorSensorHeight(sp.label, sp.heightM as number | null | undefined);
+      });
+      floorObjs.forEach(obj => {
+        (obj.sensors ?? []).forEach((sensor: { sensorId: string; heightFromFloor: number }) => {
+          addFloorSensorHeight(sensor.sensorId, sensor.heightFromFloor);
+        });
+      });
+      const manualFloorSensorHeight = (...values: Array<string | number | null | undefined>): string | null => {
+        for (const value of values) {
+          for (const token of sensorTokenVariants(value)) {
+            const height = floorSensorHeightByToken.get(token);
+            if (height) return height;
+          }
+        }
+        return null;
+      };
+      const isManualFloorSensorPosition = (raw: string): boolean => {
+        return sensorTokenVariants(raw).some(token => floorSensorPointTokens.has(token));
+      };
       const formatPlanPosition = (raw: unknown, isExt: boolean): string => {
         const value = String(raw ?? "").trim();
         if (isExt) return "\u0412\u043d\u0435\u0448\u043d\u0438\u0439";
@@ -4556,6 +4590,7 @@ function drawWarehousePlanDiagram(
         if (grid) return grid;
         const obj = floorObjectById.get(value);
         if (obj) return obj.label || (obj.type === "sensor_point" ? "\u0422\u043e\u0447\u043a\u0430 \u043d\u0430 \u0441\u0445\u0435\u043c\u0435" : obj.type);
+        if (isManualFloorSensorPosition(value)) return "\u0422\u043e\u0447\u043a\u0430 \u043d\u0430 \u043f\u043b\u0430\u043d\u0435";
         return compactRawPosition(value);
       };
       let sy = doc.y;
@@ -4586,6 +4621,7 @@ function drawWarehousePlanDiagram(
         doc.restore();
         const shortId = l.label.length > 4 ? l.label.slice(-4) : l.label;
         const posLabel = formatPlanPosition(l.position, isExt);
+        const manualHeightStr = manualFloorSensorHeight(l.position, l.label, l.customName);
         // Approximate height from position id (tier)
         let heightStr = "—";
         if (l.position && l.position.startsWith("L")) {
@@ -4601,7 +4637,7 @@ function drawWarehousePlanDiagram(
           shortId,
           l.label,
           posLabel,
-          heightStr,
+          manualHeightStr ?? heightStr,
           isExt ? "Внешний" : "",
         ];
         let scx2 = pageLeft2;
