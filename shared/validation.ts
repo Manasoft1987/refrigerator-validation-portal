@@ -75,6 +75,7 @@ export const EQUIPMENT_TYPES = [
   { id: "freezer", label: "Морозильник" },
   { id: "chamber", label: "Холодильная камера" },
   { id: "auto-refrigerator", label: "Авторефрижератор" },
+  { id: "auto-refrigerator-kg", label: "Авторефрижератор Кыргызстана" },
   { id: "thermal-container", label: "Термоконтейнер" },
   { id: "computerized-system", label: "Компьютеризированная система" },
   { id: "warehouse", label: "Помещение / зона хранения" },
@@ -83,6 +84,15 @@ export const EQUIPMENT_TYPES = [
 ] as const;
 
 export const WAREHOUSE_EXPERT_EQUIPMENT_TYPE = "warehouse-expert";
+export const KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE = "auto-refrigerator-kg";
+
+export function isAutoRefrigeratorLike(type: string | null | undefined): boolean {
+  return type === "auto-refrigerator" || type === KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE;
+}
+
+export function isKyrgyzstanAutoRefrigerator(type: string | null | undefined): boolean {
+  return type === KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE;
+}
 
 export function isWarehouseLike(type: string | null | undefined): boolean {
   return type === "warehouse" || type === WAREHOUSE_EXPERT_EQUIPMENT_TYPE;
@@ -97,6 +107,7 @@ export function getEquipmentLabel(type: string | null | undefined, customName?: 
   if (!type) return "Холодильник";
   if (type === "warehouse") return "Помещение / зона хранения (ЕАЭК №8)";
   if (type === WAREHOUSE_EXPERT_EQUIPMENT_TYPE) return "Помещение / зона хранения (экспертное)";
+  if (type === KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE) return "Авторефрижератор Кыргызстана";
   if (type === "thermal-container") return "Термоконтейнер";
   if (type === "other") return customName || "Другое";
   const found = EQUIPMENT_TYPES.find(t => t.id === type);
@@ -105,6 +116,7 @@ export function getEquipmentLabel(type: string | null | undefined, customName?: 
 
 /** Returns purpose placeholder text based on equipment type */
 export function getPurposePlaceholder(type: string | null | undefined): string {
+  if (type === KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE) return "Транспортировка термолабильных лекарственных средств и медицинских изделий в Кыргызской Республике при 2–8 °C…";
   if (type === "auto-refrigerator") return "Транспортировка термолабильных лекарственных средств и медицинских изделий при 2–8 °C…";
   if (type === "thermal-container") return "Транспортировка термолабильной продукции в квалифицированной конфигурации упаковки…";
   if (type === "freezer") return "Хранение термолабильных лекарственных средств при −20 °C…";
@@ -116,6 +128,7 @@ export function getPurposePlaceholder(type: string | null | undefined): string {
 
 /** Returns location placeholder text based on equipment type */
 export function getLocationPlaceholder(type: string | null | undefined): string {
+  if (type === KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE) return "Маршрут в Кыргызской Республике / транспортное средство / гос. номер";
   if (type === "auto-refrigerator") return "Маршрут / транспортное средство / гос. номер";
   if (type === "thermal-container") return "Место подготовки и эксплуатации термоконтейнера";
   if (type === "chamber") return "Склад / здание / помещение";
@@ -372,6 +385,27 @@ export const AUTO_REFRIGERATOR_STAGE_TEMPLATES = {
       "В ходе эксплуатационной квалификации (PV) выполняется температурное картирование с использованием не менее 10-ти поверенных датчиков-логгеров, размещённых в кузове авторефрижератора по всему объему. Регистрация температуры ведётся непрерывно в течение испытания в рабочем режиме.",
     criteria:
       "Все внутренние датчики на протяжении всего периода испытания должны находиться в пределах заданного температурного режима. MKT (средняя кинетическая температура) по каждому внутреннему датчику также должна находиться в пределах режима. Необходимо определить максимальную температуру, минимальную температуру и среднюю температуру по каждому датчику, привести табличные данные и визуализировать результаты испытания в виде графиков и гистограммы.",
+  },
+} as const;
+
+export const KYRGYZSTAN_AUTO_REFRIGERATOR_REGULATORY_BASIS =
+  "Нормативная база для Кыргызской Республики: Решение Совета Евразийской экономической комиссии от 03.11.2016 № 80 «Об утверждении Правил надлежащей дистрибьюторской практики в рамках Евразийского экономического союза»; Закон Кыргызской Республики от 02.08.2017 № 165 «Об обращении лекарственных средств»; внутренние СОП владельца процесса по хранению и транспортировке термолабильной продукции; эксплуатационная документация производителя транспортного средства и холодильной установки.";
+
+export const AUTO_REFRIGERATOR_KG_STAGE_TEMPLATES = {
+  iq: {
+    ...AUTO_REFRIGERATOR_STAGE_TEMPLATES.iq,
+    description:
+      `${AUTO_REFRIGERATOR_STAGE_TEMPLATES.iq.description}\n\n${KYRGYZSTAN_AUTO_REFRIGERATOR_REGULATORY_BASIS}`,
+  },
+  oq: {
+    ...AUTO_REFRIGERATOR_STAGE_TEMPLATES.oq,
+    description:
+      `${AUTO_REFRIGERATOR_STAGE_TEMPLATES.oq.description}\n\nОценка выполняется с учётом требований GDP ЕАЭС и национальных требований Кыргызской Республики к обращению лекарственных средств.`,
+  },
+  pv: {
+    ...AUTO_REFRIGERATOR_STAGE_TEMPLATES.pv,
+    description:
+      `${AUTO_REFRIGERATOR_STAGE_TEMPLATES.pv.description}\n\nРезультаты PV интерпретируются в рамках требований GDP ЕАЭС, Закона Кыргызской Республики «Об обращении лекарственных средств» и утверждённых внутренних процедур владельца процесса.`,
   },
 } as const;
 

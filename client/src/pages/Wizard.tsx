@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { EQUIPMENT_TYPES, TEMP_MODES, VALIDATION_BASIS, isWarehouseEaeu, isWarehouseLike } from "@shared/validation";
+import { EQUIPMENT_TYPES, TEMP_MODES, VALIDATION_BASIS, isAutoRefrigeratorLike, isWarehouseEaeu, isWarehouseLike } from "@shared/validation";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -73,7 +73,7 @@ export default function Wizard() {
   const protocolEquipmentType = giQ.data?.equipmentType || (p?.customEquipmentName === "__equipmentType:chamber" ? "chamber" : p?.equipmentType);
   const isWarehouse = isWarehouseLike(protocolEquipmentType);
   const isWarehouseByEaeu = isWarehouseEaeu(protocolEquipmentType);
-  const isAutoRefrigerator = protocolEquipmentType === "auto-refrigerator";
+  const isAutoRefrigerator = isAutoRefrigeratorLike(protocolEquipmentType);
   const isComputerizedSystem = protocolEquipmentType === "computerized-system";
   const equipment = equipmentQ.data ?? [];
 

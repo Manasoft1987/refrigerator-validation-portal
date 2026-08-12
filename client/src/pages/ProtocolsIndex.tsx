@@ -59,7 +59,7 @@ export default function ProtocolsIndex() {
   const [orgF, setOrgF] = useState<string>("all");
   const [createOpen, setCreateOpen] = useState(false);
   const [createStep, setCreateStep] = useState<1 | 2>(1);
-  const [createEquipmentType, setCreateEquipmentType] = useState<"refrigerator" | "freezer" | "auto-refrigerator" | "chamber" | "thermal-container" | "computerized-system" | "warehouse" | "warehouse-expert" | "other" | null>(null);
+  const [createEquipmentType, setCreateEquipmentType] = useState<"refrigerator" | "freezer" | "auto-refrigerator" | "auto-refrigerator-kg" | "chamber" | "thermal-container" | "computerized-system" | "warehouse" | "warehouse-expert" | "other" | null>(null);
   const [createCustomName, setCreateCustomName] = useState("");
   const [createOrg, setCreateOrg] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
@@ -349,6 +349,7 @@ export default function ProtocolsIndex() {
                   { id: "freezer", label: "Морозильник", icon: "🧊", desc: "Морозильное оборудование с заданным минусовым или пользовательским режимом" },
                   { id: "chamber", label: "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430", icon: "\u2744\uFE0F", desc: "Холодильная камера с объёмной расстановкой датчиков по позициям ISPE" },
                   { id: "auto-refrigerator", label: "Авторефрижератор", icon: "🚛", desc: "Транспортный рефрижератор с активной холодильной установкой" },
+                  { id: "auto-refrigerator-kg", label: "Авторефрижератор Кыргызстана", icon: "🚛", desc: "Транспортный рефрижератор: GDP ЕАЭС + требования Кыргызской Республики" },
                   { id: "thermal-container", label: "Термоконтейнер", icon: "📦", desc: "Пассивный изотермический контейнер с термоэлементами" },
                   { id: "computerized-system", label: "Компьютеризированная система", icon: "💻", desc: "GxP-система: GAMP, URS, риски, тестирование и выпуск" },
                   { id: "warehouse", label: "Помещение / зона хранения (ЕАЭК №8)", icon: "🏢", desc: "Склад, камера или зона с расчётом количества датчиков по Рек. ЕАЭК №8" },

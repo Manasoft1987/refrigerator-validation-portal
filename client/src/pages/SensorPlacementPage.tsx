@@ -26,7 +26,7 @@ import ReeferTruckDiagram3D from "@/components/ReeferTruckDiagram3D";
 import RefrigeratorDiagram from "@/components/RefrigeratorDiagram";
 import FloorPlanEditor, { FloorPlanObject, SensorPosition, SensorLogger } from "@/components/FloorPlanEditor";
 import { buildWarehousePositions } from "@/components/WarehouseLayoutDiagram";
-import { computeWarehouseSensorCount, isWarehouseEaeu, isWarehouseLike, TEMP_MODES } from "@shared/validation";
+import { computeWarehouseSensorCount, isAutoRefrigeratorLike, isWarehouseEaeu, isWarehouseLike, TEMP_MODES } from "@shared/validation";
 
 // --- Isometric helpers (same as ReeferTruckDiagram3D) -------------------------
 const SCALE   = 93.6;
@@ -268,7 +268,7 @@ export default function SensorPlacementPage() {
   const equipmentType = (giQ.data?.equipmentType || protocolEquipmentType || "refrigerator") as string;
   const isWarehouse = isWarehouseLike(equipmentType);
   const isWarehouseByEaeu = isWarehouseEaeu(equipmentType);
-  const isAutoRefrigerator = equipmentType === "auto-refrigerator" || equipmentType === "chamber" || equipmentType === "thermal-container";
+  const isAutoRefrigerator = isAutoRefrigeratorLike(equipmentType) || equipmentType === "chamber" || equipmentType === "thermal-container";
   const planTempMode = String((session as any)?.tempMode || giQ.data?.tempMode || "2-8");
   const planModeDef = TEMP_MODES.find(mode => mode.id === planTempMode);
   const planRangeMin = readNumber((session as any)?.customMin ?? (giQ.data as any)?.customMin) ?? planModeDef?.min ?? null;
@@ -547,7 +547,7 @@ export default function SensorPlacementPage() {
             Схема расстановки датчиков
           </h1>
           <p className="text-sm text-muted-foreground">
-            {"\u041f\u0440\u043e\u0442\u043e\u043a\u043e\u043b #"}{protocolId}{"\u0020\u2014\u0020"}{isWarehouse ? (isWarehouseByEaeu ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 / \u0437\u043e\u043d\u0430 \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f (\u0415\u0410\u042d\u041a \u21168)" : "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 / \u0437\u043e\u043d\u0430 \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f (\u044d\u043a\u0441\u043f\u0435\u0440\u0442\u043d\u043e\u0435)") : equipmentType === "chamber" ? "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430" : isAutoRefrigerator ? "\u0430\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440" : "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a"}
+            {"\u041f\u0440\u043e\u0442\u043e\u043a\u043e\u043b #"}{protocolId}{"\u0020\u2014\u0020"}{isWarehouse ? (isWarehouseByEaeu ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 / \u0437\u043e\u043d\u0430 \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f (\u0415\u0410\u042d\u041a \u21168)" : "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 / \u0437\u043e\u043d\u0430 \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f (\u044d\u043a\u0441\u043f\u0435\u0440\u0442\u043d\u043e\u0435)") : equipmentType === "chamber" ? "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430" : equipmentType === "auto-refrigerator-kg" ? "\u0430\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440 \u041a\u044b\u0440\u0433\u044b\u0437\u0441\u0442\u0430\u043d\u0430" : isAutoRefrigerator ? "\u0430\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440" : "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a"}
           </p>
         </div>
       </div>
@@ -918,7 +918,7 @@ export default function SensorPlacementPage() {
                 doorPos={doorPos ?? (session as any)?.doorPos}
                 onCoolingUnitPosChange={setCoolingUnitPos}
                 onDoorPosChange={setDoorPos}
-                objectType={equipmentType === "auto-refrigerator" ? "truck" : equipmentType === "thermal-container" ? "thermal-container" : "chamber"}
+                objectType={isAutoRefrigeratorLike(equipmentType) ? "truck" : equipmentType === "thermal-container" ? "thermal-container" : "chamber"}
               />
             </CardContent>
           </Card>

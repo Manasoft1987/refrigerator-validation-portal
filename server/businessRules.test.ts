@@ -32,6 +32,7 @@ describe("protocol number format", () => {
       [2026, 42, "warehouse", "VAL-STR-2026-042"],
       [2026, 43, "warehouse-expert", "VAL-STR-2026-043"],
       [2026, 7, "auto-refrigerator", "VAL-TRK-2026-007"],
+      [2026, 8, "auto-refrigerator-kg", "VAL-TRK-KG-2026-008"],
       [2026, 3, "chamber", "VAL-CHB-2026-003"],
       [2026, 4, "thermal-container", "VAL-TC-2026-004"],
       [2026, 6, "computerized-system", "VAL-CS-2026-006"],
@@ -40,7 +41,7 @@ describe("protocol number format", () => {
     for (const [year, seq, equipmentType, expected] of cases) {
       const produced = formatProtocolNumber(year, seq, equipmentType);
       expect(produced).toBe(expected);
-      expect(produced).toMatch(/^VAL-[A-Z]{2,3}-\d{4}-\d{3}$/);
+      expect(produced).toMatch(/^VAL-[A-Z]{2,3}(?:-[A-Z]{2})?-\d{4}-\d{3}$/);
     }
   });
 
@@ -50,6 +51,7 @@ describe("protocol number format", () => {
     expect(protocolObjectCode("warehouse")).toBe("STR");
     expect(protocolObjectCode("warehouse-expert")).toBe("STR");
     expect(protocolObjectCode("auto-refrigerator")).toBe("TRK");
+    expect(protocolObjectCode("auto-refrigerator-kg")).toBe("TRK-KG");
     expect(protocolObjectCode("chamber")).toBe("CHB");
     expect(protocolObjectCode("thermal-container")).toBe("TC");
     expect(protocolObjectCode("computerized-system")).toBe("CS");

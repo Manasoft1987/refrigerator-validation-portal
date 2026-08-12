@@ -666,6 +666,7 @@ type ProtocolEquipmentTypeCode =
   | "refrigerator"
   | "freezer"
   | "auto-refrigerator"
+  | "auto-refrigerator-kg"
   | "chamber"
   | "thermal-container"
   | "computerized-system"
@@ -680,6 +681,8 @@ export function protocolObjectCode(equipmentType: ProtocolEquipmentTypeCode): st
   switch (equipmentType) {
     case "auto-refrigerator":
       return "TRK";
+    case "auto-refrigerator-kg":
+      return "TRK-KG";
     case "chamber":
       return "CHB";
     case "thermal-container":
@@ -900,11 +903,32 @@ export async function ensureThermalContainerStorage() {
       !protocolType.includes("'freezer'") ||
       !protocolType.includes("'thermal-container'") ||
       !protocolType.includes("'computerized-system'") ||
-      !protocolType.includes("'warehouse-expert'")
+      !protocolType.includes("'warehouse-expert'") ||
+      !protocolType.includes("'auto-refrigerator-kg'")
     ) {
       await db.execute(sql.raw(
         "ALTER TABLE protocols MODIFY COLUMN equipmentType " +
-        "enum('refrigerator','freezer','auto-refrigerator','thermal-container','computerized-system','warehouse','warehouse-expert','other') " +
+        "enum('refrigerator','freezer','auto-refrigerator','auto-refrigerator-kg','thermal-container','computerized-system','warehouse','warehouse-expert','other') " +
+        "DEFAULT 'refrigerator'",
+      ));
+    }
+
+    const questionTemplateColumnResult = await db.execute(sql.raw(
+      "SHOW COLUMNS FROM questionTemplates LIKE 'equipmentType'",
+    ));
+    const questionTemplateRows = (questionTemplateColumnResult as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
+    const questionTemplateType = String(questionTemplateRows?.[0]?.Type ?? questionTemplateRows?.[0]?.type ?? "");
+    if (
+      !questionTemplateType.includes("'freezer'") ||
+      !questionTemplateType.includes("'chamber'") ||
+      !questionTemplateType.includes("'thermal-container'") ||
+      !questionTemplateType.includes("'computerized-system'") ||
+      !questionTemplateType.includes("'warehouse-expert'") ||
+      !questionTemplateType.includes("'auto-refrigerator-kg'")
+    ) {
+      await db.execute(sql.raw(
+        "ALTER TABLE questionTemplates MODIFY COLUMN equipmentType " +
+        "enum('refrigerator','freezer','auto-refrigerator','auto-refrigerator-kg','chamber','thermal-container','computerized-system','warehouse','warehouse-expert','other') " +
         "DEFAULT 'refrigerator'",
       ));
     }
@@ -1396,12 +1420,13 @@ export async function ensureChamberQuestionTemplateStorage(
       columnType.includes("'chamber'") &&
       columnType.includes("'thermal-container'") &&
       columnType.includes("'computerized-system'") &&
-      columnType.includes("'warehouse-expert'")
+      columnType.includes("'warehouse-expert'") &&
+      columnType.includes("'auto-refrigerator-kg'")
     ) return;
 
     await db.execute(sql.raw(
       "ALTER TABLE questionTemplates MODIFY COLUMN equipmentType " +
-        "enum('refrigerator','freezer','auto-refrigerator','chamber','thermal-container','computerized-system','warehouse','warehouse-expert','other') " +
+        "enum('refrigerator','freezer','auto-refrigerator','auto-refrigerator-kg','chamber','thermal-container','computerized-system','warehouse','warehouse-expert','other') " +
       "NOT NULL DEFAULT 'refrigerator'",
     ));
 

@@ -24,6 +24,8 @@ import {
 import { calculateAllOperationalMetrics } from "./operationalMetrics";
 import {
   computeWarehouseSensorCount,
+  isAutoRefrigeratorLike,
+  isKyrgyzstanAutoRefrigerator,
   isWarehouseEaeu,
   isWarehouseLike,
   normalizeSensorAccuracyC,
@@ -345,6 +347,7 @@ const TEMP_MODE_LABEL: Record<string, string> = {
 const EQUIPMENT_LABEL: Record<string, string> = {
   refrigerator: "Холодильник",
   "auto-refrigerator": "Авторефрижератор", // Note: for warehouse protocols, use getEquipmentName() which returns "помещение (зона) хранения"
+  "auto-refrigerator-kg": "Авторефрижератор Кыргызстана",
   "thermal-container": "Термоконтейнер",
   freezer: "Морозильник",
   chamber: "Холодильная камера",
@@ -500,6 +503,15 @@ function getEquipmentNameWithCase(input: ReportInput, gramCase: "nominative" | "
   if (type === "other" && input.protocol?.customEquipmentName) {
     return input.protocol.customEquipmentName;
   }
+  if (isKyrgyzstanAutoRefrigerator(type)) {
+    switch (gramCase) {
+      case "genitive": return "авторефрижератора Кыргызстана";
+      case "accusative": return "авторефрижератор Кыргызстана";
+      case "instrumental": return "авторефрижератором Кыргызстана";
+      case "nominative":
+      default: return "Авторефрижератор Кыргызстана";
+    }
+  }
   if (isWarehouseLike(type)) {
     switch (gramCase) {
       case "genitive": return "помещения (зоны) хранения";
@@ -513,7 +525,7 @@ function getEquipmentNameWithCase(input: ReportInput, gramCase: "nominative" | "
 }
 
 function isReeferLike(type: string | null | undefined): boolean {
-  return type === "auto-refrigerator" || type === "chamber" || type === "thermal-container";
+  return isAutoRefrigeratorLike(type) || type === "chamber" || type === "thermal-container";
 }
 
 function reeferSubject(type: string | null | undefined): string {
@@ -1283,7 +1295,9 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
     ? "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430"
     : eqType === "thermal-container"
       ? "\u0422\u0435\u0440\u043c\u043e\u043a\u043e\u043d\u0442\u0435\u0439\u043d\u0435\u0440"
-    : eqType === "auto-refrigerator"
+    : isKyrgyzstanAutoRefrigerator(eqType)
+      ? "Авторефрижератор Кыргызстана"
+    : isAutoRefrigeratorLike(eqType)
       ? "\u0422\u0440\u0430\u043d\u0441\u043f\u043e\u0440\u0442\u043d\u043e\u0435 \u0441\u0440\u0435\u0434\u0441\u0442\u0432\u043e"
     : eqType === "freezer"
       ? "\u041c\u043e\u0440\u043e\u0437\u0438\u043b\u044c\u043d\u0438\u043a"

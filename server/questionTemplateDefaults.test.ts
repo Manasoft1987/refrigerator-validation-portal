@@ -6,6 +6,7 @@ import {
   CHAMBER_STAGE_TEMPLATES,
   STAGE_TEMPLATES,
   AUTO_REFRIGERATOR_STAGE_TEMPLATES,
+  AUTO_REFRIGERATOR_KG_STAGE_TEMPLATES,
   DEFAULT_IQ_QUESTIONS_WAREHOUSE,
   DEFAULT_OQ_QUESTIONS,
   DEFAULT_OQ_QUESTIONS_AUTO_REFRIGERATOR,
@@ -75,6 +76,17 @@ describe("auto-refrigerator stage text", () => {
       .join(" ");
     expect(text).toMatch(/авторефрижератор/i);
     expect(text).toMatch(/кузов/i);
+  });
+});
+
+describe("Kyrgyzstan auto-refrigerator stage text", () => {
+  it("uses EAEU and Kyrgyzstan regulatory wording without Kazakhstan NPA", () => {
+    const text = Object.values(AUTO_REFRIGERATOR_KG_STAGE_TEMPLATES)
+      .flatMap(stage => [stage.purpose, stage.description, stage.criteria])
+      .join(" ");
+    expect(text).toContain("Евразийской экономической комиссии");
+    expect(text).toContain("Кыргызской Республики");
+    expect(text).not.toMatch(/Республики Казахстан|Казахстан/i);
   });
 });
 

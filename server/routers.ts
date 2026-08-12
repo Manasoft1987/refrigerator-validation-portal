@@ -13,6 +13,8 @@ import {
   DEFAULT_OQ_QUESTIONS_WAREHOUSE,
   STAGE_TEMPLATES,
   AUTO_REFRIGERATOR_STAGE_TEMPLATES,
+  AUTO_REFRIGERATOR_KG_STAGE_TEMPLATES,
+  KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE,
   CHAMBER_STAGE_TEMPLATES,
   THERMAL_CONTAINER_STAGE_TEMPLATES,
   WAREHOUSE_STAGE_TEMPLATES,
@@ -22,6 +24,8 @@ import {
   maxSensorAccuracyC,
   normalizeSensorAccuracyC,
   aggregateTrialVerdicts,
+  isAutoRefrigeratorLike,
+  isKyrgyzstanAutoRefrigerator,
   isWarehouseLike,
 } from "@shared/validation";
 import { TRPCError } from "@trpc/server";
@@ -449,7 +453,7 @@ function defaultQuestionsFor(stage: "iq" | "oq", equipmentType?: string | null):
   if (isWarehouseLike(equipmentType)) {
     return stage === "iq" ? DEFAULT_IQ_QUESTIONS_WAREHOUSE : DEFAULT_OQ_QUESTIONS_WAREHOUSE;
   }
-  if (equipmentType === "auto-refrigerator") {
+  if (isAutoRefrigeratorLike(equipmentType)) {
     return stage === "iq"
       ? DEFAULT_IQ_QUESTIONS_AUTO_REFRIGERATOR
       : DEFAULT_OQ_QUESTIONS_AUTO_REFRIGERATOR;
@@ -738,7 +742,7 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .query(({ ctx, input }) => ownProtocol(ctx.user.id, input.id)),
     create: protectedProcedure
-      .input(z.object({ organizationId: z.number(), companyId: z.number().optional(), equipmentType: z.enum(["refrigerator", "freezer", "auto-refrigerator", "chamber", "thermal-container", "computerized-system", "warehouse", "warehouse-expert", "other"]).optional(), customEquipmentName: z.string().optional() }))
+      .input(z.object({ organizationId: z.number(), companyId: z.number().optional(), equipmentType: z.enum(["refrigerator", "freezer", "auto-refrigerator", "auto-refrigerator-kg", "chamber", "thermal-container", "computerized-system", "warehouse", "warehouse-expert", "other"]).optional(), customEquipmentName: z.string().optional() }))
       .mutation(async ({ ctx, input }) => {
         // Admins can always create; regular users must belong to an approved company
         if (ctx.user.role !== "admin") {
@@ -773,7 +777,8 @@ export const appRouter = router({
           requestedEquipmentType === "freezer" ||
           requestedEquipmentType === "thermal-container" ||
           requestedEquipmentType === "computerized-system" ||
-          requestedEquipmentType === "warehouse-expert"
+          requestedEquipmentType === "warehouse-expert" ||
+          requestedEquipmentType === KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE
         ) await ensureThermalContainerStorage();
         const year = new Date().getFullYear();
         const number = await nextProtocolNumberForCompany(companyId, year, requestedEquipmentType);
@@ -951,7 +956,7 @@ export const appRouter = router({
         if (usesProtocolEquipmentType) {
           delete coerced.equipmentType;
         }
-        if (requestedEquipmentType === "freezer") {
+        if (requestedEquipmentType === "freezer" || requestedEquipmentType === KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE) {
           await ensureThermalContainerStorage();
         }
         const saved = await upsertGeneralInfo(protocolId, coerced);
@@ -959,6 +964,7 @@ export const appRouter = router({
           "refrigerator",
           "freezer",
           "auto-refrigerator",
+          KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE,
           "warehouse",
           "warehouse-expert",
           "other",
@@ -1002,7 +1008,7 @@ export const appRouter = router({
           if (dbTemplates.length > 0) {
             return dbTemplates.map(t => t.text);
           }
-          if (isWarehouseLike(input.equipmentType) || input.equipmentType === "auto-refrigerator" || input.equipmentType === "chamber" || input.equipmentType === "thermal-container") {
+          if (isWarehouseLike(input.equipmentType) || isAutoRefrigeratorLike(input.equipmentType) || input.equipmentType === "chamber" || input.equipmentType === "thermal-container") {
             return defaultQuestionsFor(input.stage, input.equipmentType);
           }
           // If no equipment-specific templates, fall back to generic DB templates
@@ -1027,8 +1033,8 @@ export const appRouter = router({
         ? CHAMBER_STAGE_TEMPLATES[input.stage]
         : input.equipmentType === "thermal-container"
           ? THERMAL_CONTAINER_STAGE_TEMPLATES[input.stage]
-        : input.equipmentType === "auto-refrigerator"
-          ? AUTO_REFRIGERATOR_STAGE_TEMPLATES[input.stage]
+        : isAutoRefrigeratorLike(input.equipmentType)
+          ? (isKyrgyzstanAutoRefrigerator(input.equipmentType) ? AUTO_REFRIGERATOR_KG_STAGE_TEMPLATES : AUTO_REFRIGERATOR_STAGE_TEMPLATES)[input.stage]
           : STAGE_TEMPLATES[input.stage]),
   }),
 
@@ -1715,7 +1721,7 @@ export const appRouter = router({
       .input(z.object({ protocolId: z.number() }))
       .query(async ({ ctx, input }) => {
         const protocol = await ownProtocol(ctx.user.id, input.protocolId);
-        if (protocol.equipmentType !== "auto-refrigerator") return [];
+        if (!isAutoRefrigeratorLike(protocol.equipmentType)) return [];
         return listProtocolAttachments(input.protocolId);
       }),
     upload: protectedProcedure
@@ -1731,7 +1737,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const protocol = await ownProtocol(ctx.user.id, input.protocolId);
-        if (protocol.equipmentType !== "auto-refrigerator") {
+        if (!isAutoRefrigeratorLike(protocol.equipmentType)) {
           throw new TRPCError({
             code: "BAD_REQUEST",
             message: "Приложения пока доступны только для протоколов авторефрижераторов",
@@ -1775,7 +1781,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ ctx, input }) => {
         const protocol = await ownProtocol(ctx.user.id, input.protocolId);
-        if (protocol.equipmentType !== "auto-refrigerator") {
+        if (!isAutoRefrigeratorLike(protocol.equipmentType)) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Приложения доступны только для авторефрижераторов" });
         }
         const existing = await getProtocolAttachment(input.protocolId, input.id);
@@ -1795,7 +1801,7 @@ export const appRouter = router({
       .input(z.object({ protocolId: z.number(), id: z.number() }))
       .mutation(async ({ ctx, input }) => {
         const protocol = await ownProtocol(ctx.user.id, input.protocolId);
-        if (protocol.equipmentType !== "auto-refrigerator") {
+        if (!isAutoRefrigeratorLike(protocol.equipmentType)) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Приложения доступны только для авторефрижераторов" });
         }
         await deleteProtocolAttachment(input.protocolId, input.id);
@@ -1903,16 +1909,17 @@ export const appRouter = router({
         const isEnglishWarehouseReport = isWarehouseProtocol && gi?.reportLanguage === "en";
         const isChamberProtocol =
           protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || gi?.equipmentType === "chamber";
-        const isAutoRefrigeratorProtocol =
-          (protocol.equipmentType ?? gi?.equipmentType) === "auto-refrigerator";
+        const effectiveEquipmentType = (gi?.equipmentType as string | null | undefined) || protocol.equipmentType;
+        const isAutoRefrigeratorProtocol = isAutoRefrigeratorLike(effectiveEquipmentType);
+        const isKyrgyzstanAutoRefrigeratorProtocol = isKyrgyzstanAutoRefrigerator(effectiveEquipmentType);
         const isThermalContainerProtocol =
-          (protocol.equipmentType ?? gi?.equipmentType) === "thermal-container";
+          effectiveEquipmentType === "thermal-container";
         const reportStageTemplates = isWarehouseProtocol
           ? (isEnglishWarehouseReport ? WAREHOUSE_STAGE_TEMPLATES_EN : WAREHOUSE_STAGE_TEMPLATES)
           : isChamberProtocol
             ? CHAMBER_STAGE_TEMPLATES
             : isAutoRefrigeratorProtocol
-              ? AUTO_REFRIGERATOR_STAGE_TEMPLATES
+              ? (isKyrgyzstanAutoRefrigeratorProtocol ? AUTO_REFRIGERATOR_KG_STAGE_TEMPLATES : AUTO_REFRIGERATOR_STAGE_TEMPLATES)
               : isThermalContainerProtocol
                 ? THERMAL_CONTAINER_STAGE_TEMPLATES
                 : STAGE_TEMPLATES;
@@ -2286,6 +2293,7 @@ export const appRouter = router({
       }).optional())
       .query(async ({ input }) => {
         if (input?.equipmentType === "chamber" || input?.equipmentType === "thermal-container") await ensureChamberQuestionsReady();
+        if (input?.equipmentType === KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE) await ensureThermalContainerStorage();
         return listAllQuestionTemplates(input?.equipmentType, input?.equipmentKind);
       }),
     create: protectedProcedure
@@ -2293,7 +2301,7 @@ export const appRouter = router({
         z.object({
           stage: z.enum(["iq", "oq"]),
           text: z.string().min(1),
-          equipmentType: z.enum(["refrigerator", "freezer", "auto-refrigerator", "chamber", "thermal-container", "warehouse", "warehouse-expert", "other"]).optional(),
+          equipmentType: z.enum(["refrigerator", "freezer", "auto-refrigerator", "auto-refrigerator-kg", "chamber", "thermal-container", "warehouse", "warehouse-expert", "other"]).optional(),
           /** For warehouse: which equipment kind these questions apply to */
           equipmentKind: z.enum(["conditioner", "ventilation", "heat_curtain", "chiller", "fan_coil", "other"]).nullable().optional(),
         }),
@@ -2301,6 +2309,7 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         const eqType = input.equipmentType || "refrigerator";
         if (eqType === "chamber") await ensureChamberQuestionsReady();
+        if (eqType === KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE) await ensureThermalContainerStorage();
         const eqKind = input.equipmentKind ?? null;
         // Place new question at the end of its stage+equipmentType+equipmentKind
         const all = await listAllQuestionTemplates(eqType, eqKind);
@@ -2341,11 +2350,12 @@ export const appRouter = router({
       }),
     seedDefaults: protectedProcedure
       .input(z.object({
-        equipmentType: z.enum(["refrigerator", "freezer", "auto-refrigerator", "chamber", "thermal-container", "warehouse", "warehouse-expert", "other"]),
+        equipmentType: z.enum(["refrigerator", "freezer", "auto-refrigerator", "auto-refrigerator-kg", "chamber", "thermal-container", "warehouse", "warehouse-expert", "other"]),
         overwrite: z.boolean().optional(),
       }))
       .mutation(async ({ input }) => {
         if (input.equipmentType === "chamber" || input.equipmentType === "thermal-container") await ensureChamberQuestionsReady();
+        if (input.equipmentType === KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE) await ensureThermalContainerStorage();
         const existing = await listAllQuestionTemplates(input.equipmentType);
         if (existing.length > 0 && !input.overwrite) {
           return { inserted: 0, skipped: existing.length };
