@@ -1598,12 +1598,6 @@ function refrigeratorHeatPoint(
   shelfCount: number,
   drawerCount: number,
 ): { x: number; y: number } {
-  const posX = Number(sensor.posX);
-  const posY = Number(sensor.posY);
-  if (Number.isFinite(posX) && Number.isFinite(posY)) {
-    return { x: clamp01(posX / 100), y: clamp01(posY / 100) };
-  }
-
   const parsed = parseFridgePlacement(sensor.position);
   if (parsed) {
     const zoneX = FRIDGE_ZONES[parsed.zone].x / 100;
@@ -1615,6 +1609,12 @@ function refrigeratorHeatPoint(
       : shelfTop + ((Math.max(1, Math.min(shelfCount, parsed.shelf)) - 1) / Math.max(1, shelfCount - 1)) * (shelfBottom - shelfTop);
     const depthOffset = parsed.zone.startsWith("F") ? 0.035 : -0.01;
     return { x: clamp01(zoneX), y: clamp01(y + depthOffset) };
+  }
+
+  const posX = Number(sensor.posX);
+  const posY = Number(sensor.posY);
+  if (Number.isFinite(posX) && Number.isFinite(posY)) {
+    return { x: clamp01(posX / 100), y: clamp01(posY / 100) };
   }
 
   if (sensor.position && SNAP_POS[sensor.position]) {
