@@ -18,6 +18,7 @@ import {
   drawRefrigeratorDiagram,
   drawReeferTruckDiagram3D,
   drawStatsBarChart,
+  drawTemperatureMapSummary,
   type DiagramSensor,
   type EventMarker,
 } from "./charts";
@@ -1166,6 +1167,25 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
       } else {
         drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, "Схема 2. Расстановка датчиков (серийные номера и средняя температура)", "serial", input.refrigeratorDrawerCount ?? 2, input.refrigeratorLevelCount ?? 7, hotLabel, coldLabel);
       }
+    }
+    const supportsTemperatureMap =
+      !isWarehouseLike(eqType) &&
+      (isAutoRefrigeratorLike(eqType) || eqType === "refrigerator" || eqType === "freezer");
+    const hasTemperatureMapData = (input.pvLoggers ?? []).some(logger =>
+      logger.role === "internal" &&
+      logger.avg != null &&
+      Number.isFinite(typeof logger.avg === "string" ? Number(logger.avg) : logger.avg),
+    );
+    if (supportsTemperatureMap && hasTemperatureMapData) {
+      doc.addPage();
+      drawTemperatureMapSummary(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, {
+        title: "Схема 3. Температурная карта по средним значениям PV",
+        objectType: isAutoRefrigeratorLike(eqType) ? "truck" : eqType === "freezer" ? "freezer" : "refrigerator",
+        rangeMin: input.pv.rangeMin,
+        rangeMax: input.pv.rangeMax,
+        drawerCount: input.refrigeratorDrawerCount ?? 2,
+        levelCount: input.refrigeratorLevelCount ?? 7,
+      });
     }
     drawSensorPlacementAnalysis(doc, input.pvLoggers as DiagramSensor[], input);
     if (isWarehouseEaeu(eqType)) {

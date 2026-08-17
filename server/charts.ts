@@ -761,6 +761,143 @@ function formatSensorAvg(avg: DiagramSensor["avg"]): string | null {
   return value.toFixed(1).replace(".", ",");
 }
 
+function numericSensorAvg(avg: DiagramSensor["avg"]): number | null {
+  const value = typeof avg === "string" ? Number(avg) : avg;
+  return value == null || !Number.isFinite(value) ? null : value;
+}
+
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const clean = hex.replace("#", "");
+  return [
+    parseInt(clean.slice(0, 2), 16),
+    parseInt(clean.slice(2, 4), 16),
+    parseInt(clean.slice(4, 6), 16),
+  ];
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const toHex = (n: number) => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, "0");
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function interpolateColor(a: string, b: string, t: number): string {
+  const [ar, ag, ab] = hexToRgb(a);
+  const [br, bg, bb] = hexToRgb(b);
+  return rgbToHex(ar + (br - ar) * t, ag + (bg - ag) * t, ab + (bb - ab) * t);
+}
+
+function temperaturePaletteColor(value: number, lo: number, hi: number): string {
+  const t = clamp01((value - lo) / (hi - lo || 1));
+  const stops = [
+    { at: 0.00, color: "#1d4ed8" },
+    { at: 0.24, color: "#06b6d4" },
+    { at: 0.50, color: "#22c55e" },
+    { at: 0.74, color: "#facc15" },
+    { at: 1.00, color: "#ef4444" },
+  ];
+  for (let i = 0; i < stops.length - 1; i += 1) {
+    const left = stops[i];
+    const right = stops[i + 1];
+    if (t >= left.at && t <= right.at) {
+      return interpolateColor(left.color, right.color, (t - left.at) / (right.at - left.at || 1));
+    }
+  }
+  return stops[stops.length - 1].color;
+}
+
+function idwTemperature(
+  x: number,
+  y: number,
+  points: Array<{ x: number; y: number; avg: number }>,
+): number {
+  let numerator = 0;
+  let denominator = 0;
+  for (const point of points) {
+    const dx = x - point.x;
+    const dy = y - point.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < 0.0002) return point.avg;
+    const weight = 1 / Math.pow(d2, 1.15);
+    numerator += point.avg * weight;
+    denominator += weight;
+  }
+  return denominator > 0 ? numerator / denominator : 0;
+}
+
+function shortTemperatureMapLabel(sensor: DiagramSensor): string {
+  const primary = String(sensor.customName || sensor.label || "").trim();
+  const digits = primary.replace(/\D/g, "");
+  if (digits.length >= 4) return digits.slice(-4);
+  if (primary) return primary.length > 8 ? primary.slice(-8) : primary;
+  return String(sensor.id || "");
+}
+
+function drawHeatField(
+  doc: any,
+  points: Array<{ x: number; y: number; avg: number }>,
+  lo: number,
+  hi: number,
+  rect: { x: number; y: number; w: number; h: number },
+  gridCols: number,
+  gridRows: number,
+): void {
+  const cellW = rect.w / gridCols;
+  const cellH = rect.h / gridRows;
+  doc.save();
+  for (let row = 0; row < gridRows; row += 1) {
+    for (let col = 0; col < gridCols; col += 1) {
+      const nx = (col + 0.5) / gridCols;
+      const ny = (row + 0.5) / gridRows;
+      const temp = idwTemperature(nx, ny, points);
+      doc.rect(rect.x + col * cellW, rect.y + row * cellH, cellW + 0.25, cellH + 0.25)
+        .fill(temperaturePaletteColor(temp, lo, hi));
+    }
+  }
+  doc.restore();
+}
+
+function drawTemperaturePoint(
+  doc: any,
+  point: { x: number; y: number; avg: number; sensor: DiagramSensor },
+  rect: { x: number; y: number; w: number; h: number },
+  lo: number,
+  hi: number,
+  idx: number,
+  hotSensor?: DiagramSensor | null,
+  coldSensor?: DiagramSensor | null,
+): void {
+  const cx = rect.x + point.x * rect.w;
+  const cy = rect.y + point.y * rect.h;
+  const color = sensorBadgeColor(idx);
+  const label = shortTemperatureMapLabel(point.sensor);
+  const tempLabel = `${formatSensorAvg(point.avg) ?? point.avg.toFixed(1).replace(".", ",")}°C`;
+  const isHot = hotSensor === point.sensor;
+  const isCold = coldSensor === point.sensor;
+  const r = 14;
+
+  doc.save();
+  doc.circle(cx, cy, r + 2).fill("#ffffff");
+  doc.circle(cx, cy, r).fill(color).strokeColor("#ffffff").lineWidth(1.6).stroke();
+  if (isHot) {
+    doc.circle(cx, cy, r + 4).strokeColor("#ef4444").lineWidth(1.6).stroke();
+    drawStar(doc, cx + r + 8, cy - r - 8, 5, "#ef4444");
+  }
+  if (isCold) {
+    doc.circle(cx, cy, r + (isHot ? 7 : 4)).strokeColor("#2563eb").lineWidth(1.6).stroke();
+    drawDiamond(doc, cx + r + 8, cy + (isHot ? 7 : -r - 8), 5, "#2563eb");
+  }
+  doc.font("bold").fontSize(6.8).fillColor("#ffffff");
+  doc.text(label, cx - r + 1, cy - 7.8, { width: r * 2 - 2, align: "center", lineBreak: false });
+  doc.font("bold").fontSize(5.5).fillColor("#ffffff");
+  doc.text(tempLabel, cx - r + 1, cy + 1.8, { width: r * 2 - 2, align: "center", lineBreak: false });
+  doc.restore();
+}
+
 function refrigeratorBadgeText(sensor: DiagramSensor, idx: number, badgeMode: "serial" | "position"): string {
   if (badgeMode === "position") return refrigeratorPositionLabel(sensor, idx);
   const base = refrigeratorBadgeLabel(sensor);
@@ -1421,6 +1558,245 @@ const REEFER_GROUP_COLORS: Record<string, string> = {
   wall:   "#16a34a",
   center: "#dc2626",
 };
+
+function refrigeratorHeatPoint(
+  sensor: DiagramSensor,
+  idx: number,
+  shelfCount: number,
+  drawerCount: number,
+): { x: number; y: number } {
+  const posX = Number(sensor.posX);
+  const posY = Number(sensor.posY);
+  if (Number.isFinite(posX) && Number.isFinite(posY)) {
+    return { x: clamp01(posX / 100), y: clamp01(posY / 100) };
+  }
+
+  const parsed = parseFridgePlacement(sensor.position);
+  if (parsed) {
+    const zoneX = FRIDGE_ZONES[parsed.zone].x / 100;
+    const drawerReserve = drawerCount > 0 ? 0.12 : 0.04;
+    const shelfTop = 0.10;
+    const shelfBottom = 1 - drawerReserve;
+    const y = shelfCount <= 1
+      ? 0.5
+      : shelfTop + ((Math.max(1, Math.min(shelfCount, parsed.shelf)) - 1) / Math.max(1, shelfCount - 1)) * (shelfBottom - shelfTop);
+    const depthOffset = parsed.zone.startsWith("F") ? 0.035 : -0.01;
+    return { x: clamp01(zoneX), y: clamp01(y + depthOffset) };
+  }
+
+  if (sensor.position && SNAP_POS[sensor.position]) {
+    const snap = SNAP_POS[sensor.position];
+    return { x: snap.x / 100, y: snap.y / 100 };
+  }
+
+  return {
+    x: 0.18 + (idx % 3) * 0.32,
+    y: 0.18 + Math.floor(idx / 3) * 0.18,
+  };
+}
+
+function reeferHeatPoint(sensor: DiagramSensor, idx: number): { x: number; y: number } {
+  const posX = Number(sensor.posX);
+  const posY = Number(sensor.posY);
+  if (Number.isFinite(posX) && Number.isFinite(posY)) {
+    return { x: clamp01(posX / 100), y: clamp01(posY / 100) };
+  }
+
+  const ref = REEFER_SENSOR_POSITIONS.find(position => position.id === sensor.position);
+  if (ref) {
+    // Side elevation summary: horizontal axis follows cargo length, vertical axis follows height.
+    // Width differences are kept as a small diagonal offset so corner pairs remain distinguishable.
+    return {
+      x: clamp01(0.08 + ref.y * 0.84 + (ref.x - 0.5) * 0.08),
+      y: clamp01(0.86 - ref.z * 0.72 + (ref.x - 0.5) * 0.05),
+    };
+  }
+
+  return {
+    x: 0.10 + (idx % 5) * 0.19,
+    y: 0.18 + Math.floor(idx / 5) * 0.24,
+  };
+}
+
+function sensorByExtreme(
+  points: Array<{ sensor: DiagramSensor; avg: number }>,
+  kind: "hot" | "cold",
+): DiagramSensor | null {
+  if (points.length === 0) return null;
+  return points.reduce((best, current) => {
+    if (kind === "hot") return current.avg > best.avg ? current : best;
+    return current.avg < best.avg ? current : best;
+  }, points[0]).sensor;
+}
+
+function drawTemperatureLegend(
+  doc: any,
+  x: number,
+  y: number,
+  w: number,
+  lo: number,
+  hi: number,
+): void {
+  const steps = 36;
+  const h = 9;
+  for (let i = 0; i < steps; i += 1) {
+    const t = i / Math.max(1, steps - 1);
+    doc.rect(x + (i / steps) * w, y, w / steps + 0.3, h)
+      .fill(temperaturePaletteColor(lo + (hi - lo) * t, lo, hi));
+  }
+  doc.roundedRect(x, y, w, h, 2).strokeColor("#64748b").lineWidth(0.5).stroke();
+  doc.font("body").fontSize(7).fillColor("#475569");
+  doc.text(`${lo.toFixed(1).replace(".", ",")} °C`, x, y + 12, { width: 60, lineBreak: false });
+  doc.text(`${hi.toFixed(1).replace(".", ",")} °C`, x + w - 60, y + 12, { width: 60, align: "right", lineBreak: false });
+  doc.text("цветовая интерполяция по средним значениям внутренних датчиков", x + 65, y + 12, {
+    width: w - 130,
+    align: "center",
+    lineBreak: false,
+  });
+}
+
+export function drawTemperatureMapSummary(
+  doc: PDFKit.PDFDocument,
+  sensors: DiagramSensor[],
+  pageMargin: number,
+  options: {
+    title?: string;
+    objectType: "truck" | "refrigerator" | "freezer";
+    rangeMin?: number | null;
+    rangeMax?: number | null;
+    drawerCount?: number | null;
+    levelCount?: number | null;
+  },
+): void {
+  const internalPoints = sensors
+    .filter(sensor => sensor.role === "internal")
+    .map((sensor, idx) => {
+      const avg = numericSensorAvg(sensor.avg);
+      if (avg == null) return null;
+      const p = options.objectType === "truck"
+        ? reeferHeatPoint(sensor, idx)
+        : refrigeratorHeatPoint(
+          sensor,
+          idx,
+          normalizeFridgeLevelCount(options.levelCount ?? fridgeShelfCount(sensors)),
+          Math.max(0, Math.min(2, Math.round(Number(options.drawerCount ?? 2)))),
+        );
+      return { sensor, avg, x: p.x, y: p.y };
+    })
+    .filter((point): point is { sensor: DiagramSensor; avg: number; x: number; y: number } => Boolean(point));
+
+  ensureSpace(doc, 520);
+
+  if (options.title) {
+    doc.font("bold").fontSize(13).fillColor("#1f2937");
+    doc.text(options.title, pageMargin, doc.y, { width: doc.page.width - pageMargin * 2 });
+    doc.moveDown(0.35);
+  }
+
+  if (internalPoints.length < 2) {
+    doc.font("body").fontSize(9).fillColor("#64748b");
+    doc.text("Температурная карта не построена: нужны минимум два внутренних датчика со средними значениями и координатами.", pageMargin, doc.y, {
+      width: doc.page.width - pageMargin * 2,
+    });
+    doc.moveDown(0.8);
+    return;
+  }
+
+  let lo = Math.min(...internalPoints.map(point => point.avg));
+  let hi = Math.max(...internalPoints.map(point => point.avg));
+  if (Number.isFinite(options.rangeMin)) lo = Math.min(lo, Number(options.rangeMin));
+  if (Number.isFinite(options.rangeMax)) hi = Math.max(hi, Number(options.rangeMax));
+  if (Math.abs(hi - lo) < 0.5) {
+    lo -= 0.5;
+    hi += 0.5;
+  }
+  const hotSensor = sensorByExtreme(internalPoints, "hot");
+  const coldSensor = sensorByExtreme(internalPoints, "cold");
+
+  const availableW = doc.page.width - pageMargin * 2;
+  const designW = options.objectType === "truck" ? 760 : 560;
+  const designH = options.objectType === "truck" ? 360 : 650;
+  const availableH = Math.max(420, doc.page.height - doc.page.margins.bottom - (doc.y as number) - 10);
+  const scale = Math.min(availableW / designW, availableH / designH, 1);
+  const originX = pageMargin + Math.max(0, (availableW - designW * scale) / 2);
+  const originY = doc.y as number;
+  const sx = (value: number) => originX + value * scale;
+  const sy = (value: number) => originY + value * scale;
+  const sv = (value: number) => value * scale;
+
+  if (options.objectType === "truck") {
+    const body = { x: sx(48), y: sy(66), w: sv(580), h: sv(190) };
+    drawHeatField(doc, internalPoints, lo, hi, body, 62, 22);
+    doc.save();
+    doc.roundedRect(body.x, body.y, body.w, body.h, sv(4)).lineWidth(sv(3)).strokeColor("#111827").stroke();
+    doc.rect(sx(628), sy(140), sv(108), sv(88)).fill("#f8fafc").strokeColor("#111827").lineWidth(sv(3)).stroke();
+    doc.rect(sx(656), sy(158), sv(48), sv(36)).fill("#e0f2fe").strokeColor("#111827").lineWidth(sv(2)).stroke();
+    doc.moveTo(sx(26), sy(276)).lineTo(sx(748), sy(276)).lineWidth(sv(3)).strokeColor("#111827").stroke();
+    [sx(130), sx(668)].forEach(wx => {
+      doc.circle(wx, sy(306), sv(28)).fill("#ffffff").strokeColor("#111827").lineWidth(sv(3)).stroke();
+      doc.circle(wx, sy(306), sv(13)).fill("#e5e7eb").strokeColor("#64748b").lineWidth(sv(1)).stroke();
+    });
+    doc.restore();
+    internalPoints.forEach((point, idx) => drawTemperaturePoint(doc, point, body, lo, hi, idx, hotSensor, coldSensor));
+    drawTemperatureLegend(doc, sx(126), sy(324), sv(500), lo, hi);
+  } else {
+    const shelfCount = normalizeFridgeLevelCount(options.levelCount ?? fridgeShelfCount(sensors));
+    const drawerCount = Math.max(0, Math.min(2, Math.round(Number(options.drawerCount ?? 2))));
+    const cab = { x: sx(74), y: sy(38), w: sv(360), h: sv(540) };
+    const heatRect = { x: sx(96), y: sy(72), w: sv(312), h: sv(455) };
+    drawHeatField(doc, internalPoints, lo, hi, heatRect, 32, 48);
+    doc.save();
+    doc.roundedRect(cab.x, cab.y, cab.w, cab.h, sv(6)).lineWidth(sv(2.6)).strokeColor("#111827").stroke();
+    doc.polygon(
+      [cab.x + cab.w, cab.y],
+      [sx(500), sy(72)],
+      [sx(500), sy(620)],
+      [cab.x + cab.w, cab.y + cab.h],
+    ).fillAndStroke("#e2e8f0", "#111827");
+    doc.roundedRect(heatRect.x, heatRect.y, heatRect.w, heatRect.h, sv(4)).lineWidth(sv(1.2)).strokeColor("#94a3b8").stroke();
+
+    const topGap = 54;
+    const bottomGap = drawerCount > 0 ? 84 : 34;
+    const shelfAreaH = 540 - topGap - bottomGap;
+    for (let shelf = 1; shelf <= shelfCount; shelf += 1) {
+      if (drawerCount > 0 && shelf === shelfCount) continue;
+      const y = sy(38 + topGap + (shelf - 1) * (shelfCount > 1 ? shelfAreaH / (shelfCount - 1) : 0));
+      doc.polygon(
+        [sx(112), y],
+        [sx(404), y],
+        [sx(380), y + sv(22)],
+        [sx(88), y + sv(22)],
+      ).fillAndStroke("#ffffff", "#64748b");
+      doc.font("bold").fontSize(sv(8)).fillColor("#475569");
+      doc.text(String(shelf), sx(446), y + sv(5), { width: sv(20), align: "center", lineBreak: false });
+    }
+    if (drawerCount > 0) {
+      const drawerY = sy(500);
+      if (drawerCount === 1) {
+        doc.roundedRect(sx(124), drawerY, sv(248), sv(44), sv(6)).fillAndStroke("#ffffff", "#94a3b8");
+        doc.font("bold").fontSize(sv(9)).fillColor("#64748b").text("Лоток", sx(124), drawerY + sv(17), { width: sv(248), align: "center", lineBreak: false });
+      } else {
+        doc.roundedRect(sx(112), drawerY, sv(136), sv(44), sv(6)).fillAndStroke("#ffffff", "#94a3b8");
+        doc.roundedRect(sx(260), drawerY, sv(136), sv(44), sv(6)).fillAndStroke("#ffffff", "#94a3b8");
+        doc.font("bold").fontSize(sv(9)).fillColor("#64748b").text("Лоток", sx(112), drawerY + sv(17), { width: sv(136), align: "center", lineBreak: false });
+        doc.text("Лоток", sx(260), drawerY + sv(17), { width: sv(136), align: "center", lineBreak: false });
+      }
+    }
+    doc.restore();
+    internalPoints.forEach((point, idx) => drawTemperaturePoint(doc, point, heatRect, lo, hi, idx, hotSensor, coldSensor));
+    drawTemperatureLegend(doc, sx(110), sy(604), sv(330), lo, hi);
+  }
+
+  doc.font("body").fontSize(7.5).fillColor("#64748b");
+  doc.text(
+    "Карта построена методом интерполяции по средним значениям внутренних регистраторов данных за период PV; числовые результаты и критерии приемки приведены в таблицах отчёта.",
+    pageMargin,
+    originY + designH * scale + 4,
+    { width: doc.page.width - pageMargin * 2, align: "center" },
+  );
+  doc.y = originY + designH * scale + 30;
+  doc.fillColor("#000000");
+}
 
 
 /**
