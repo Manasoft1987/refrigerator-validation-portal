@@ -1171,14 +1171,31 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     const supportsTemperatureMap =
       !isWarehouseLike(eqType) &&
       (isAutoRefrigeratorLike(eqType) || eqType === "refrigerator" || eqType === "freezer");
-    const hasTemperatureMapData = (input.pvLoggers ?? []).some(logger =>
+    const pvAverageBySensorKey = new Map<string, number | string | null | undefined>();
+    const addAverageKey = (key: unknown, avg: number | string | null | undefined) => {
+      const normalized = String(key ?? "").trim();
+      if (normalized) pvAverageBySensorKey.set(normalized, avg);
+    };
+    input.pv.loggers.forEach(logger => {
+      addAverageKey(logger.label, logger.avg);
+      addAverageKey(logger.customName, logger.avg);
+    });
+    const temperatureMapLoggers = (input.pvLoggers ?? []).map(logger => {
+      const mergedAvg =
+        logger.avg ??
+        pvAverageBySensorKey.get(String(logger.label ?? "").trim()) ??
+        pvAverageBySensorKey.get(String(logger.customName ?? "").trim()) ??
+        null;
+      return { ...logger, avg: mergedAvg };
+    });
+    const hasTemperatureMapData = temperatureMapLoggers.some(logger =>
       logger.role === "internal" &&
       logger.avg != null &&
       Number.isFinite(typeof logger.avg === "string" ? Number(logger.avg) : logger.avg),
     );
     if (supportsTemperatureMap && hasTemperatureMapData) {
       doc.addPage();
-      drawTemperatureMapSummary(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, {
+      drawTemperatureMapSummary(doc, temperatureMapLoggers as DiagramSensor[], PAGE_MARGIN, {
         title: "Схема 3. Температурная карта по средним значениям PV",
         objectType: isAutoRefrigeratorLike(eqType) ? "truck" : eqType === "freezer" ? "freezer" : "refrigerator",
         rangeMin: input.pv.rangeMin,

@@ -898,6 +898,39 @@ function drawTemperaturePoint(
   doc.restore();
 }
 
+function spreadTemperaturePoints<T extends { x: number; y: number }>(
+  points: T[],
+  minDistance: number,
+): T[] {
+  const spread = points.map(point => ({ ...point }));
+  for (let pass = 0; pass < 10; pass += 1) {
+    for (let i = 0; i < spread.length; i += 1) {
+      for (let j = i + 1; j < spread.length; j += 1) {
+        let dx = spread[j].x - spread[i].x;
+        let dy = spread[j].y - spread[i].y;
+        let distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance >= minDistance) continue;
+
+        if (distance < 0.001) {
+          const angle = ((i + j + pass + 1) * 137.5 * Math.PI) / 180;
+          dx = Math.cos(angle);
+          dy = Math.sin(angle);
+          distance = 1;
+        }
+
+        const push = (minDistance - distance) / 2;
+        const ux = dx / distance;
+        const uy = dy / distance;
+        spread[i].x = clamp01(spread[i].x - ux * push);
+        spread[i].y = clamp01(spread[i].y - uy * push);
+        spread[j].x = clamp01(spread[j].x + ux * push);
+        spread[j].y = clamp01(spread[j].y + uy * push);
+      }
+    }
+  }
+  return spread;
+}
+
 function refrigeratorBadgeText(sensor: DiagramSensor, idx: number, badgeMode: "serial" | "position"): string {
   if (badgeMode === "position") return refrigeratorPositionLabel(sensor, idx);
   const base = refrigeratorBadgeLabel(sensor);
@@ -1712,6 +1745,10 @@ export function drawTemperatureMapSummary(
   }
   const hotSensor = sensorByExtreme(internalPoints, "hot");
   const coldSensor = sensorByExtreme(internalPoints, "cold");
+  const displayPoints = spreadTemperaturePoints(
+    internalPoints,
+    options.objectType === "truck" ? 0.072 : 0.064,
+  );
 
   const availableW = doc.page.width - pageMargin * 2;
   const designW = options.objectType === "truck" ? 760 : 560;
@@ -1737,7 +1774,7 @@ export function drawTemperatureMapSummary(
       doc.circle(wx, sy(306), sv(13)).fill("#e5e7eb").strokeColor("#64748b").lineWidth(sv(1)).stroke();
     });
     doc.restore();
-    internalPoints.forEach((point, idx) => drawTemperaturePoint(doc, point, body, lo, hi, idx, hotSensor, coldSensor));
+    displayPoints.forEach((point, idx) => drawTemperaturePoint(doc, point, body, lo, hi, idx, hotSensor, coldSensor));
     drawTemperatureLegend(doc, sx(126), sy(324), sv(500), lo, hi);
   } else {
     const shelfCount = normalizeFridgeLevelCount(options.levelCount ?? fridgeShelfCount(sensors));
@@ -1783,7 +1820,7 @@ export function drawTemperatureMapSummary(
       }
     }
     doc.restore();
-    internalPoints.forEach((point, idx) => drawTemperaturePoint(doc, point, heatRect, lo, hi, idx, hotSensor, coldSensor));
+    displayPoints.forEach((point, idx) => drawTemperaturePoint(doc, point, heatRect, lo, hi, idx, hotSensor, coldSensor));
     drawTemperatureLegend(doc, sx(110), sy(604), sv(330), lo, hi);
   }
 
