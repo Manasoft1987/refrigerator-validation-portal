@@ -1998,6 +1998,25 @@ export const appRouter = router({
           }
         }
 
+        // Clean warehouse floor-plan background (uploaded PDF/photo), used under
+        // vector sensor markers in the PDF. This avoids embedding editor
+        // screenshots with stale labels/critical marks.
+        let planBackgroundImageBuffer: Buffer | null = null;
+        const planBgKey = (session as any)?.planBackgroundImageKey ?? null;
+        const planBgUrl = (session as any)?.planBackgroundImageUrl ?? null;
+        const inlinePlanBackgroundImage = typeof planBgUrl === "string"
+          ? planBgUrl.match(/^data:image\/(?:png|jpeg|jpg|webp);base64,(.+)$/)
+          : null;
+        if (inlinePlanBackgroundImage) {
+          planBackgroundImageBuffer = Buffer.from(inlinePlanBackgroundImage[1], "base64");
+        } else if (planBgKey && !String(planBgKey).startsWith("inline:")) {
+          try {
+            planBackgroundImageBuffer = (await storageReadBuffer(planBgKey)).data;
+          } catch (e) {
+            console.warn("Plan background image fetch failed:", e);
+          }
+        }
+
         // Fetch excursion study data
         const excursionSession = await getExcursionSession(input.protocolId);
         const excursionLoggers = excursionSession?.enabled
@@ -2205,8 +2224,9 @@ export const appRouter = router({
           refrigeratorDrawerCount: Number((session as any)?.refrigeratorDrawerCount ?? 2),
           refrigeratorLevelCount: Number((session as any)?.refrigeratorLevelCount ?? 7),
           floorPlanObjects: session?.floorPlanObjects as any,
-          // Saved plan screenshot (preferred over vector drawing in PDF) — pass as Buffer for PDFKit
+          // Saved editor screenshot fallback; clean plan background is passed separately.
           planImageUrl: planImageBuffer,
+          planBackgroundImageUrl: planBackgroundImageBuffer,
           // Room dims from pvSession (preferred over generalInfo.whXxx)
           pvRoomLengthM: (session as any)?.roomLengthM ? Number((session as any).roomLengthM) : null,
           pvRoomWidthM: (session as any)?.roomWidthM ? Number((session as any).roomWidthM) : null,

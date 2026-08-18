@@ -102,7 +102,7 @@ describe("generateProtocolPdf – warehouse / storage zone", () => {
       let imageCallCount = 0;
       let diagramTitlePage: number | undefined;
       let diagramLengthLabelPage: number | undefined;
-      const planImageBuffer = Buffer.from("editor screenshot should not be embedded");
+      const planImageBuffer = Buffer.from("clean room plan background should be embedded");
 
       (PDFDocument.prototype as any).image = function (...args: any[]) {
         if (args[0] === planImageBuffer) {
@@ -224,7 +224,7 @@ describe("generateProtocolPdf – warehouse / storage zone", () => {
               label: "Перегородка",
             },
           ],
-          planImageUrl: planImageBuffer,
+          planBackgroundImageUrl: planImageBuffer,
         } as any);
       } finally {
         (PDFDocument.prototype as any).image = originalImage;
@@ -234,7 +234,7 @@ describe("generateProtocolPdf – warehouse / storage zone", () => {
       expect(Buffer.isBuffer(buf)).toBe(true);
       expect(buf.length).toBeGreaterThan(2000);
       expect(buf.subarray(0, 5).toString("ascii")).toBe("%PDF-");
-      expect(imageCallCount).toBe(0);
+      expect(imageCallCount).toBeGreaterThan(0);
       expect(diagramTitlePage).toBeDefined();
       expect(diagramLengthLabelPage).toBe(diagramTitlePage);
     },

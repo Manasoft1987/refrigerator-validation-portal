@@ -301,6 +301,10 @@ export type ReportInput = {
    * Used only as a fallback when structured plan coordinates are unavailable.
    */
   planImageUrl?: string | Buffer | null;
+  /**
+   * Clean uploaded room plan/photo used as a background under vector markers.
+   */
+  planBackgroundImageUrl?: string | Buffer | null;
   /** Room dimensions from pvSession (preferred over generalInfo.whXxx) */
   pvRoomLengthM?: number | null;
   pvRoomWidthM?: number | null;
@@ -793,7 +797,7 @@ function getStageTrace(input: ReportInput, stage: "IQ" | "OQ" | "PV"): DataInteg
  * If customName is provided, appends it on a new line.
  */
 function shortLabel(label: string, customName?: string | null): string {
-  const short = label.length > 4 ? label.slice(-4) : label;
+  const short = shortSensorId(label) || label;
   return customName ? `${short}\n${customName}` : short;
 }
 
@@ -873,10 +877,14 @@ function buildWarehouseCriticalSensorTokens(input: ReportInput): { hot: Set<stri
   const add = (set: Set<string>, value: string | number | null | undefined) => {
     for (const token of sensorTokenVariants(value)) set.add(token);
   };
-  const addSummaryLogger = (set: Set<string>, logger: LoggerSummary | undefined | null) => {
+  const addSummaryLogger = (
+    set: Set<string>,
+    logger: { label?: string | null; customName?: string | null; position?: string | null } | undefined | null,
+  ) => {
     if (!logger) return;
     add(set, logger.label);
     add(set, logger.customName);
+    add(set, logger.position);
   };
   const addMatchingPvLoggerPositions = (set: Set<string>) => {
     const current = Array.from(set);
@@ -895,8 +903,37 @@ function buildWarehouseCriticalSensorTokens(input: ReportInput): { hot: Set<stri
 
   const hot = new Set<string>();
   const cold = new Set<string>();
-  addSummaryLogger(hot, input.pv.hotIdx !== null ? input.pv.loggers[input.pv.hotIdx] : null);
-  addSummaryLogger(cold, input.pv.coldIdx !== null ? input.pv.loggers[input.pv.coldIdx] : null);
+  // The warehouse plan captions show average PV temperature, so the critical
+  // markers on this visual map must be derived from the current internal logger
+  // averages. Stored hotIdx/coldIdx can become stale after logger deletion or
+  // re-upload and may also use a different basis (instantaneous min).
+  const currentInternalSummaries = input.pv.loggers
+    .filter(logger => logger.role === "internal" && Number.isFinite(Number(logger.avg)));
+  const currentInternalPlanLoggers = (input.pvLoggers ?? [])
+    .filter(logger => logger.role === "internal" && Number.isFinite(Number(logger.avg)));
+
+  if (currentInternalSummaries.length > 0) {
+    const hottest = currentInternalSummaries.reduce((best, logger) => (
+      Number(logger.avg) > Number(best.avg) ? logger : best
+    ), currentInternalSummaries[0]);
+    const coldest = currentInternalSummaries.reduce((best, logger) => (
+      Number(logger.avg) < Number(best.avg) ? logger : best
+    ), currentInternalSummaries[0]);
+    addSummaryLogger(hot, hottest);
+    addSummaryLogger(cold, coldest);
+  } else if (currentInternalPlanLoggers.length > 0) {
+    const hottest = currentInternalPlanLoggers.reduce((best, logger) => (
+      Number(logger.avg) > Number(best.avg) ? logger : best
+    ), currentInternalPlanLoggers[0]);
+    const coldest = currentInternalPlanLoggers.reduce((best, logger) => (
+      Number(logger.avg) < Number(best.avg) ? logger : best
+    ), currentInternalPlanLoggers[0]);
+    addSummaryLogger(hot, hottest);
+    addSummaryLogger(cold, coldest);
+  } else {
+    addSummaryLogger(hot, input.pv.hotIdx !== null ? input.pv.loggers[input.pv.hotIdx] : null);
+    addSummaryLogger(cold, input.pv.coldIdx !== null ? input.pv.loggers[input.pv.coldIdx] : null);
+  }
   addMatchingPvLoggerPositions(hot);
   addMatchingPvLoggerPositions(cold);
   return { hot, cold };
@@ -964,6 +1001,26 @@ function chooseWarehouseCriticalMarkerPosition(
     }
   }
   return fallback ?? [plan.x + markerRadius, plan.y + markerRadius];
+}
+
+function chooseWarehouseFloatingLabelPosition(
+  candidates: Array<[number, number]>,
+  plan: WarehouseMarkerBox,
+  occupied: WarehouseMarkerBox[],
+  labelW: number,
+  labelH: number,
+): WarehouseMarkerBox {
+  let fallback: WarehouseMarkerBox | null = null;
+  for (const [rawX, rawY] of candidates) {
+    const x = Math.max(plan.x + 2, Math.min(plan.x + plan.w - labelW - 2, rawX));
+    const y = Math.max(plan.y + 2, Math.min(plan.y + plan.h - labelH - 2, rawY));
+    const box = { x, y, w: labelW, h: labelH };
+    fallback ??= box;
+    if (!occupied.some(item => warehouseBoxesOverlap(box, item))) {
+      return box;
+    }
+  }
+  return fallback ?? { x: plan.x + 2, y: plan.y + 2, w: labelW, h: labelH };
 }
 
 function buildActiveSensorTokens(input: ReportInput): Set<string> {
@@ -4200,6 +4257,33 @@ function drawWarehousePlanDiagram(
   const planX = pageLeft + (usableW - drawW - externalBadgeW) / 2;
   const planY = doc.y + 10;
 
+  let embeddedPlanBackground = false;
+  if (!template && input.planBackgroundImageUrl) {
+    try {
+      doc.save();
+      doc.rect(planX, planY, drawW, drawH).clip();
+      doc.opacity(0.96);
+      doc.image(input.planBackgroundImageUrl as any, planX, planY, {
+        fit: [drawW, drawH],
+        align: "center",
+        valign: "center",
+      });
+      doc.restore();
+      embeddedPlanBackground = true;
+    } catch (_e) {
+      doc.restore();
+      embeddedPlanBackground = false;
+    }
+  }
+
+  if (!embeddedPlanBackground) {
+    doc.save();
+    doc.fillColor("#fbfdff").rect(planX, planY, drawW, drawH).fill();
+    doc.fillColor("#f1f5f9").opacity(0.55);
+    doc.roundedRect(planX + 8, planY + 8, drawW - 16, drawH - 16, 4).fill();
+    doc.restore();
+  }
+
   // Frame
   doc.save();
   doc.lineWidth(1.2).strokeColor(ACCENT)
@@ -4218,7 +4302,7 @@ function drawWarehousePlanDiagram(
     externalWarehouseLoggers.slice(0, 3).forEach((logger, idx) => {
       const y = firstY + idx * 24;
       const rawLabel = String(logger.customName || logger.label || "EXT");
-      const label = rawLabel.length > 8 ? rawLabel.slice(-8) : rawLabel;
+      const label = shortSensorId(rawLabel) || "EXT";
       doc.fillColor("#f1f5f9").strokeColor("#64748b").lineWidth(0.8)
         .roundedRect(badgeX, y - 9, 72, 18, 9)
         .fillAndStroke();
@@ -4246,12 +4330,14 @@ function drawWarehousePlanDiagram(
   // Grid lines (light)
   doc.save();
   doc.strokeColor("#e2e8f0").lineWidth(0.6).dash(3, { space: 3 });
-  for (let i = 0; isEaeuWarehouse && i < calc.nL; i++) {
-    const y = planY + (calc.nL === 1 ? 0.5 : i / (calc.nL - 1)) * drawH;
+  const gridRows = embeddedPlanBackground ? 0 : (isEaeuWarehouse && calc.nL > 0 ? calc.nL : 4);
+  const gridCols = embeddedPlanBackground ? 0 : (isEaeuWarehouse && calc.nW > 0 ? calc.nW : 4);
+  for (let i = 0; i < gridRows; i++) {
+    const y = planY + (gridRows === 1 ? 0.5 : i / (gridRows - 1)) * drawH;
     doc.moveTo(planX, y).lineTo(planX + drawW, y).stroke();
   }
-  for (let j = 0; isEaeuWarehouse && j < calc.nW; j++) {
-    const x = planX + (calc.nW === 1 ? 0.5 : j / (calc.nW - 1)) * drawW;
+  for (let j = 0; j < gridCols; j++) {
+    const x = planX + (gridCols === 1 ? 0.5 : j / (gridCols - 1)) * drawW;
     doc.moveTo(x, planY).lineTo(x, planY + drawH).stroke();
   }
   doc.undash();
@@ -4408,6 +4494,7 @@ function drawWarehousePlanDiagram(
   }
 
   // ── Render sensor_point objects as circles on the plan ─────────────────────
+  const sensorLabelBoxes: WarehouseMarkerBox[] = [];
   for (const sp of sensorPointObjs) {
     const spX = planX + (sp.xPct / 100) * drawW;
     const spY = planY + (sp.yPct / 100) * drawH;
@@ -4421,12 +4508,26 @@ function drawWarehousePlanDiagram(
     doc.font("bold").fontSize(labelFont);
     const labelW = Math.min(78, Math.max(r * 2, doc.widthOfString(label) + 8));
     const hasFloatingLabel = label.includes("(");
-    const labelX = hasFloatingLabel ? Math.max(planX + 2, Math.min(planX + drawW - labelW - 2, spX - labelW / 2)) : 0;
-    const labelY = hasFloatingLabel ? Math.max(planY + 2, spY - r - 14) : 0;
     const markerPlanBox = { x: planX, y: planY, w: drawW, h: drawH };
-    const occupiedMarkerBoxes: WarehouseMarkerBox[] = hasFloatingLabel
-      ? [{ x: labelX - 2, y: labelY - 2, w: labelW + 4, h: 16 }]
-      : [];
+    const labelH = 12;
+    const labelBox = hasFloatingLabel
+      ? chooseWarehouseFloatingLabelPosition(
+        [
+          [spX - labelW / 2, spY - r - 14],
+          [spX - labelW / 2, spY + r + 4],
+          [spX + r + 5, spY - labelH / 2],
+          [spX - labelW - r - 5, spY - labelH / 2],
+          [spX - labelW / 2, spY - r - 30],
+          [spX - labelW / 2, spY + r + 18],
+        ],
+        markerPlanBox,
+        sensorLabelBoxes,
+        labelW,
+        labelH,
+      )
+      : null;
+    if (labelBox) sensorLabelBoxes.push(labelBox);
+    const occupiedMarkerBoxes: WarehouseMarkerBox[] = [...sensorLabelBoxes];
     if (isCriticalHot) {
       doc.circle(spX, spY, r + 2.5).lineWidth(2.0).strokeColor("#ef4444").stroke();
     }
@@ -4436,9 +4537,9 @@ function drawWarehousePlanDiagram(
     doc.fillColor("#7dd3fc").strokeColor("#0369a1").lineWidth(1.5).circle(spX, spY, r).fillAndStroke();
     if (hasFloatingLabel) {
       doc.fillColor("white").strokeColor("#0369a1").lineWidth(0.5)
-        .roundedRect(labelX, labelY, labelW, 12, 3).fillAndStroke();
+        .roundedRect(labelBox!.x, labelBox!.y, labelW, labelH, 3).fillAndStroke();
       doc.fillColor("#0c4a6e")
-        .text(label, labelX + 3, labelY + 3, { width: labelW - 6, align: "center", lineBreak: false });
+        .text(label, labelBox!.x + 3, labelBox!.y + 3, { width: labelW - 6, align: "center", lineBreak: false });
     } else {
       doc.fillColor("#0c4a6e")
         .text(label, spX - r, spY - 4, { width: r * 2, align: "center" });
@@ -4670,7 +4771,7 @@ function drawWarehousePlanDiagram(
         doc.fillColor(bg).rect(pageLeft2, sy, totalW2, sRowH).fill();
         doc.strokeColor("#e2e8f0").lineWidth(0.4).rect(pageLeft2, sy, totalW2, sRowH).stroke();
         doc.restore();
-        const shortId = l.label.length > 4 ? l.label.slice(-4) : l.label;
+        const shortId = shortSensorId(l.label) || l.label;
         const posLabel = formatPlanPosition(l.position, isExt);
         const manualHeightStr = manualFloorSensorHeight(l.position, l.label, l.customName);
         // Approximate height from position id (tier)
