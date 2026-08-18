@@ -135,6 +135,7 @@ import { generateComputerizedSystemPdf } from "./computerizedSystemPdf";
 import { getComputerizedSystemReleaseReadiness } from "@shared/computerizedSystem";
 import { storagePut, storageReadBuffer } from "./storage";
 import { buildWarehouseQuestions } from "./warehouseQuestions";
+import { calculateCriticalLoggerIndices } from "./pvCriticalPoints";
 
 function normalizeSensorNumber(value: string | null | undefined): string {
   return String(value ?? "")
@@ -1875,28 +1876,16 @@ export const appRouter = router({
           return { logger: l, series: resampled, stats, deviations };
         });
 
-        // Determine hot/cold critical sensors among internals
-        const internalIdx: number[] = [];
-        loggers.forEach((l, i) => {
-          if (l.role === "internal") internalIdx.push(i);
-        });
-        let hotIdx: number | null = null;
-        let coldIdx: number | null = null;
-        let hotMax = -Infinity;
-        let coldMin = Infinity;
-        for (const i of internalIdx) {
-          const stats = preparedLoggers[i]?.stats;
-          const avg = stats?.avg ?? Number(loggers[i].avgVal || 0);
-          if (avg > hotMax) {
-            hotMax = avg;
-            hotIdx = i;
-          }
-          const minVal = stats?.min ?? Number(loggers[i].minVal || 0);
-          if (minVal < coldMin) {
-            coldMin = minVal;
-            coldIdx = i;
-          }
-        }
+        // Determine hot/cold critical sensors among internals by PV risk:
+        // deviations first, then duration/severity, then extremes/MKT/AVG.
+        const { hotIdx, coldIdx } = calculateCriticalLoggerIndices(preparedLoggers.map(({ logger: l, stats, deviations }) => ({
+          role: l.role,
+          min: stats?.min ?? l.minVal,
+          max: stats?.max ?? l.maxVal,
+          avg: stats?.avg ?? l.avgVal,
+          mkt: stats?.mkt ?? l.mktVal,
+          deviations,
+        })));
         const extIndices: number[] = [];
         loggers.forEach((l, i) => {
           if (l.role === "external") extIndices.push(i);

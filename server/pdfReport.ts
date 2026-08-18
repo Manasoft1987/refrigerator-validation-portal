@@ -23,6 +23,7 @@ import {
   type EventMarker,
 } from "./charts";
 import { calculateAllOperationalMetrics } from "./operationalMetrics";
+import { calculateCriticalLoggerIndices } from "./pvCriticalPoints";
 import {
   computeWarehouseSensorCount,
   isAutoRefrigeratorLike,
@@ -873,67 +874,6 @@ function tokenSetsIntersect(a: Iterable<string>, b: Iterable<string>): boolean {
   return false;
 }
 
-function finiteMetric(value: number | string | null | undefined, fallback = 0): number {
-  const numeric = typeof value === "string" ? Number(value) : value;
-  return numeric == null || !Number.isFinite(numeric) ? fallback : numeric;
-}
-
-function compareMetricTuples(a: number[], b: number[]): number {
-  const length = Math.max(a.length, b.length);
-  for (let i = 0; i < length; i++) {
-    const diff = (a[i] ?? 0) - (b[i] ?? 0);
-    if (Math.abs(diff) > 1e-9) return diff;
-  }
-  return 0;
-}
-
-function warehouseCriticalScore(logger: LoggerSummary, kind: "hot" | "cold"): number[] {
-  const relevantDeviations = logger.deviations.filter(dev => (
-    kind === "hot" ? dev.type === "high" : dev.type === "low"
-  ));
-  const deviationDurationMs = relevantDeviations.reduce((sum, dev) => sum + Math.max(0, dev.durationMs), 0);
-  const deviationWorstValue = relevantDeviations.reduce((best, dev) => {
-    if (kind === "hot") return Math.max(best, finiteMetric(dev.value, -Infinity));
-    return Math.max(best, -finiteMetric(dev.value, Infinity));
-  }, relevantDeviations.length > 0 ? -Infinity : 0);
-  const avg = finiteMetric(logger.avg);
-  const mkt = finiteMetric(logger.mkt, avg);
-  const max = finiteMetric(logger.max, avg);
-  const min = finiteMetric(logger.min, avg);
-
-  if (kind === "hot") {
-    return [
-      relevantDeviations.length > 0 ? 1 : 0,
-      deviationDurationMs,
-      deviationWorstValue,
-      max,
-      mkt,
-      avg,
-    ];
-  }
-
-  return [
-    relevantDeviations.length > 0 ? 1 : 0,
-    deviationDurationMs,
-    deviationWorstValue,
-    -min,
-    -avg,
-  ];
-}
-
-function pickWarehouseCriticalLogger(loggers: LoggerSummary[], kind: "hot" | "cold"): LoggerSummary | null {
-  const candidates = loggers.filter(logger => (
-    logger.role === "internal" &&
-    (Number.isFinite(Number(logger.avg)) || Number.isFinite(Number(logger.min)) || Number.isFinite(Number(logger.max)))
-  ));
-  if (candidates.length === 0) return null;
-  return candidates.reduce((best, logger) => (
-    compareMetricTuples(warehouseCriticalScore(logger, kind), warehouseCriticalScore(best, kind)) > 0
-      ? logger
-      : best
-  ), candidates[0]);
-}
-
 function buildWarehouseCriticalSensorTokens(input: ReportInput): { hot: Set<string>; cold: Set<string> } {
   const add = (set: Set<string>, value: string | number | null | undefined) => {
     for (const token of sensorTokenVariants(value)) set.add(token);
@@ -967,8 +907,9 @@ function buildWarehouseCriticalSensorTokens(input: ReportInput): { hot: Set<stri
   // Warehouse critical markers should follow PV risk, not only the average
   // shown in the label: deviations first, then extremes/MKT/AVG. Stored
   // hotIdx/coldIdx can become stale after logger deletion or re-upload.
-  const hottestByRisk = pickWarehouseCriticalLogger(input.pv.loggers, "hot");
-  const coldestByRisk = pickWarehouseCriticalLogger(input.pv.loggers, "cold");
+  const currentCritical = calculateCriticalLoggerIndices(input.pv.loggers);
+  const hottestByRisk = currentCritical.hotIdx !== null ? input.pv.loggers[currentCritical.hotIdx] : null;
+  const coldestByRisk = currentCritical.coldIdx !== null ? input.pv.loggers[currentCritical.coldIdx] : null;
   const currentInternalPlanLoggers = (input.pvLoggers ?? [])
     .filter(logger => logger.role === "internal" && Number.isFinite(Number(logger.avg)));
 
@@ -2382,10 +2323,10 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     drawChartExplanation(
       doc,
       en
-        ? "The hot point chart shows the logger with the highest average temperature. This logger identifies the least favourable warm area and supports worst-case assessment within the storage room."
+        ? "The hot point chart shows the internal logger selected by PV temperature-risk ranking: out-of-range excursions, excursion duration and severity, maximum temperature, MKT and average temperature. This supports worst-case assessment of the warmest/least favourable area."
         : getReportEquipmentType(input) === "warehouse"
-        ? "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0430\u043c\u043e\u0433\u043e \u0442\u0451\u043f\u043b\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 (\u0441 \u043d\u0430\u0438\u0431\u043e\u043b\u044c\u0448\u0438\u043c \u0441\u0440\u0435\u0434\u043d\u0438\u043c \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435\u043c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b). \u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u043e\u0431\u044b\u0447\u043d\u043e \u0440\u0430\u0441\u043f\u043e\u043b\u0430\u0433\u0430\u0435\u0442\u0441\u044f \u0432 \u0437\u043e\u043d\u0435 \u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u0435\u0435 \u044d\u0444\u0444\u0435\u043a\u0442\u0438\u0432\u043d\u044b\u043c \u043e\u0445\u043b\u0430\u0436\u0434\u0435\u043d\u0438\u0435\u043c \u0438 \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438 \u043d\u0430\u0438\u0445\u0443\u0434\u0448\u0438\u0445 \u0443\u0441\u043b\u043e\u0432\u0438\u0439 \u0432 \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0438."
-        : "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0430\u043c\u043e\u0433\u043e \u0442\u0451\u043f\u043b\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 (\u0441 \u043d\u0430\u0438\u0431\u043e\u043b\u044c\u0448\u0438\u043c \u0441\u0440\u0435\u0434\u043d\u0438\u043c \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435\u043c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b). \u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u043e\u0431\u044b\u0447\u043d\u043e \u0440\u0430\u0441\u043f\u043e\u043b\u0430\u0433\u0430\u0435\u0442\u0441\u044f \u0432 \u0437\u043e\u043d\u0435 \u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u0435\u0435 \u044d\u0444\u0444\u0435\u043a\u0442\u0438\u0432\u043d\u044b\u043c \u043e\u0445\u043b\u0430\u0436\u0434\u0435\u043d\u0438\u0435\u043c \u0438 \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438 \u043d\u0430\u0438\u0445\u0443\u0434\u0448\u0438\u0445 \u0443\u0441\u043b\u043e\u0432\u0438\u0439 \u0432 " + reeferAreaAfterIn(getReportEquipmentType(input)) + "."
+        ? "График горячей точки показывает внутренний датчик, выбранный по риск-оценке PV: отклонения за пределы режима, длительность и выраженность отклонений, максимальная температура, MKT и среднее значение. Это поддерживает оценку наихудшей тёплой зоны помещения."
+        : "График горячей точки показывает внутренний датчик, выбранный по риск-оценке PV: отклонения за пределы режима, длительность и выраженность отклонений, максимальная температура, MKT и среднее значение. Это поддерживает оценку наихудшей тёплой зоны в " + reeferAreaAfterIn(getReportEquipmentType(input)) + "."
     );
   }
 
@@ -2404,10 +2345,10 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     drawChartExplanation(
       doc,
       en
-        ? "The cold point chart shows the logger with the lowest average temperature. This logger supports assessment of the coldest area within the storage room."
+        ? "The cold point chart shows the internal logger selected by PV temperature-risk ranking: out-of-range low excursions, excursion duration and severity, minimum temperature and average temperature. This supports worst-case assessment of the coldest area."
         : getReportEquipmentType(input) === "warehouse"
-        ? "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0430\u043c\u043e\u0433\u043e \u0445\u043e\u043b\u043e\u0434\u043d\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 (\u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u044c\u0448\u0438\u043c \u0441\u0440\u0435\u0434\u043d\u0438\u043c \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435\u043c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b). \u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438 \u043d\u0430\u0438\u0431\u043e\u043b\u0435\u0435 \u0445\u043e\u043b\u043e\u0434\u043d\u043e\u0439 \u0437\u043e\u043d\u044b \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f."
-        : "\u0413\u0440\u0430\u0444\u0438\u043a \u0441\u0430\u043c\u043e\u0433\u043e \u0445\u043e\u043b\u043e\u0434\u043d\u043e\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 (\u0441 \u043d\u0430\u0438\u043c\u0435\u043d\u044c\u0448\u0438\u043c \u0441\u0440\u0435\u0434\u043d\u0438\u043c \u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435\u043c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b). \u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043e\u0446\u0435\u043d\u043a\u0438 \u043d\u0430\u0438\u0431\u043e\u043b\u0435\u0435 \u0445\u043e\u043b\u043e\u0434\u043d\u043e\u0439 \u0437\u043e\u043d\u044b \u0432 " + reeferAreaAfterIn(getReportEquipmentType(input)) + "."
+        ? "График холодной точки показывает внутренний датчик, выбранный по риск-оценке PV: отклонения ниже режима, длительность и выраженность отклонений, минимальная температура и среднее значение. Это поддерживает оценку наихудшей холодной зоны помещения."
+        : "График холодной точки показывает внутренний датчик, выбранный по риск-оценке PV: отклонения ниже режима, длительность и выраженность отклонений, минимальная температура и среднее значение. Это поддерживает оценку наихудшей холодной зоны в " + reeferAreaAfterIn(getReportEquipmentType(input)) + "."
     );
   }
 
