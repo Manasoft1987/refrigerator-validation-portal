@@ -746,6 +746,13 @@ function sensorBadgeColor(idx: number): string {
   return BADGE_PALETTE[idx % BADGE_PALETTE.length];
 }
 
+function semanticSensorBadgeColor(isCriticalHot?: boolean | null, isCriticalCold?: boolean | null): string {
+  if (isCriticalHot && isCriticalCold) return "#7c3aed";
+  if (isCriticalHot) return "#ef4444";
+  if (isCriticalCold) return "#2563eb";
+  return "#0891b2";
+}
+
 function refrigeratorBadgeLabel(sensor: DiagramSensor): string {
   const serial = String(sensor.label ?? "").trim();
   const digits = serial.replace(/\D/g, "");
@@ -1191,12 +1198,12 @@ function drawRefrigeratorDiagramPortalStyle(
     const match = key.match(/^RF:S(\d+):(BL|BC|BR|FL|FC|FR)$/);
     if (!match) return;
     const p = project(Number(match[1]), match[2] as FridgeZoneCode);
-    const color = sensorBadgeColor(idx);
     const avg = formatSensorAvg(sensor.avg);
     const label = badgeMode === "position" ? `T${idx + 1}` : refrigeratorBadgeLabel(sensor);
     const isCriticalHot = sensorMatchesCriticalLabel(sensor, hotLabel);
     const isCriticalCold = sensorMatchesCriticalLabel(sensor, coldLabel);
     const isCritical = isCriticalHot || isCriticalCold;
+    const color = semanticSensorBadgeColor(isCriticalHot, isCriticalCold);
     const r = avg ? 16 : 14;
     if (isCritical) {
       doc.save();
@@ -1209,7 +1216,7 @@ function drawRefrigeratorDiagramPortalStyle(
       }
       doc.restore();
     }
-    drawCircle(p.x, p.y, r, color, "#ffffff", 2.2);
+    drawCircle(p.x, p.y, r, color, "#ffffff", isCritical ? 2.6 : 2.2);
     if (isCriticalHot) {
       doc.save();
       doc.circle(sx(p.x), sy(p.y), sv(r + 2.5))
@@ -1236,7 +1243,7 @@ function drawRefrigeratorDiagramPortalStyle(
   doc.save();
   doc.roundedRect(sx(legendX), sy(legendY), sv(160), sv(showCriticalLegend ? 126 : 78), sv(8)).fillAndStroke("#ffffff", "#cbd5e1");
   doc.restore();
-  drawCircle(legendX + 18, legendY + 22, 7, "#2563eb", "#2563eb", 1);
+  drawCircle(legendX + 18, legendY + 22, 7, "#0891b2", "#0891b2", 1);
   text("T — точка измерения", legendX + 34, legendY + 17, 116, 12, "#0f172a");
   drawCircle(legendX + 18, legendY + 48, 6, "#ffffff", "#94a3b8", 1.2);
   text("свободная позиция", legendX + 34, legendY + 43, 116, 11, "#64748b");
@@ -1254,7 +1261,7 @@ function drawRefrigeratorDiagramPortalStyle(
   const externalStartY = showCriticalLegend ? legendY + 156 : cab.y + 124;
   externals.forEach((sensor, idx) => {
     const y = externalStartY + idx * 42;
-    const color = sensorBadgeColor(internals.length + idx);
+    const color = "#64748b";
     doc.save();
     doc.moveTo(sx(cab.x + cab.w + 52), sy(y))
       .lineTo(sx(cab.x + cab.w + 92), sy(y))
@@ -1456,8 +1463,11 @@ export function drawRefrigeratorDiagram(
 
   // --- Internal sensor badges (rectangles) ---
   internals.forEach((s, idx) => {
-    const color = sensorBadgeColor(idx);
     const name = refrigeratorBadgeText(s, idx, badgeMode);
+    const isCriticalHot = sensorMatchesCriticalLabel(s, hotLabel);
+    const isCriticalCold = sensorMatchesCriticalLabel(s, coldLabel);
+    const isCritical = isCriticalHot || isCriticalCold;
+    const color = semanticSensorBadgeColor(isCriticalHot, isCriticalCold);
 
     let pctX = 40;
     let pctY = 50;
@@ -1490,6 +1500,14 @@ export function drawRefrigeratorDiagram(
     doc.circle(bx, by, radius + 2.5).fill("#ffffff");
     doc.circle(bx, by, radius).fill(color);
     doc.circle(bx, by, radius).lineWidth(1.5).strokeColor("white").stroke();
+    if (isCriticalHot) {
+      doc.circle(bx, by, radius + 3.4).lineWidth(2.0).strokeColor("#ef4444").stroke();
+      drawStar(doc, bx + radius + 4, by - radius - 6, 7, "#ef4444");
+    }
+    if (isCriticalCold) {
+      doc.circle(bx, by, radius + (isCriticalHot ? 6.2 : 3.4)).lineWidth(1.8).strokeColor("#2563eb").stroke();
+      drawDiamond(doc, bx + radius + 4, by + (isCriticalHot ? -8 : -radius - 6), 7, "#2563eb");
+    }
     doc.font("bold").fontSize(badgeFontSize).fillColor("white");
     if (showAvgInBadges) {
       const avg = formatSensorAvg(s.avg);
@@ -1512,7 +1530,7 @@ export function drawRefrigeratorDiagram(
   // --- External sensor badges (right of cabinet) ---
   const extStartX = cabX + cabW + 20;
   externals.forEach((s, idx) => {
-    const color = sensorBadgeColor(internals.length + idx);
+    const color = "#64748b";
     const name = refrigeratorBadgeText(s, idx, badgeMode);
     const ey = cabY + 40 + idx * extRowGap;
 
@@ -2127,14 +2145,15 @@ export function drawReeferTruckDiagram3D(
     const wz = sp.z * BH;
     const [sx, sy] = pt(wx, wy, wz);
 
-    // Always use group colour (blue=corner, green=wall, red=center) for consistent look
     const assigned = labelOnly ? undefined : posMap[sp.id];
-    const color = REEFER_GROUP_COLORS[sp.group];
     
     // Check if this is a critical sensor (hot or cold) by comparing labels
-    const isCriticalHot = hotLabel && assigned && assigned.label === hotLabel;
-    const isCriticalCold = coldLabel && assigned && assigned.label === coldLabel;
+    const isCriticalHot = Boolean(hotLabel && assigned && assigned.label === hotLabel);
+    const isCriticalCold = Boolean(coldLabel && assigned && assigned.label === coldLabel);
     const isCritical = isCriticalHot || isCriticalCold;
+    const color = assigned && isCritical
+      ? semanticSensorBadgeColor(isCriticalHot, isCriticalCold)
+      : REEFER_GROUP_COLORS[sp.group];
 
     const label = assigned
       ? shortLabelStr(assigned.label)
@@ -2144,13 +2163,13 @@ export function drawReeferTruckDiagram3D(
     
     // Draw symbol for critical sensors
     if (isCritical) {
-      const symbolColor = isCriticalHot ? "#ef4444" : "#3b82f6"; // red for hot, blue for cold
       const symbolSize = 10;
       // Draw star for hot, diamond for cold
       if (isCriticalHot) {
-        drawStar(doc, sx, sy - BY - 10, symbolSize, symbolColor);
-      } else {
-        drawDiamond(doc, sx, sy - BY - 10, symbolSize, symbolColor);
+        drawStar(doc, sx, sy - BY - 10, symbolSize, "#ef4444");
+      }
+      if (isCriticalCold) {
+        drawDiamond(doc, sx, sy + (isCriticalHot ? -BY - 20 : -BY - 10), symbolSize, "#2563eb");
       }
     }
     

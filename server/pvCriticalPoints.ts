@@ -69,11 +69,20 @@ export function criticalLoggerScore(logger: CriticalLoggerInput, kind: "hot" | "
   ];
 }
 
-export function pickCriticalLoggerIndex(loggers: CriticalLoggerInput[], kind: "hot" | "cold"): number | null {
+function countInternalLoggersWithMetrics(loggers: CriticalLoggerInput[]): number {
+  return loggers.filter(logger => logger.role === "internal" && hasAnyMetric(logger)).length;
+}
+
+export function pickCriticalLoggerIndex(
+  loggers: CriticalLoggerInput[],
+  kind: "hot" | "cold",
+  excludeIndex: number | null = null,
+): number | null {
   let bestIndex: number | null = null;
   let bestScore: number[] | null = null;
 
   loggers.forEach((logger, index) => {
+    if (excludeIndex !== null && index === excludeIndex) return;
     if (logger.role !== "internal" || !hasAnyMetric(logger)) return;
     const score = criticalLoggerScore(logger, kind);
     if (!bestScore || compareMetricTuples(score, bestScore) > 0) {
@@ -89,8 +98,19 @@ export function calculateCriticalLoggerIndices(loggers: CriticalLoggerInput[]): 
   hotIdx: number | null;
   coldIdx: number | null;
 } {
+  const hotIdx = pickCriticalLoggerIndex(loggers, "hot");
+  let coldIdx = pickCriticalLoggerIndex(loggers, "cold");
+
+  // If there are several internal loggers, hot and cold points should identify
+  // two different risk locations. A single logger may be both only when it is
+  // the only internal logger with data.
+  if (hotIdx !== null && coldIdx === hotIdx && countInternalLoggersWithMetrics(loggers) > 1) {
+    const alternativeColdIdx = pickCriticalLoggerIndex(loggers, "cold", hotIdx);
+    if (alternativeColdIdx !== null) coldIdx = alternativeColdIdx;
+  }
+
   return {
-    hotIdx: pickCriticalLoggerIndex(loggers, "hot"),
-    coldIdx: pickCriticalLoggerIndex(loggers, "cold"),
+    hotIdx,
+    coldIdx,
   };
 }

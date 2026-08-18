@@ -1274,8 +1274,11 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
       drawWarehousePlanDiagram(doc, input, false, isEnglishWarehouse(input) ? "Diagram. Sensor placement on the storage area plan (ID and average temperature)" : "Схема. Расстановка датчиков на плане помещения (ID и средняя температура)");
     } else {
       // Non-warehouse: Schema 1 (reference positions)
-      const hotLabel = input.pv.hotIdx !== null && input.pv.loggers[input.pv.hotIdx] ? input.pv.loggers[input.pv.hotIdx].label : null;
-      const coldLabel = input.pv.coldIdx !== null && input.pv.loggers[input.pv.coldIdx] ? input.pv.loggers[input.pv.coldIdx].label : null;
+      // Recalculate on PDF generation so old saved hotIdx/coldIdx cannot mark
+      // the same logger as both hot and cold after data/import corrections.
+      const critical = calculateCriticalLoggerIndices(input.pv.loggers);
+      const hotLabel = critical.hotIdx !== null && input.pv.loggers[critical.hotIdx] ? input.pv.loggers[critical.hotIdx].label : null;
+      const coldLabel = critical.coldIdx !== null && input.pv.loggers[critical.coldIdx] ? input.pv.loggers[critical.coldIdx].label : null;
       if (isReeferLike(eqType)) {
         drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, true, "Схема 1. Эталонные позиции ISPE (C1–C8, W1–W4, V1–V3)", null, null, eqType === "chamber" || eqType === "thermal-container" ? "chamber" : "truck");
       } else {

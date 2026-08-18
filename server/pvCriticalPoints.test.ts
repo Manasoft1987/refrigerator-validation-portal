@@ -31,4 +31,25 @@ describe("calculateCriticalLoggerIndices", () => {
     expect(result.hotIdx).toBe(2);
     expect(result.coldIdx).toBe(1);
   });
+
+  it("keeps hot and cold points on different internal loggers when possible", () => {
+    const result = calculateCriticalLoggerIndices([
+      {
+        role: "internal",
+        min: 1.5,
+        max: 10.1,
+        avg: 6.4,
+        mkt: 6.8,
+        deviations: [
+          { type: "high", value: 10.1, durationMs: 15 * 60_000 },
+          { type: "low", value: 1.5, durationMs: 15 * 60_000 },
+        ],
+      },
+      { role: "internal", min: 2.2, max: 8.4, avg: 5.1, mkt: 5.2, deviations: [] },
+      { role: "external", min: -5, max: 32, avg: 15, mkt: 16, deviations: [] },
+    ]);
+
+    expect(result.hotIdx).toBe(0);
+    expect(result.coldIdx).toBe(1);
+  });
 });
