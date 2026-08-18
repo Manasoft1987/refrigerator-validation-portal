@@ -870,6 +870,7 @@ function drawTemperaturePoint(
   idx: number,
   hotSensor?: DiagramSensor | null,
   coldSensor?: DiagramSensor | null,
+  radius = 14,
 ): void {
   const cx = rect.x + point.x * rect.w;
   const cy = rect.y + point.y * rect.h;
@@ -878,7 +879,7 @@ function drawTemperaturePoint(
   const tempLabel = `${formatSensorAvg(point.avg) ?? point.avg.toFixed(1).replace(".", ",")}°C`;
   const isHot = hotSensor === point.sensor;
   const isCold = coldSensor === point.sensor;
-  const r = 14;
+  const r = radius;
 
   doc.save();
   doc.circle(cx, cy, r + 2).fill("#ffffff");
@@ -901,8 +902,10 @@ function drawTemperaturePoint(
 function spreadTemperaturePoints<T extends { x: number; y: number }>(
   points: T[],
   minDistance: number,
+  boundsMargin = 0.035,
 ): T[] {
   const spread = points.map(point => ({ ...point }));
+  const clampWithMargin = (value: number) => Math.max(boundsMargin, Math.min(1 - boundsMargin, value));
   for (let pass = 0; pass < 10; pass += 1) {
     for (let i = 0; i < spread.length; i += 1) {
       for (let j = i + 1; j < spread.length; j += 1) {
@@ -921,10 +924,10 @@ function spreadTemperaturePoints<T extends { x: number; y: number }>(
         const push = (minDistance - distance) / 2;
         const ux = dx / distance;
         const uy = dy / distance;
-        spread[i].x = clamp01(spread[i].x - ux * push);
-        spread[i].y = clamp01(spread[i].y - uy * push);
-        spread[j].x = clamp01(spread[j].x + ux * push);
-        spread[j].y = clamp01(spread[j].y + uy * push);
+        spread[i].x = clampWithMargin(spread[i].x - ux * push);
+        spread[i].y = clampWithMargin(spread[i].y - uy * push);
+        spread[j].x = clampWithMargin(spread[j].x + ux * push);
+        spread[j].y = clampWithMargin(spread[j].y + uy * push);
       }
     }
   }
@@ -1629,12 +1632,6 @@ function refrigeratorHeatPoint(
 }
 
 function reeferHeatPoint(sensor: DiagramSensor, idx: number): { x: number; y: number } {
-  const posX = Number(sensor.posX);
-  const posY = Number(sensor.posY);
-  if (Number.isFinite(posX) && Number.isFinite(posY)) {
-    return { x: clamp01(posX / 100), y: clamp01(posY / 100) };
-  }
-
   const ref = REEFER_SENSOR_POSITIONS.find(position => position.id === sensor.position);
   if (ref) {
     // Side elevation summary: horizontal axis follows cargo length, vertical axis follows height.
@@ -1643,6 +1640,12 @@ function reeferHeatPoint(sensor: DiagramSensor, idx: number): { x: number; y: nu
       x: clamp01(0.08 + ref.y * 0.84 + (ref.x - 0.5) * 0.08),
       y: clamp01(0.86 - ref.z * 0.72 + (ref.x - 0.5) * 0.05),
     };
+  }
+
+  const posX = Number(sensor.posX);
+  const posY = Number(sensor.posY);
+  if (Number.isFinite(posX) && Number.isFinite(posY)) {
+    return { x: clamp01(posX / 100), y: clamp01(posY / 100) };
   }
 
   return {
@@ -1748,6 +1751,7 @@ export function drawTemperatureMapSummary(
   const displayPoints = spreadTemperaturePoints(
     internalPoints,
     options.objectType === "truck" ? 0.072 : 0.064,
+    options.objectType === "truck" ? 0.055 : 0.035,
   );
 
   const availableW = doc.page.width - pageMargin * 2;
@@ -1774,7 +1778,7 @@ export function drawTemperatureMapSummary(
       doc.circle(wx, sy(306), sv(13)).fill("#e5e7eb").strokeColor("#64748b").lineWidth(sv(1)).stroke();
     });
     doc.restore();
-    displayPoints.forEach((point, idx) => drawTemperaturePoint(doc, point, body, lo, hi, idx, hotSensor, coldSensor));
+    displayPoints.forEach((point, idx) => drawTemperaturePoint(doc, point, body, lo, hi, idx, hotSensor, coldSensor, 11));
     drawTemperatureLegend(doc, sx(126), sy(324), sv(500), lo, hi);
   } else {
     const shelfCount = normalizeFridgeLevelCount(options.levelCount ?? fridgeShelfCount(sensors));
@@ -1820,7 +1824,7 @@ export function drawTemperatureMapSummary(
       }
     }
     doc.restore();
-    displayPoints.forEach((point, idx) => drawTemperaturePoint(doc, point, heatRect, lo, hi, idx, hotSensor, coldSensor));
+    displayPoints.forEach((point, idx) => drawTemperaturePoint(doc, point, heatRect, lo, hi, idx, hotSensor, coldSensor, 14));
     drawTemperatureLegend(doc, sx(110), sy(604), sv(330), lo, hi);
   }
 
