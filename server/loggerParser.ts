@@ -165,6 +165,16 @@ function looksLikeMeasurementValue(value: string | undefined): boolean {
   return normalized.includes(".") || (n >= -80 && n <= 100);
 }
 
+function cleanSensorName(value: string | undefined): string | undefined {
+  let cleaned = String(value ?? "").trim();
+  if (!cleaned) return undefined;
+  cleaned = cleaned.replace(/^["']+|["']+$/g, "").trim();
+  // Some CSV exports prefix serial numbers with an apostrophe so Excel keeps
+  // them as text. It is not part of the logger serial.
+  cleaned = cleaned.replace(/^'(?=[A-Za-zА-Яа-я0-9])/, "").trim();
+  return cleaned || undefined;
+}
+
 /**
  * Select the best TIME and TEMPERATURE column indices for a grid of rows
  * whose first row is the header.
@@ -289,15 +299,27 @@ function parseTimestamp(raw: any): number | null {
 
 function detectDelimiter(lines: string[]): string {
   const candidates = [";", "\t", "|", ","];
-  const sample = lines.slice(0, Math.min(lines.length, 8));
+  const sample = lines.slice(0, Math.min(lines.length, 80));
   let best: { delim: string; score: number } = { delim: ",", score: -1 };
   for (const d of candidates) {
     const regex = new RegExp(d === "|" ? "\\|" : d === "\t" ? "\t" : d, "g");
-    const perLine = sample.map(l => (l.match(regex) || []).length);
-    if (perLine.every(c => c === 0)) continue;
-    const base = perLine[0] || 0;
-    const consistent = perLine.filter(c => c === base && c > 0).length;
-    const score = base * 10 + consistent;
+    const positiveCounts = sample
+      .map(l => (l.match(regex) || []).length)
+      .filter(count => count > 0);
+    if (positiveCounts.length === 0) continue;
+    const frequencies = new Map<number, number>();
+    for (const count of positiveCounts) {
+      frequencies.set(count, (frequencies.get(count) ?? 0) + 1);
+    }
+    let modeCount = 0;
+    let modeFrequency = 0;
+    for (const [count, frequency] of frequencies.entries()) {
+      if (frequency > modeFrequency || (frequency === modeFrequency && count > modeCount)) {
+        modeCount = count;
+        modeFrequency = frequency;
+      }
+    }
+    const score = modeCount * 10 + modeFrequency;
     if (score > best.score) best = { delim: d, score };
   }
   return best.score > 0 ? best.delim : ",";
@@ -466,11 +488,58 @@ function extractSensorNameFromFileName(fileName: string): string | undefined {
 }
 
 function chooseSensorName(extractedName: string | undefined, fileName: string): string | undefined {
+  const cleanedExtractedName = cleanSensorName(extractedName);
   const fileNameSensor = extractSensorNameFromFileName(fileName);
-  if (fileNameSensor && looksLikeMeasurementValue(extractedName)) {
+  if (fileNameSensor && looksLikeMeasurementValue(cleanedExtractedName)) {
     return fileNameSensor;
   }
-  return extractedName ?? fileNameSensor;
+  return cleanedExtractedName ?? fileNameSensor;
+}
+
+function findMeasurementTableStart(rows: any[][]): number | null {
+  for (let i = 0; i < rows.length; i++) {
+    const rowText = (rows[i] ?? []).map(cell => String(cell ?? "").toLowerCase()).join(" ");
+    const key = normKey(rowText);
+    const isTableMarker =
+      (key.includes("таблич") && key.includes("данн")) ||
+      (key.includes("table") && key.includes("data"));
+    if (!isTableMarker) continue;
+
+    for (let j = i + 1; j < rows.length; j++) {
+      const row = rows[j] ?? [];
+      if (parseTimestamp(row[0]) !== null && parseNumber(row[1]) !== null) return j;
+    }
+  }
+  return null;
+}
+
+function parseHeaderlessMeasurementTable(
+  rows: any[][],
+  startIdx: number,
+  sensorName: string | undefined,
+): LoggerSeries | null {
+  const dataRows = rows.slice(startIdx).filter(row => Array.isArray(row) && row.length > 0);
+  const { timeIdx, tempIdx } = heuristicColumnsFromData(dataRows);
+  if (timeIdx === -1 || tempIdx === -1) return null;
+
+  const ts: number[] = [];
+  const temp: number[] = [];
+  for (const row of dataRows) {
+    const t = parseTimestamp(row[timeIdx]);
+    const v = parseNumber(row[tempIdx]);
+    if (t !== null && v !== null && v > -80 && v < 80) {
+      ts.push(t);
+      temp.push(v);
+    }
+  }
+  if (ts.length === 0) return null;
+
+  const order = ts.map((_, i) => i).sort((a, b) => ts[a] - ts[b]);
+  return {
+    ts: order.map(i => ts[i]),
+    temp: order.map(i => temp[i]),
+    sensorName,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -570,6 +639,13 @@ export function parseLoggerBuffer(
   );
 
   if (rows.length < 2) return { ts: [], temp: [] };
+
+  const measurementTableStart = findMeasurementTableStart(rows);
+  if (measurementTableStart !== null) {
+    const sensorName = chooseSensorName(extractSensorName(rows, measurementTableStart), fileName);
+    const headerlessResult = parseHeaderlessMeasurementTable(rows, measurementTableStart, sensorName);
+    if (headerlessResult) return headerlessResult;
+  }
 
   const headerIdx = findHeaderRowIndex(rows);
   const header = rows[headerIdx] || [];

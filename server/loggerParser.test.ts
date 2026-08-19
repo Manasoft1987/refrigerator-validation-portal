@@ -205,6 +205,28 @@ describe("parseLoggerBuffer", () => {
     expect(res.sensorName).toBe("000B44BCADD2568");
   });
 
+  it("parses Bereg-style CSV where measurements start below a metadata block", () => {
+    const csv =
+      "// Информация об отчёте \\\\\n" +
+      "Создано программой:;Берег\n" +
+      "Серийный номер:;'B2BED86E99A4806B'\n" +
+      "Тип отчёта:;Полный\n" +
+      "\n" +
+      "// Информация по каналам \\\\\n" +
+      "Тип измерений:;Температура\n" +
+      "Среднее значение:;14,96 °C\n" +
+      "\n" +
+      "// Табличные данные \\\\\n" +
+      "24.07.2026 11:00:00;30,56\n" +
+      "24.07.2026 11:01:00;30,57\n" +
+      "24.07.2026 11:02:00;30,63\n";
+    const res = parseLoggerBuffer(Buffer.from(csv), "25.07.2026 14.19_B2BED86E99A4806B.csv");
+    expect(res.ts.length).toBe(3);
+    expect(res.temp[0]).toBeCloseTo(30.56, 6);
+    expect(res.temp[2]).toBeCloseTo(30.63, 6);
+    expect(res.sensorName).toBe("B2BED86E99A4806B");
+  });
+
   it("does not treat humidity columns as temperature when headers contain percent/RH", () => {
     const csv =
       "Timestamp,Sensor (°C),Sensor (%RH)\n" +
