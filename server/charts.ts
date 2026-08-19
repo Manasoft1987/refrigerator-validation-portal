@@ -881,11 +881,12 @@ function drawTemperaturePoint(
 ): void {
   const cx = rect.x + point.x * rect.w;
   const cy = rect.y + point.y * rect.h;
-  const color = sensorBadgeColor(idx);
+  let color = sensorBadgeColor(idx);
   const label = shortTemperatureMapLabel(point.sensor);
   const tempLabel = `${formatSensorAvg(point.avg) ?? point.avg.toFixed(1).replace(".", ",")}°C`;
   const isHot = hotSensor === point.sensor;
   const isCold = coldSensor === point.sensor;
+  color = (isHot || isCold) ? semanticSensorBadgeColor(isHot, isCold) : color;
   const r = radius;
 
   doc.save();
@@ -1675,12 +1676,22 @@ function reeferHeatPoint(sensor: DiagramSensor, idx: number): { x: number; y: nu
 function sensorByExtreme(
   points: Array<{ sensor: DiagramSensor; avg: number }>,
   kind: "hot" | "cold",
+  excludeSensor?: DiagramSensor | null,
 ): DiagramSensor | null {
-  if (points.length === 0) return null;
-  return points.reduce((best, current) => {
+  const candidates = excludeSensor ? points.filter(point => point.sensor !== excludeSensor) : points;
+  if (candidates.length === 0) return null;
+  return candidates.reduce((best, current) => {
     if (kind === "hot") return current.avg > best.avg ? current : best;
     return current.avg < best.avg ? current : best;
-  }, points[0]).sensor;
+  }, candidates[0]).sensor;
+}
+
+function sensorByCriticalLabel(
+  points: Array<{ sensor: DiagramSensor; avg: number }>,
+  label?: string | null,
+): DiagramSensor | null {
+  if (!label) return null;
+  return points.find(point => sensorMatchesCriticalLabel(point.sensor, label))?.sensor ?? null;
 }
 
 function drawTemperatureLegend(
@@ -1720,6 +1731,8 @@ export function drawTemperatureMapSummary(
     rangeMax?: number | null;
     drawerCount?: number | null;
     levelCount?: number | null;
+    hotLabel?: string | null;
+    coldLabel?: string | null;
   },
 ): void {
   const internalPoints = sensors
@@ -1764,8 +1777,11 @@ export function drawTemperatureMapSummary(
     lo -= 0.5;
     hi += 0.5;
   }
-  const hotSensor = sensorByExtreme(internalPoints, "hot");
-  const coldSensor = sensorByExtreme(internalPoints, "cold");
+  const hotSensor = sensorByCriticalLabel(internalPoints, options.hotLabel) ?? sensorByExtreme(internalPoints, "hot");
+  let coldSensor = sensorByCriticalLabel(internalPoints, options.coldLabel) ?? sensorByExtreme(internalPoints, "cold");
+  if (hotSensor && coldSensor === hotSensor && internalPoints.length > 1) {
+    coldSensor = sensorByExtreme(internalPoints, "cold", hotSensor) ?? coldSensor;
+  }
   const displayPoints = spreadTemperaturePoints(
     internalPoints,
     options.objectType === "truck" ? 0.072 : 0.064,
