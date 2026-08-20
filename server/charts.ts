@@ -1956,7 +1956,7 @@ export function drawReeferTruckDiagram3D(
   // Draw title on the same page as the diagram (after ensureSpace)
   if (title) {
     doc.font("bold").fontSize(11).fillColor("#1f2937");
-    doc.text(title, pageMargin, doc.y, { lineBreak: false });
+    doc.text(title, pageMargin, doc.y, { width: doc.page.width - pageMargin * 2 });
     doc.moveDown(0.4);
   }
 

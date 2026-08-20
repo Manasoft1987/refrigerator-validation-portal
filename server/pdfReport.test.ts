@@ -319,6 +319,7 @@ describe("generateProtocolPdf", () => {
       const allText = writtenText.join("\n");
       expect(allText).toContain("Риск-ориентированная фактическая расстановка датчиков");
       expect(allText).toContain("Количество и позиции логгеров приняты по риск-ориентированной фактической схеме");
+      expect(allText).toContain("Для данного авторефрижератора принята риск-ориентированная фактическая схема размещения");
       expect(allText).toContain("Схема 2. Температурная карта по средним значениям PV");
       expect(allText).not.toContain("Эталонные позиции ISPE");
       expect(allText).not.toContain("Схема 3. Температурная карта по средним значениям PV");
