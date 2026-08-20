@@ -1274,6 +1274,8 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     const critical = calculateCriticalLoggerIndices(input.pv.loggers);
     const hotLabel = critical.hotIdx !== null && input.pv.loggers[critical.hotIdx] ? input.pv.loggers[critical.hotIdx].label : null;
     const coldLabel = critical.coldIdx !== null && input.pv.loggers[critical.coldIdx] ? input.pv.loggers[critical.coldIdx].label : null;
+    const internalPvLoggerCount = input.pvLoggers.filter(logger => logger.role === "internal").length;
+    const useRiskOrientedReeferPlacement = isAutoRefrigeratorLike(eqType) && internalPvLoggerCount > 0 && internalPvLoggerCount < 15;
     if (isWarehouseLike(eqType)) {
       // Warehouse: single floor plan diagram only (no ISPE grid schema)
       drawWarehousePlanDiagram(doc, input, false, isEnglishWarehouse(input) ? "Diagram. Sensor placement on the storage area plan (ID and average temperature)" : "Схема. Расстановка датчиков на плане помещения (ID и средняя температура)");
@@ -1282,23 +1284,44 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
       // Hot/cold critical markers are PV result interpretation and are shown
       // on the final temperature map instead of the placement diagrams.
       if (isReeferLike(eqType)) {
-        drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, true, "Схема 1. Эталонные позиции ISPE (C1–C8, W1–W4, V1–V3)", null, null, eqType === "chamber" || eqType === "thermal-container" ? "chamber" : "truck");
+        if (useRiskOrientedReeferPlacement) {
+          drawReeferTruckDiagram3D(
+            doc,
+            input.pvLoggers as DiagramSensor[],
+            PAGE_MARGIN,
+            input.coolingUnitPos,
+            input.doorPos,
+            false,
+            "Схема 1. Риск-ориентированная фактическая расстановка датчиков (серийные номера)",
+            null,
+            null,
+            "truck",
+            { showEmptyReferencePositions: false, showReferenceLegend: false },
+          );
+        } else {
+          drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, true, "Схема 1. Эталонные позиции ISPE (C1–C8, W1–W4, V1–V3)", null, null, eqType === "chamber" || eqType === "thermal-container" ? "chamber" : "truck");
+        }
       } else {
         doc.addPage();
         const shelfObjectName = eqType === "freezer" ? "\u043c\u043e\u0440\u043e\u0437\u0438\u043b\u044c\u043d\u0438\u043a\u0430" : "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a\u0430";
         drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, "\u0421\u0445\u0435\u043c\u0430 1. \u041f\u043e\u0437\u0438\u0446\u0438\u0438 \u0440\u0430\u0437\u043c\u0435\u0449\u0435\u043d\u0438\u044f \u0434\u0430\u0442\u0447\u0438\u043a\u043e\u0432 \u043f\u043e \u043f\u043e\u043b\u043a\u0430\u043c " + shelfObjectName, "position", input.refrigeratorDrawerCount ?? 2, input.refrigeratorLevelCount ?? 7, null, null);
       }
-      // Schema 2: with serial numbers
-      doc.addPage();
-      if (isReeferLike(eqType)) {
-        drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, false, "Схема 2. Расстановка датчиков (с серийными номерами)", null, null, eqType === "chamber" || eqType === "thermal-container" ? "chamber" : "truck");
-      } else {
-        drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, "Схема 2. Расстановка датчиков (серийные номера и средняя температура)", "serial", input.refrigeratorDrawerCount ?? 2, input.refrigeratorLevelCount ?? 7, null, null);
+      // Schema 2: with serial numbers. For reduced auto-refrigerator studies
+      // the first diagram is already the actual risk-based placement, so avoid
+      // duplicating the same layout and numbering.
+      if (!useRiskOrientedReeferPlacement) {
+        doc.addPage();
+        if (isReeferLike(eqType)) {
+          drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, false, "Схема 2. Расстановка датчиков (с серийными номерами)", null, null, eqType === "chamber" || eqType === "thermal-container" ? "chamber" : "truck");
+        } else {
+          drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, "Схема 2. Расстановка датчиков (серийные номера и средняя температура)", "serial", input.refrigeratorDrawerCount ?? 2, input.refrigeratorLevelCount ?? 7, null, null);
+        }
       }
     }
     const supportsTemperatureMap =
       !isWarehouseLike(eqType) &&
       (isAutoRefrigeratorLike(eqType) || eqType === "refrigerator" || eqType === "freezer");
+    const temperatureMapSchemaNumber = useRiskOrientedReeferPlacement ? 2 : 3;
     const pvAverageBySensorKey = new Map<string, number | string | null | undefined>();
     const addAverageKey = (key: unknown, avg: number | string | null | undefined) => {
       const normalized = String(key ?? "").trim();
@@ -1324,7 +1347,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     if (supportsTemperatureMap && hasTemperatureMapData) {
       doc.addPage();
       drawTemperatureMapSummary(doc, temperatureMapLoggers as DiagramSensor[], PAGE_MARGIN, {
-        title: "Схема 3. Температурная карта по средним значениям PV",
+        title: `Схема ${temperatureMapSchemaNumber}. Температурная карта по средним значениям PV`,
         objectType: isAutoRefrigeratorLike(eqType) ? "truck" : eqType === "freezer" ? "freezer" : "refrigerator",
         rangeMin: input.pv.rangeMin,
         rangeMax: input.pv.rangeMax,
@@ -2599,6 +2622,8 @@ function drawSensorPlacementAnalysis(
 
   const internals = sensors.filter(s => s.role === "internal");
   const externals = sensors.filter(s => s.role === "external");
+  const eqType = getReportEquipmentType(input);
+  const isRiskOrientedAutoReefer = isAutoRefrigeratorLike(eqType) && internals.length > 0 && internals.length < 15;
 
   if (en) {
     const analysisText =
@@ -2614,6 +2639,13 @@ function drawSensorPlacementAnalysis(
   }
 
   let analysisText = "";
+
+  if (isRiskOrientedAutoReefer) {
+    analysisText +=
+      `Для данного авторефрижератора принята риск-ориентированная фактическая схема размещения: ${internals.length} внутренних регистраторов данных` +
+      (externals.length > 0 ? ` и ${externals.length} внешний регистратор` : "") +
+      ". Количество и позиции регистраторов определены с учетом объема грузового отсека, расположения холодильного агрегата, дверей, зон возможного температурного градиента, маршрута циркуляции воздуха и условий фактической эксплуатации. Выбранная схема направлена на покрытие наиболее критичных зон и оценку равномерности температурного распределения в рамках данного исследования.\n\n";
+  }
 
   // Analyze internal sensor placement
   if (internals.length >= 2) {

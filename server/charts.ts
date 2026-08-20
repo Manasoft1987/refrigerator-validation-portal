@@ -1908,7 +1908,13 @@ export function drawReeferTruckDiagram3D(
   hotLabel?: string | null,
   coldLabel?: string | null,
   objectType: "truck" | "chamber" = "truck",
+  options: {
+    showEmptyReferencePositions?: boolean;
+    showReferenceLegend?: boolean;
+  } = {},
 ): void {
+  const showEmptyReferencePositions = options.showEmptyReferencePositions ?? true;
+  const showReferenceLegend = options.showReferenceLegend ?? true;
   // Box world dimensions (arbitrary units, scaled to SVG-like coords via scale)
   const BW = 1.6; // width  (X)
   const BD = 3.2; // depth  (Y)
@@ -2162,6 +2168,7 @@ export function drawReeferTruckDiagram3D(
     const [sx, sy] = pt(wx, wy, wz);
 
     const assigned = labelOnly ? undefined : posMap[sp.id];
+    if (!assigned && !showEmptyReferencePositions) return;
     
     // Check if this is a critical sensor (hot or cold) by comparing labels
     const isCriticalHot = Boolean(hotLabel && assigned && assigned.label === hotLabel);
@@ -2253,10 +2260,13 @@ export function drawReeferTruckDiagram3D(
   // ── Legend ──
   // Moved 42pt (~1.5cm) closer to the diagram (was +8, now -34)
   const legendY = oyFinal + (BW + BD) * sin30 * scale * 0.5 - 34;
-  const legendItems = [
+  const showCriticalLegend = Boolean(hotLabel || coldLabel);
+  const legendItems = showReferenceLegend ? [
     { color: REEFER_GROUP_COLORS.corner, label: "Угол (8 шт.)" },
     { color: REEFER_GROUP_COLORS.wall,   label: "Центр стенки (4 шт.)" },
     { color: REEFER_GROUP_COLORS.center, label: "Центр объёма (3 шт.)" },
+  ] : [
+    { color: REEFER_GROUP_COLORS.corner, label: "Фактические точки размещения" },
   ];
   legendItems.forEach((item, i) => {
     const lx = pageMargin + i * 145;
@@ -2269,21 +2279,23 @@ export function drawReeferTruckDiagram3D(
   });
 
   // Add critical point symbols legend
-  doc.save();
-  const symbolLegendY = legendY + 18;
-  // Diamond for cold point
-  drawDiamond(doc, pageMargin + 5, symbolLegendY, 4, "#3b82f6");
-  doc.font("body").fontSize(8).fillColor("#374151");
-  doc.text("Холодная точка", pageMargin + 14, symbolLegendY - 4, { lineBreak: false });
-  
-  // Star for hot point
-  drawStar(doc, pageMargin + 145 + 5, symbolLegendY, 4, "#ef4444");
-  doc.text("Горячая точка", pageMargin + 145 + 14, symbolLegendY - 4, { lineBreak: false });
-  doc.restore();
+  if (showCriticalLegend) {
+    doc.save();
+    const symbolLegendY = legendY + (showReferenceLegend ? 18 : 20);
+    // Diamond for cold point
+    drawDiamond(doc, pageMargin + 5, symbolLegendY, 4, "#3b82f6");
+    doc.font("body").fontSize(8).fillColor("#374151");
+    doc.text("Холодная точка", pageMargin + 14, symbolLegendY - 4, { lineBreak: false });
+    
+    // Star for hot point
+    drawStar(doc, pageMargin + 145 + 5, symbolLegendY, 4, "#ef4444");
+    doc.text("Горячая точка", pageMargin + 145 + 14, symbolLegendY - 4, { lineBreak: false });
+    doc.restore();
+  }
 
-  // ── ISPE reference ──
+  // ── Reference note ──
   doc.font("body").fontSize(7).fillColor("#94a3b8");
-  doc.text("ISPE Good Practice Guide: Cold Chain Management", pageMargin, legendY + 32, {
+  doc.text(showReferenceLegend ? "ISPE Good Practice Guide: Cold Chain Management" : "Количество и позиции логгеров приняты по риск-ориентированной фактической схеме.", pageMargin, legendY + 32, {
     align: "right",
     width: doc.page.width - pageMargin * 2,
     lineBreak: false,
@@ -2291,7 +2303,7 @@ export function drawReeferTruckDiagram3D(
 
   // Sensor Registry Table — only in full (non-labelOnly) mode
   if (!labelOnly) {
-    const tableY = legendY + 46;
+    const tableY = legendY + (showCriticalLegend ? 46 : 34);
     // Set doc.y to tableY so ensureSpace uses the correct position
     doc.y = tableY;
     ensureSpace(doc, 150);

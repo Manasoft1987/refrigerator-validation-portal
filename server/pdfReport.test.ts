@@ -242,6 +242,91 @@ describe("generateProtocolPdf", () => {
   );
 
   it(
+    "uses a risk-oriented actual placement diagram for auto-refrigerators with fewer than 15 internal loggers",
+    async () => {
+      const now = Date.UTC(2026, 6, 10, 9, 0, 0);
+      const series = mkSeries(now, 72, 5);
+      const positions = ["C1", "C2", "C4", "C5", "C6", "C8", "W1", "W2", "V1", "V3"];
+      const loggers = positions.map((position, idx) => ({
+        id: idx + 1,
+        label: `S${String(idx + 1).padStart(4, "0")}`,
+        customName: null,
+        role: "internal" as const,
+        position,
+        pointCount: series.temp.length,
+        min: 4.2 + idx * 0.02,
+        max: 5.8 + idx * 0.02,
+        avg: 5.0 + idx * 0.02,
+        std: 0.2,
+        mkt: 5.1 + idx * 0.02,
+        series,
+        deviations: [],
+      }));
+      const external = {
+        id: 99,
+        label: "EXT1",
+        customName: null,
+        role: "external" as const,
+        position: "external",
+        pointCount: series.temp.length,
+        min: 20,
+        max: 25,
+        avg: 22,
+        std: 0.5,
+        mkt: 22,
+        series,
+        deviations: [],
+      };
+      const originalText = (PDFDocument.prototype as any).text;
+      const writtenText: string[] = [];
+
+      (PDFDocument.prototype as any).text = function (text: string, ...args: any[]) {
+        writtenText.push(String(text));
+        return originalText.call(this, text, ...args);
+      };
+
+      try {
+        await generateProtocolPdf({
+          org: BASE_ORG,
+          protocol: { number: "VAL-TRK-2026-010", createdAt: new Date(now) },
+          generalInfo: {
+            ...BASE_GI,
+            equipmentType: "auto-refrigerator",
+            validationDate: "2026-07-10",
+          },
+          iq: {
+            purpose: "IQ", description: "IQ", criteria: "IQ",
+            items: [], verdict: "pass",
+          },
+          oq: {
+            purpose: "OQ", description: "OQ", criteria: "OQ",
+            items: [], verdict: "pass",
+          },
+          pv: {
+            purpose: "PV", description: "PV", criteria: "PV",
+            tempMode: "2-8", rangeMin: 2, rangeMax: 8,
+            startAt: now, endAt: now + 72 * 3600_000,
+            minDurationHours: 72, minSensorCount: 10,
+            loggers: [...loggers, external], verdict: "pass", failureReasons: [],
+            hotIdx: 9, coldIdx: 0, extIndices: [10],
+          },
+          pvLoggers: [...loggers, external],
+        } as any);
+      } finally {
+        (PDFDocument.prototype as any).text = originalText;
+      }
+
+      const allText = writtenText.join("\n");
+      expect(allText).toContain("Риск-ориентированная фактическая расстановка датчиков");
+      expect(allText).toContain("Количество и позиции логгеров приняты по риск-ориентированной фактической схеме");
+      expect(allText).toContain("Схема 2. Температурная карта по средним значениям PV");
+      expect(allText).not.toContain("Эталонные позиции ISPE");
+      expect(allText).not.toContain("Схема 3. Температурная карта по средним значениям PV");
+    },
+    60_000,
+  );
+
+  it(
     "splits wide measurement tables into readable sensor blocks",
     async () => {
       const now = Date.UTC(2026, 5, 12, 14, 30, 0);
