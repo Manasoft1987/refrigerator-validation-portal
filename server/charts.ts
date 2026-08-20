@@ -1650,13 +1650,15 @@ function refrigeratorHeatPoint(
   };
 }
 
-function reeferHeatPoint(sensor: DiagramSensor, idx: number): { x: number; y: number } {
+export function reeferHeatPoint(sensor: DiagramSensor, idx: number): { x: number; y: number } {
   const ref = REEFER_SENSOR_POSITIONS.find(position => position.id === sensor.position);
   if (ref) {
     // Side elevation summary: horizontal axis follows cargo length, vertical axis follows height.
+    // Keep the same orientation as the 3D placement diagram: rear of the cargo
+    // body is on the left, front/cabin side is on the right.
     // Width differences are kept as a small diagonal offset so corner pairs remain distinguishable.
     return {
-      x: clamp01(0.08 + ref.y * 0.84 + (ref.x - 0.5) * 0.08),
+      x: clamp01(0.92 - ref.y * 0.84 + (ref.x - 0.5) * 0.08),
       y: clamp01(0.86 - ref.z * 0.72 + (ref.x - 0.5) * 0.05),
     };
   }
