@@ -1266,6 +1266,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     }
   drawStageDataEntryTable(doc, input, "PV");
   drawPVParams(doc, input.pv, input);
+  drawPVExpertSummary(doc, input);
 
   if (input.pvLoggers && input.pvLoggers.length > 0) {
     const eqType = getReportEquipmentType(input) || "";
@@ -2194,6 +2195,214 @@ function drawPVParams(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Re
     [en ? "External loggers" : "Внешних датчиков", String(pv.loggers.filter(l => l.role === "external").length)],
   ];
   drawKVTable(doc, rows);
+}
+
+function supportsExpertPvSummary(input?: ReportInput): boolean {
+  const eqType = getReportEquipmentType(input) || "";
+  return isAutoRefrigeratorLike(eqType) || eqType === "refrigerator" || eqType === "freezer";
+}
+
+function finiteNumberOrNull(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function fmtPlainNumber(value: number | null | undefined, digits = 1): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  return value.toFixed(digits).replace(".", ",");
+}
+
+function fmtTempMetric(value: number | null | undefined, digits = 1): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+  return `${fmtPlainNumber(value, digits)} °C`;
+}
+
+function shortLoggerDisplay(logger: Pick<LoggerSummary, "label" | "customName"> | null | undefined): string {
+  const customName = String(logger?.customName ?? "").trim();
+  if (customName) return customName;
+  const label = String(logger?.label ?? "").trim();
+  if (!label) return "—";
+  const digits = label.replace(/\D/g, "");
+  if (digits.length >= 4) return digits.slice(-4);
+  return label;
+}
+
+function findPlacementLogger(input: ReportInput, logger: LoggerSummary | null | undefined) {
+  if (!logger) return null;
+  const candidates = [logger.label, logger.customName]
+    .map(value => String(value ?? "").trim())
+    .filter(Boolean);
+  return (input.pvLoggers ?? []).find(item => {
+    const itemKeys = [item.label, item.customName]
+      .map(value => String(value ?? "").trim())
+      .filter(Boolean);
+    return itemKeys.some(key => candidates.includes(key));
+  }) ?? null;
+}
+
+function placementLabel(input: ReportInput, logger: LoggerSummary | null | undefined): string {
+  const placement = findPlacementLogger(input, logger);
+  const rawPosition = String(placement?.position ?? "").trim();
+  if (placement?.role === "external" || rawPosition === "external") return "внешний регистратор";
+  if (rawPosition && rawPosition !== "unset") return rawPosition;
+  return "по схеме";
+}
+
+function drawPVInfoBox(
+  doc: PDFKit.PDFDocument,
+  text: string,
+  options: { bg?: string; border?: string; color?: string } = {},
+) {
+  const left = PAGE_MARGIN;
+  const width = doc.page.width - PAGE_MARGIN * 2;
+  const padding = 14;
+  doc.font("body").fontSize(10);
+  const height = Math.max(54, doc.heightOfString(text, { width: width - padding * 2 }) + padding * 2);
+  ensureSpace(doc, height + 8);
+  const y = doc.y;
+  doc.save();
+  doc
+    .lineWidth(0.7)
+    .fillColor(options.bg || "#f8fafc")
+    .strokeColor(options.border || BORDER)
+    .roundedRect(left, y, width, height, 6)
+    .fillAndStroke();
+  doc.restore();
+  doc
+    .fillColor(options.color || ACCENT)
+    .font("body")
+    .fontSize(10)
+    .text(text, left + padding, y + padding, { width: width - padding * 2 });
+  doc.y = y + height;
+  doc.moveDown(0.6);
+}
+
+function drawPVExpertSummary(doc: PDFKit.PDFDocument, input: ReportInput) {
+  if (!supportsExpertPvSummary(input)) return;
+  const pv = input.pv;
+  const internal = pv.loggers.filter(logger => logger.role === "internal");
+  const external = pv.loggers.filter(logger => logger.role === "external");
+  const durationMs = pv.startAt && pv.endAt ? pv.endAt - pv.startAt : 0;
+  const period = `${pv.startAt ? fmtDate(pv.startAt) : "—"} — ${pv.endAt ? fmtDate(pv.endAt) : "—"}`;
+  const samplingStep = pv.samplingStepMinutes ? `${pv.samplingStepMinutes} мин` : "—";
+  const accuracy = pv.sensorAccuracy !== undefined && pv.sensorAccuracy !== null ? `±${pv.sensorAccuracy.toFixed(1)} °C` : "—";
+
+  drawSubTitle(doc, "Паспорт испытания PV");
+  drawKVTable(doc, [
+    ["Объект испытания", getEquipmentName(input)],
+    ["Температурный режим / критерий", `${pvTemperatureModeLabel(pv, input)}; расчетный диапазон ${fmtTempRange(pv.rangeMin, pv.rangeMax)}`],
+    ["Период мониторинга", period],
+    ["Фактическая длительность", durationMs > 0 ? fmtDuration(durationMs) : "—"],
+    ["Логгеры в расчете", `${internal.length} внутренних; ${external.length} внешних`],
+    ["Шаг регистрации / погрешность", `${samplingStep}; ${accuracy}`],
+    ["Итог PV", verdictLabelLocal(pv.verdict, input)],
+  ], 190);
+
+  drawPVCriticalPointsSummary(doc, input);
+  drawPVResultInterpretation(doc, input);
+}
+
+function drawPVCriticalPointsSummary(doc: PDFKit.PDFDocument, input: ReportInput) {
+  const pv = input.pv;
+  const internal = pv.loggers.filter(logger => logger.role === "internal" && finiteNumberOrNull(logger.avg) !== null);
+  drawSubTitle(doc, "Критические точки PV");
+
+  if (internal.length < 2) {
+    drawPVInfoBox(
+      doc,
+      "Для выделения отдельных горячей и холодной точек требуется не менее двух внутренних логгеров с расчетными показателями. При меньшем количестве точек результат оценивается по общей статистике PV.",
+      { bg: "#fff7ed", border: "#fed7aa", color: "#9a3412" },
+    );
+    return;
+  }
+
+  const critical = calculateCriticalLoggerIndices(pv.loggers);
+  const rows: string[][] = [];
+  const addRow = (kind: "hot" | "cold", index: number | null) => {
+    if (index === null) return;
+    const logger = pv.loggers[index];
+    if (!logger) return;
+    rows.push([
+      kind === "hot" ? "Горячая точка" : "Холодная точка",
+      shortLoggerDisplay(logger),
+      placementLabel(input, logger),
+      `${fmtTempMetric(logger.min)} / ${fmtTempMetric(logger.avg)} / ${fmtTempMetric(logger.max)}`,
+      fmtTempMetric(logger.mkt),
+      kind === "hot"
+        ? "наибольший тепловой риск по комплексной оценке PV"
+        : "наибольший холодовой риск по комплексной оценке PV",
+    ]);
+  };
+
+  addRow("hot", critical.hotIdx);
+  addRow("cold", critical.coldIdx);
+
+  if (rows.length === 0) {
+    drawPVInfoBox(doc, "Критические точки не определены: отсутствует достаточный набор расчетных данных внутренних логгеров.");
+    return;
+  }
+
+  drawSimpleTable(
+    doc,
+    ["Точка", "Логгер", "Позиция", "Min / Avg / Max", "MKT", "Основание"],
+    rows,
+    [0.16, 0.11, 0.13, 0.22, 0.11, 0.27],
+  );
+}
+
+function drawPVResultInterpretation(doc: PDFKit.PDFDocument, input: ReportInput) {
+  const pv = input.pv;
+  const internal = pv.loggers
+    .filter(logger => logger.role === "internal")
+    .map(logger => ({ logger, avg: finiteNumberOrNull(logger.avg) }))
+    .filter(item => item.avg !== null) as Array<{ logger: LoggerSummary; avg: number }>;
+
+  drawSubTitle(doc, "Интерпретация результата PV");
+
+  if (internal.length === 0) {
+    drawPVInfoBox(doc, "Интерпретация не сформирована: отсутствуют расчетные данные внутренних логгеров.");
+    return;
+  }
+
+  const sortedByAvg = [...internal].sort((a, b) => a.avg - b.avg);
+  const coldByAvg = sortedByAvg[0];
+  const hotByAvg = sortedByAvg[sortedByAvg.length - 1];
+  const avgSpread = hotByAvg.avg - coldByAvg.avg;
+  const deviations = internal.reduce((sum, item) => sum + (item.logger.deviations?.length ?? 0), 0);
+  const critical = calculateCriticalLoggerIndices(pv.loggers);
+  const criticalHot = critical.hotIdx !== null ? pv.loggers[critical.hotIdx] : null;
+  const criticalCold = critical.coldIdx !== null ? pv.loggers[critical.coldIdx] : null;
+
+  const verdictText =
+    pv.verdict === "pass"
+      ? "На основании выполненного мониторинга эксплуатационная квалификация PV признана пройденной."
+      : pv.verdict === "fail"
+        ? "На основании выполненного мониторинга эксплуатационная квалификация PV признана не пройденной; требуется анализ причин и корректирующие действия."
+        : "Итоговый вывод PV не сформирован, так как этап не завершен.";
+
+  const deviationText =
+    deviations === 0
+      ? "Отклонения за пределы установленного температурного режима по внутренним логгерам не зарегистрированы."
+      : `Зарегистрировано отклонений по внутренним логгерам: ${deviations}; детализация приведена в разделе зафиксированных отклонений.`;
+
+  const criticalText =
+    criticalHot && criticalCold
+      ? `Критические точки по комплексной оценке: горячая — ${shortLoggerDisplay(criticalHot)} (${placementLabel(input, criticalHot)}), холодная — ${shortLoggerDisplay(criticalCold)} (${placementLabel(input, criticalCold)}).`
+      : "Критические точки по комплексной оценке не выделены из-за недостаточного количества сопоставимых внутренних логгеров.";
+
+  const text =
+    `Диапазон средних значений внутренних логгеров составил ${fmtTempMetric(coldByAvg.avg)}...${fmtTempMetric(hotByAvg.avg)}; разница между максимальной и минимальной средней температурой — ${fmtTempMetric(avgSpread)}. ` +
+    `По средним значениям наиболее холодная зона: ${shortLoggerDisplay(coldByAvg.logger)} (${placementLabel(input, coldByAvg.logger)}), наиболее теплая зона: ${shortLoggerDisplay(hotByAvg.logger)} (${placementLabel(input, hotByAvg.logger)}). ` +
+    `${criticalText} ${deviationText} ${verdictText}`;
+
+  const boxStyle =
+    pv.verdict === "pass"
+      ? { bg: "#ecfdf5", border: "#a7f3d0", color: "#065f46" }
+      : pv.verdict === "fail"
+        ? { bg: "#fef2f2", border: "#fecaca", color: "#991b1b" }
+        : { bg: "#f8fafc", border: BORDER, color: ACCENT };
+  drawPVInfoBox(doc, text, boxStyle);
 }
 
 function drawStatsTable(

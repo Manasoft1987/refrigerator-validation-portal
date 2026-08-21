@@ -328,6 +328,96 @@ describe("generateProtocolPdf", () => {
   );
 
   it(
+    "adds compact expert PV interpretation blocks for refrigerators",
+    async () => {
+      const now = Date.UTC(2026, 6, 10, 9, 0, 0);
+      const coldSeries = mkSeries(now, 72, 3.2);
+      const hotSeries = mkSeries(now, 72, 7.1);
+      const loggers = [
+        {
+          id: 1,
+          label: "230609STS0013742",
+          customName: null,
+          role: "internal" as const,
+          pointCount: coldSeries.temp.length,
+          min: 2.8,
+          max: 3.7,
+          avg: 3.2,
+          std: 0.2,
+          mkt: 3.3,
+          series: coldSeries,
+          deviations: [],
+        },
+        {
+          id: 2,
+          label: "230609STS0013966",
+          customName: null,
+          role: "internal" as const,
+          pointCount: hotSeries.temp.length,
+          min: 6.8,
+          max: 8.4,
+          avg: 7.1,
+          std: 0.3,
+          mkt: 7.2,
+          series: hotSeries,
+          deviations: [{ start: now + 3600_000, end: now + 5400_000, durationMs: 1800_000, value: 8.4, type: "high" as const }],
+        },
+      ];
+      const originalText = (PDFDocument.prototype as any).text;
+      const writtenText: string[] = [];
+
+      (PDFDocument.prototype as any).text = function (text: string, ...args: any[]) {
+        writtenText.push(String(text));
+        return originalText.call(this, text, ...args);
+      };
+
+      try {
+        await generateProtocolPdf({
+          org: BASE_ORG,
+          protocol: { number: "VAL-REF-2026-150", createdAt: new Date(now) },
+          generalInfo: {
+            ...BASE_GI,
+            equipmentType: "refrigerator",
+            validationDate: "2026-07-10",
+          },
+          iq: {
+            purpose: "IQ", description: "IQ", criteria: "IQ",
+            items: [], verdict: "pass",
+          },
+          oq: {
+            purpose: "OQ", description: "OQ", criteria: "OQ",
+            items: [], verdict: "pass",
+          },
+          pv: {
+            purpose: "PV", description: "PV", criteria: "PV",
+            tempMode: "2-8", rangeMin: 1.8, rangeMax: 8.2,
+            sensorAccuracy: 0.2,
+            startAt: now, endAt: now + 72 * 3600_000,
+            minDurationHours: 72, minSensorCount: 2,
+            samplingStepMinutes: 5,
+            loggers, verdict: "fail", failureReasons: ["High deviation"],
+            hotIdx: 1, coldIdx: 0, extIndices: [],
+          },
+          pvLoggers: [
+            { id: 1, label: "230609STS0013742", role: "internal", position: "верхняя полка слева", avg: 3.2 },
+            { id: 2, label: "230609STS0013966", role: "internal", position: "нижняя полка справа", avg: 7.1 },
+          ],
+        } as any);
+      } finally {
+        (PDFDocument.prototype as any).text = originalText;
+      }
+
+      const allText = writtenText.join("\n");
+      expect(allText).toContain("Паспорт испытания PV");
+      expect(allText).toContain("Критические точки PV");
+      expect(allText).toContain("Интерпретация результата PV");
+      expect(allText).toContain("комплексной оценке PV");
+      expect(allText).toContain("разница между максимальной и минимальной средней температурой");
+    },
+    60_000,
+  );
+
+  it(
     "splits wide measurement tables into readable sensor blocks",
     async () => {
       const now = Date.UTC(2026, 5, 12, 14, 30, 0);
