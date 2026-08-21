@@ -2297,7 +2297,12 @@ export function drawReeferTruckDiagram3D(
 
   // ── Reference note ──
   doc.font("body").fontSize(7).fillColor("#94a3b8");
-  doc.text(showReferenceLegend ? "ISPE Good Practice Guide: Cold Chain Management" : "Количество и позиции логгеров приняты по риск-ориентированной фактической схеме.", pageMargin, legendY + 32, {
+  const referenceNote = showReferenceLegend
+    ? objectType === "chamber"
+      ? "Эталонные позиции используются как методическая схема объёмного покрытия камеры."
+      : "ISPE Good Practice Guide: Cold Chain Management"
+    : "Количество и позиции логгеров приняты по риск-ориентированной фактической схеме.";
+  doc.text(referenceNote, pageMargin, legendY + 32, {
     align: "right",
     width: doc.page.width - pageMargin * 2,
     lineBreak: false,

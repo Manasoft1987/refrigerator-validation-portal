@@ -1415,20 +1415,30 @@ export async function ensureChamberQuestionTemplateStorage(
     ));
     const rows = (result as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
     const columnType = String(rows?.[0]?.Type ?? rows?.[0]?.type ?? "");
-    if (
+    const chamberSchemaReady =
       columnType.includes("'freezer'") &&
       columnType.includes("'chamber'") &&
       columnType.includes("'thermal-container'") &&
       columnType.includes("'computerized-system'") &&
       columnType.includes("'warehouse-expert'") &&
-      columnType.includes("'auto-refrigerator-kg'")
-    ) return;
+      columnType.includes("'auto-refrigerator-kg'");
 
-    await db.execute(sql.raw(
-      "ALTER TABLE questionTemplates MODIFY COLUMN equipmentType " +
-        "enum('refrigerator','freezer','auto-refrigerator','auto-refrigerator-kg','chamber','thermal-container','computerized-system','warehouse','warehouse-expert','other') " +
-      "NOT NULL DEFAULT 'refrigerator'",
-    ));
+    if (!chamberSchemaReady) {
+      await db.execute(sql.raw(
+        "ALTER TABLE questionTemplates MODIFY COLUMN equipmentType " +
+          "enum('refrigerator','freezer','auto-refrigerator','auto-refrigerator-kg','chamber','thermal-container','computerized-system','warehouse','warehouse-expert','other') " +
+        "NOT NULL DEFAULT 'refrigerator'",
+      ));
+    }
+
+    await db.execute(sql`
+      UPDATE questionTemplates
+      SET text = ${iqQuestions[3]}
+      WHERE stage = 'iq'
+        AND equipmentType = 'chamber'
+        AND isDefault = 1
+        AND text = ${"Соответствуют ли место установки и конструкция холодильной камеры проектной документации?"}
+    `);
 
     for (const [stage, questions] of [
       ["iq", iqQuestions],

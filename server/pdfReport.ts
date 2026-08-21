@@ -1301,7 +1301,12 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
             { showEmptyReferencePositions: false, showReferenceLegend: false },
           );
         } else {
-          drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, true, "Схема 1. Эталонные позиции ISPE (C1–C8, W1–W4, V1–V3)", null, null, eqType === "chamber" || eqType === "thermal-container" ? "chamber" : "truck");
+          const referenceTitle = eqType === "chamber"
+            ? "Схема 1. Эталонные позиции размещения регистраторов в холодильной камере"
+            : eqType === "thermal-container"
+              ? "Схема 1. Эталонные позиции размещения регистраторов в термоконтейнере"
+              : "Схема 1. Эталонные позиции ISPE (C1–C8, W1–W4, V1–V3)";
+          drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, true, referenceTitle, null, null, eqType === "chamber" || eqType === "thermal-container" ? "chamber" : "truck");
         }
       } else {
         doc.addPage();
@@ -2924,6 +2929,13 @@ function drawSensorPlacementAnalysis(
         "потенциальные зоны риска, где может возникнуть локальное отклонение температуры от установленного диапазона. " +
         "Это критически важно для обеспечения стабильности условий хранения лекарственных средств и выявления " +
         "неисправностей системы кондиционирования или отопления на ранних этапах.\n\n";
+    } else if (getReportEquipmentType(input) === "chamber") {
+      analysisText +=
+        "Такая многоточечная расстановка позволяет выявить температурные градиенты внутри холодильной камеры и оценить " +
+        "равномерность распределения температуры по её рабочему объёму. При интерпретации учитываются зоны возле двери, " +
+        "испарителя или холодильного агрегата, верхний и нижний уровни хранения, а также полки/стеллажи, которые могут " +
+        "влиять на циркуляцию воздуха. Выбранная схема направлена на подтверждение пригодности камеры для хранения " +
+        "лекарственных средств в заданном температурном режиме и на определение критических тёплой и холодной точек.\n\n";
     } else {
       analysisText +=
         "\u0422\u0430\u043a\u0430\u044f \u043c\u043d\u043e\u0433\u043e\u0442\u043e\u0447\u0435\u0447\u043d\u0430\u044f \u0440\u0430\u0441\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430 \u043f\u043e\u0437\u0432\u043e\u043b\u044f\u0435\u0442 \u0432\u044b\u044f\u0432\u0438\u0442\u044c \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u043d\u044b\u0435 \u0433\u0440\u0430\u0434\u0438\u0435\u043d\u0442\u044b \u0432\u043d\u0443\u0442\u0440\u0438 " + reeferInsideVolume(getReportEquipmentType(input)) + " \u0438 \u043e\u0446\u0435\u043d\u0438\u0442\u044c " +

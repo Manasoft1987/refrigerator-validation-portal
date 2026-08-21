@@ -1186,10 +1186,20 @@ export const appRouter = router({
         const trialKey = input.trialKey ?? "default";
         const patch: any = { ...rest };
         delete patch.trialKey;
-        if (protocol.equipmentType === "warehouse" && patch.minDurationHours !== undefined) {
+        if (patch.minDurationHours !== undefined) {
           const gi = await getGeneralInfo(input.protocolId);
+          const effectiveEquipmentType =
+            protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER
+              ? "chamber"
+              : ((gi?.equipmentType as string | null | undefined) || protocol.equipmentType);
           const warehouseMinDurationHours = gi?.whStudyType === "cold_room" ? 24 : 168;
-          patch.minDurationHours = Math.max(warehouseMinDurationHours, patch.minDurationHours);
+          const minimumDurationHours =
+            protocol.equipmentType === "warehouse"
+              ? warehouseMinDurationHours
+              : effectiveEquipmentType === "chamber"
+                ? 24
+                : 1;
+          patch.minDurationHours = Math.max(minimumDurationHours, patch.minDurationHours);
         }
         if (customMin !== undefined) patch.customMin = customMin === null ? null : String(customMin);
         if (customMax !== undefined) patch.customMax = customMax === null ? null : String(customMax);
@@ -1544,12 +1554,16 @@ export const appRouter = router({
         const durationHours = session.startAt && session.endAt
           ? (session.endAt - session.startAt) / 3600000
           : 0;
+        const isChamberProtocolForAnalysis =
+          protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || gi1?.equipmentType === "chamber";
         const warehouseMinDurationHours = protocol.equipmentType === "warehouse"
           ? (gi1?.whStudyType === "cold_room" ? 24 : 168)
           : 72;
         const minDurationHours = protocol.equipmentType === "warehouse"
           ? Math.max(warehouseMinDurationHours, session.minDurationHours)
-          : session.minDurationHours;
+          : isChamberProtocolForAnalysis
+            ? Math.max(24, session.minDurationHours)
+            : session.minDurationHours;
         if (durationHours < minDurationHours) {
           failureReasons.push(
             `Длительность испытания ${durationHours.toFixed(1)} ч меньше минимальной (${minDurationHours} ч).`,
@@ -1903,14 +1917,16 @@ export const appRouter = router({
         const hasPVData = preparedLoggers.some(l => l.series.temp.length > 0);
         const isWarehouseProtocol = isWarehouseLike(protocol.equipmentType);
         const isEnglishWarehouseReport = isWarehouseProtocol && gi?.reportLanguage === "en";
+        const isChamberProtocol =
+          protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || gi?.equipmentType === "chamber";
         const warehouseMinDurationHours = protocol.equipmentType === "warehouse"
           ? (gi?.whStudyType === "cold_room" ? 24 : 168)
           : 72;
         const reportMinDurationHours = protocol.equipmentType === "warehouse"
           ? Math.max(warehouseMinDurationHours, session?.minDurationHours ?? warehouseMinDurationHours)
-          : (session?.minDurationHours ?? warehouseMinDurationHours);
-        const isChamberProtocol =
-          protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || gi?.equipmentType === "chamber";
+          : isChamberProtocol
+            ? Math.max(24, session?.minDurationHours ?? warehouseMinDurationHours)
+            : (session?.minDurationHours ?? warehouseMinDurationHours);
         const effectiveEquipmentType = (gi?.equipmentType as string | null | undefined) || protocol.equipmentType;
         const isAutoRefrigeratorProtocol = isAutoRefrigeratorLike(effectiveEquipmentType);
         const isKyrgyzstanAutoRefrigeratorProtocol = isKyrgyzstanAutoRefrigerator(effectiveEquipmentType);

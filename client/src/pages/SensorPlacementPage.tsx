@@ -268,6 +268,7 @@ export default function SensorPlacementPage() {
   const equipmentType = (giQ.data?.equipmentType || protocolEquipmentType || "refrigerator") as string;
   const isWarehouse = isWarehouseLike(equipmentType);
   const isWarehouseByEaeu = isWarehouseEaeu(equipmentType);
+  const isChamber = equipmentType === "chamber";
   const isAutoRefrigerator = isAutoRefrigeratorLike(equipmentType) || equipmentType === "chamber" || equipmentType === "thermal-container";
   const planTempMode = String((session as any)?.tempMode || giQ.data?.tempMode || "2-8");
   const planModeDef = TEMP_MODES.find(mode => mode.id === planTempMode);
@@ -547,7 +548,7 @@ export default function SensorPlacementPage() {
             Схема расстановки датчиков
           </h1>
           <p className="text-sm text-muted-foreground">
-            {"\u041f\u0440\u043e\u0442\u043e\u043a\u043e\u043b #"}{protocolId}{"\u0020\u2014\u0020"}{isWarehouse ? (isWarehouseByEaeu ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 / \u0437\u043e\u043d\u0430 \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f (\u0415\u0410\u042d\u041a \u21168)" : "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 / \u0437\u043e\u043d\u0430 \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f (\u044d\u043a\u0441\u043f\u0435\u0440\u0442\u043d\u043e\u0435)") : equipmentType === "chamber" ? "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430" : equipmentType === "auto-refrigerator-kg" ? "\u0430\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440 \u041a\u044b\u0440\u0433\u044b\u0437\u0441\u0442\u0430\u043d\u0430" : isAutoRefrigerator ? "\u0430\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440" : "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a"}
+            {"\u041f\u0440\u043e\u0442\u043e\u043a\u043e\u043b #"}{protocolId}{"\u0020\u2014\u0020"}{isWarehouse ? (isWarehouseByEaeu ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 / \u0437\u043e\u043d\u0430 \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f (\u0420\u0435\u043a. \u0415\u042d\u041a \u21168)" : "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 / \u0437\u043e\u043d\u0430 \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f (\u044d\u043a\u0441\u043f\u0435\u0440\u0442\u043d\u043e\u0435)") : equipmentType === "chamber" ? "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430" : equipmentType === "auto-refrigerator-kg" ? "\u0430\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440 \u041a\u044b\u0440\u0433\u044b\u0437\u0441\u0442\u0430\u043d\u0430" : isAutoRefrigerator ? "\u0430\u0432\u0442\u043e\u0440\u0435\u0444\u0440\u0438\u0436\u0435\u0440\u0430\u0442\u043e\u0440" : "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a"}
           </p>
         </div>
       </div>
@@ -816,11 +817,11 @@ export default function SensorPlacementPage() {
         </Card>
       )}
 
-      {/* ── AUTO-REFRIGERATOR: ISPE diagram + 3D assignment ── */}
+      {/* ── AUTO-REFRIGERATOR / CHAMBER: reference diagram + 3D assignment ── */}
       {!isWarehouse && isAutoRefrigerator && (
       <Tabs defaultValue="positions" className="w-full">
         <TabsList className="grid w-full grid-cols-2 max-w-md">
-          <TabsTrigger value="positions">Схема позиций ISPE</TabsTrigger>
+          <TabsTrigger value="positions">{isChamber ? "Эталонные позиции камеры" : "Схема позиций ISPE"}</TabsTrigger>
           <TabsTrigger value="assignment">Расстановка датчиков</TabsTrigger>
         </TabsList>
 
@@ -829,11 +830,12 @@ export default function SensorPlacementPage() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Info className="h-4 w-4 text-primary" />
-                Стандартные позиции ISPE
+                {isChamber ? "Эталонные позиции размещения в камере" : "Стандартные позиции ISPE"}
               </CardTitle>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Схема показывает 15 стандартных позиций размещения датчиков согласно ISPE Good Practice Guide:
-                8 угловых позиций (C1–C8), 4 центра стенок (W1–W4) и 3 центра объёма (V1–V3).
+                {isChamber
+                  ? "Схема показывает 15 эталонных позиций для объёмного покрытия холодильной камеры: 8 угловых позиций (C1–C8), 4 центра стенок (W1–W4) и 3 центра объёма (V1–V3)."
+                  : "Схема показывает 15 стандартных позиций размещения датчиков согласно ISPE Good Practice Guide: 8 угловых позиций (C1–C8), 4 центра стенок (W1–W4) и 3 центра объёма (V1–V3)."}
                 Это справочная схема — реальные серийные номера датчиков назначаются на вкладке «Расстановка датчиков».
               </p>
             </CardHeader>

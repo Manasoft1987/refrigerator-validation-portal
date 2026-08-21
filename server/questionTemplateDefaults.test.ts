@@ -55,6 +55,9 @@ describe("cold chamber stage text", () => {
       .flatMap(stage => [stage.purpose, stage.description, stage.criteria])
       .join(" ");
     expect(text).not.toMatch(/авторефрижератор|кузов|кабина|транспортное средство|VIN/i);
+    expect(text).not.toMatch(/проектной документац/i);
+    expect(text).toMatch(/ЕЭК №8|24–72/);
+    expect(text).toContain("ISPE Good Practice Guide");
     expect(text).toContain("холодильная камера");
   });
 });

@@ -7,7 +7,7 @@
  *   - Y axis goes left-and-down   (world depth / into screen)
  *   - Z axis goes straight up     (world height)
  *
- * 15 ISPE-compliant sensor positions:
+ * 15 reference sensor positions:
  *   C1–C8  — 8 corners
  *   W1–W4  — 4 wall centers (front, back, left, right)
  *   V1–V3  — 3 vertical center points (bottom, middle, top)
@@ -66,7 +66,7 @@ const W = 1.6;  // width  (X: left → right)
 const D = 3.2;  // depth  (Y: front → back)
 const H = 1.4;  // height (Z: bottom → top)
 
-// ─── 15 ISPE sensor positions ─────────────────────────────────────────────────
+// ─── 15 reference sensor positions ─────────────────────────────────────────────
 const SENSOR_POSITIONS: {
   id: string;
   label: string;
@@ -545,9 +545,11 @@ export default function ReeferTruckDiagram3D({
           </g>
         ))}
 
-        {/* ISPE reference */}
+        {/* Method reference */}
         <text x={748} y={552} textAnchor="end" fontSize={8} fill="#94a3b8" fontFamily="sans-serif">
-          ISPE Good Practice Guide: Cold Chain Management
+          {objectType === "chamber"
+            ? "Эталонная схема объёмного покрытия холодильной камеры"
+            : "ISPE Good Practice Guide: Cold Chain Management"}
         </text>
       </svg>
 

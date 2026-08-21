@@ -70,6 +70,7 @@ export default function PVStep({
   const equipmentType = giQ.data?.equipmentType || protocolQ.data?.equipmentType || "refrigerator";
   const isWarehouse = isWarehouseLike(equipmentType);
   const isWarehouseByEaeu = isWarehouseEaeu(equipmentType);
+  const isChamber = equipmentType === "chamber";
   const warehouseStudyType = (giQ.data as any)?.whStudyType;
   const warehouseMinDurationHours = isWarehouseByEaeu
     ? (warehouseStudyType === "cold_room" ? 24 : 168)
@@ -108,6 +109,8 @@ export default function PVStep({
         endAt: localInputFromUtcMs(session.endAt as any),
         minDurationHours: isWarehouseByEaeu
           ? Math.max(warehouseMinDurationHours, initialMinDurationHours)
+          : isChamber
+            ? Math.max(24, initialMinDurationHours)
           : initialMinDurationHours,
         minSensorCount: session.minSensorCount || 9,
         samplingStepMinutes: session.samplingStepMinutes ? String(session.samplingStepMinutes) : "0",
@@ -115,7 +118,7 @@ export default function PVStep({
         customMax: session.customMax ?? (giQ.data as any)?.customMax ?? "",
       });
     }
-  }, [session, giQ.data, activeTrialKey, isThermalContainer, isWarehouseByEaeu, warehouseMinDurationHours]);
+  }, [session, giQ.data, activeTrialKey, isThermalContainer, isWarehouseByEaeu, warehouseMinDurationHours, isChamber]);
 
   // auto-infer start/end from uploaded data (only if not already set)
   useEffect(() => {
@@ -245,7 +248,9 @@ export default function PVStep({
   const normalizedDurationHours = (value: unknown) => {
     const parsed = Number(value);
     const fallback = Number.isFinite(parsed) && parsed > 0 ? parsed : warehouseMinDurationHours;
-    return isWarehouseByEaeu ? Math.max(warehouseMinDurationHours, fallback) : fallback;
+    if (isWarehouseByEaeu) return Math.max(warehouseMinDurationHours, fallback);
+    if (isChamber) return Math.max(24, fallback);
+    return fallback;
   };
 
   if (pvQ.isLoading || !form) {
@@ -361,15 +366,15 @@ export default function PVStep({
                 warehouseStudyType === "cold_room"
                   ? "Для холодильной/морозильной камеры: 24–72 ч или более по обоснованию."
                   : "Для помещения хранения: не менее 168 ч (7 суток подряд)."
-              ) : undefined}
+              ) : isChamber ? "Для холодильной камеры: 24–72 ч или более по обоснованию (Рек. ЕЭК №8)." : undefined}
             >
               <Input
                 type="number"
-                min={isWarehouseByEaeu ? warehouseMinDurationHours : 1}
+                min={isWarehouseByEaeu ? warehouseMinDurationHours : isChamber ? 24 : 1}
                 value={form.minDurationHours}
                 onChange={e => setForm({ ...form, minDurationHours: e.target.value })}
                 onBlur={e => {
-                  if (isWarehouseByEaeu) {
+                  if (isWarehouseByEaeu || isChamber) {
                     setForm({ ...form, minDurationHours: normalizedDurationHours(e.target.value) });
                   }
                 }}
