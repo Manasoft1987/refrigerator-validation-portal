@@ -1267,6 +1267,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   drawStageDataEntryTable(doc, input, "PV");
   drawPVParams(doc, input.pv, input);
   drawPVExpertSummary(doc, input);
+  drawWarehouseOperationalEventsSection(doc, input);
 
   if (input.pvLoggers && input.pvLoggers.length > 0) {
     const eqType = getReportEquipmentType(input) || "";
@@ -2171,12 +2172,27 @@ function drawStageVerdict(
   doc.moveDown(0.6);
 }
 
+function pvDurationRequirementLabel(pv: ReportInput["pv"], input?: ReportInput, nonWarehousePrefix = false): string {
+  const en = isEnglishWarehouse(input);
+  const eqType = getReportEquipmentType(input);
+  if (isWarehouseEaeu(eqType)) {
+    const whStudyType = (input?.generalInfo as any)?.whStudyType;
+    if (whStudyType === "cold_room") {
+      return en
+        ? `24–72 h or longer when justified; selected ${pv.minDurationHours} h`
+        : `24–72 ч или более при обосновании; выбрано ${pv.minDurationHours} ч`;
+    }
+    return en
+      ? `not less than 7 consecutive days (168 h); selected ${pv.minDurationHours} h`
+      : `не менее 7 суток подряд (168 ч); выбрано ${pv.minDurationHours} ч`;
+  }
+  return nonWarehousePrefix ? `не менее ${pv.minDurationHours} ч` : `${pv.minDurationHours} ч`;
+}
+
 function drawPVParams(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: ReportInput) {
   const en = isEnglishWarehouse(input);
   const durationMs = pv.startAt && pv.endAt ? pv.endAt - pv.startAt : 0;
-  const durationRequirement = isWarehouseEaeu(getReportEquipmentType(input))
-    ? (en ? `from 3 days onward (not less than 72 h); selected ${pv.minDurationHours} h` : `от 3 суток и далее (не менее 72 ч); выбрано ${pv.minDurationHours} ч`)
-    : `${pv.minDurationHours} ч`;
+  const durationRequirement = pvDurationRequirementLabel(pv, input);
   const rows: Array<[string, string]> = [
     [en ? "Temperature mode" : "Температурный режим", pvTemperatureModeLabel(pv, input)],
     ...sensorAccuracyRows(pv, input),
@@ -2403,6 +2419,19 @@ function drawPVResultInterpretation(doc: PDFKit.PDFDocument, input: ReportInput)
         ? { bg: "#fef2f2", border: "#fecaca", color: "#991b1b" }
         : { bg: "#f8fafc", border: BORDER, color: ACCENT };
   drawPVInfoBox(doc, text, boxStyle);
+}
+
+function drawWarehouseOperationalEventsSection(doc: PDFKit.PDFDocument, input: ReportInput) {
+  if (!isWarehouseEaeu(getReportEquipmentType(input))) return;
+  const en = isEnglishWarehouse(input);
+  drawSubTitle(doc, en ? "Operational Events Log" : "Журнал эксплуатационных событий");
+  drawPVInfoBox(
+    doc,
+    en
+      ? "According to the data entered in the portal, no abnormal events that could affect the temperature profile were recorded during the study period. Routine door/gate openings were considered part of normal storage-area operation. Prolonged or abnormal door/gate openings, power failure, maintenance work or other events, if they occur, shall be recorded with date, time, duration and reason."
+      : "По данным, внесённым в портал, в период исследования не зарегистрированы нештатные события, способные повлиять на температурный режим. Рутинные открытия дверей/ворот рассматривались как часть штатной эксплуатации помещения хранения. Длительные или нештатные открытия дверей/ворот, отключение электропитания, ремонтные работы и иные события, при их возникновении, подлежат фиксации с указанием даты, времени, продолжительности и причины.",
+    { bg: "#f8fafc", border: BORDER, color: ACCENT },
+  );
 }
 
 function drawStatsTable(
@@ -3230,9 +3259,7 @@ function drawChecklistPlan(doc: PDFKit.PDFDocument, items: ChecklistItem[], inpu
 
 function drawPVPlan(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: ReportInput) {
   const en = isEnglishWarehouse(input);
-  const durationRequirement = isWarehouseEaeu(getReportEquipmentType(input))
-    ? (en ? `from 3 days onward (not less than 72 h); selected ${pv.minDurationHours} h` : `от 3 суток и далее (не менее 72 ч); выбрано ${pv.minDurationHours} ч`)
-    : `не менее ${pv.minDurationHours} ч`;
+  const durationRequirement = pvDurationRequirementLabel(pv, input, true);
   const rows: Array<[string, string]> = [
     [en ? "Temperature mode" : "Температурный режим", pvTemperatureModeLabel(pv, input)],
     ...sensorAccuracyRows(pv, input),
@@ -5634,7 +5661,14 @@ MKT (Mean Kinetic Temperature) — среднекинетическая темп
 
   "6.8": `Регистраторы размещены в соответствии со схемой (Приложение № 1). Размещение выполнено до начала периода регистрации.`,
 
-  "6.9": `Регистраторы извлечены по окончании периода регистрации. Данные выгружены в течение [указать] часов после извлечения.`,
+  "6.9": `Температурное картирование проводится в условиях штатной эксплуатации помещения хранения. В период исследования двери/ворота открываются в обычном рабочем режиме, связанном с движением персонала, приемкой, размещением, комплектованием и отпуском продукции. Специальное испытание с регламентированным открыванием дверей/ворот не проводится, если иное не указано в протоколе.
+
+В течение всего периода исследования:
+— регистраторы данных не перемещаются и не извлекаются из зоны хранения;
+— условия эксплуатации зоны хранения поддерживаются в штатном режиме;
+— длительные или нештатные открытия дверей/ворот, отключение электропитания, ремонтные работы и иные события, способные повлиять на температурный режим, фиксируются с указанием даты, времени, продолжительности и причины.
+
+По завершении периода исследования данные регистраторов извлекаются.`,
 
   "6.10": `Данные с каждого регистратора выгружены с помощью [указать ПО]. Файлы данных объединены для совместного анализа. Исходные файлы сохранены в архиве.`,
 };
@@ -5712,15 +5746,23 @@ Performers: [list full names and positions]`,
 
   "6.8": `Data loggers are placed according to the approved room plan before the start of the recording period.`,
 
-  "6.9": `Data loggers are retrieved after completion of the recording period. Data are downloaded within the timeframe defined by the organization.`,
+  "6.9": `Temperature mapping is performed under routine operation of the storage area. During the study, doors/gates are opened in the normal operating mode related to personnel movement, receipt, placement, picking and release of products. A dedicated test with controlled door/gate opening is not performed unless specified in the protocol.
+
+During the study period:
+— data loggers are not moved or removed from the storage area;
+— operating conditions of the storage area are maintained in routine mode;
+— prolonged or abnormal door/gate openings, power failure, maintenance work and other events that may affect the temperature profile are recorded with date, time, duration and reason.
+
+After completion of the study period, data loggers are retrieved.`,
 
   "6.10": `Data from each logger are downloaded using appropriate software. Data files are combined for joint analysis. Source files are retained in the archive.`,
 };
 
 const WAREHOUSE_MAPPING_METHOD_NOTE_EN =
   "The guide for temperature mapping of medicinal product storage areas approved by EEC Board Recommendation No. 8 is used as a methodological reference. " +
-  "This protocol is adapted to its structure and approach. The study duration is established by the internal procedure as from 3 days onward " +
-  "(not less than 72 hours), considering risk assessment, operating mode of the storage area and representativeness of the observation period.";
+  "This protocol is adapted to its structure and approach. For warehouses, controlled-environment rooms, reception and dispatch areas, " +
+  "the study duration is established as not less than 7 consecutive days (168 hours), considering risk assessment, operating mode of the storage area " +
+  "and representativeness of the observation period. For refrigerated/freezer chambers within a controlled-environment room, a period of 24–72 hours or longer may be used when justified by the protocol.";
 
 function drawWarehouseEquipmentList(doc: PDFKit.PDFDocument, input: ReportInput, prefix = "5.1."): void {
   const en = isEnglishWarehouse(input);

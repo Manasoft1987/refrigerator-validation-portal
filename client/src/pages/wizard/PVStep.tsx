@@ -70,6 +70,10 @@ export default function PVStep({
   const equipmentType = giQ.data?.equipmentType || protocolQ.data?.equipmentType || "refrigerator";
   const isWarehouse = isWarehouseLike(equipmentType);
   const isWarehouseByEaeu = isWarehouseEaeu(equipmentType);
+  const warehouseStudyType = (giQ.data as any)?.whStudyType;
+  const warehouseMinDurationHours = isWarehouseByEaeu
+    ? (warehouseStudyType === "cold_room" ? 24 : 168)
+    : 72;
   const isThermalContainer = equipmentType === "thermal-container";
   const tempModesForPV = equipmentType === "refrigerator" || equipmentType === "freezer"
     ? TEMP_MODES
@@ -97,18 +101,21 @@ export default function PVStep({
   useEffect(() => {
     if (session && seededTrialRef.current !== activeTrialKey) {
       seededTrialRef.current = activeTrialKey;
+      const initialMinDurationHours = session.minDurationHours || warehouseMinDurationHours;
       setForm({
         tempMode: session.tempMode || (isThermalContainer ? activeTrialKey : giQ.data?.tempMode) || "2-8",
         startAt: localInputFromUtcMs(session.startAt as any),
         endAt: localInputFromUtcMs(session.endAt as any),
-        minDurationHours: session.minDurationHours || 72,
+        minDurationHours: isWarehouseByEaeu
+          ? Math.max(warehouseMinDurationHours, initialMinDurationHours)
+          : initialMinDurationHours,
         minSensorCount: session.minSensorCount || 9,
         samplingStepMinutes: session.samplingStepMinutes ? String(session.samplingStepMinutes) : "0",
         customMin: session.customMin ?? (giQ.data as any)?.customMin ?? "",
         customMax: session.customMax ?? (giQ.data as any)?.customMax ?? "",
       });
     }
-  }, [session, giQ.data, activeTrialKey, isThermalContainer]);
+  }, [session, giQ.data, activeTrialKey, isThermalContainer, isWarehouseByEaeu, warehouseMinDurationHours]);
 
   // auto-infer start/end from uploaded data (only if not already set)
   useEffect(() => {
@@ -237,8 +244,8 @@ export default function PVStep({
   });
   const normalizedDurationHours = (value: unknown) => {
     const parsed = Number(value);
-    const fallback = Number.isFinite(parsed) && parsed > 0 ? parsed : 72;
-    return isWarehouseByEaeu ? Math.max(72, fallback) : fallback;
+    const fallback = Number.isFinite(parsed) && parsed > 0 ? parsed : warehouseMinDurationHours;
+    return isWarehouseByEaeu ? Math.max(warehouseMinDurationHours, fallback) : fallback;
   };
 
   if (pvQ.isLoading || !form) {
@@ -350,11 +357,15 @@ export default function PVStep({
             </Field>
             <Field
               label={isWarehouse ? "Минимальная длительность, ч" : "Мин. длит., ч"}
-              hint={isWarehouseByEaeu ? "Для помещения хранения: от 72 ч (от 3 суток и далее)." : undefined}
+              hint={isWarehouseByEaeu ? (
+                warehouseStudyType === "cold_room"
+                  ? "Для холодильной/морозильной камеры: 24–72 ч или более по обоснованию."
+                  : "Для помещения хранения: не менее 168 ч (7 суток подряд)."
+              ) : undefined}
             >
               <Input
                 type="number"
-                min={isWarehouseByEaeu ? 72 : 1}
+                min={isWarehouseByEaeu ? warehouseMinDurationHours : 1}
                 value={form.minDurationHours}
                 onChange={e => setForm({ ...form, minDurationHours: e.target.value })}
                 onBlur={e => {

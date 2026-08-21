@@ -1187,7 +1187,9 @@ export const appRouter = router({
         const patch: any = { ...rest };
         delete patch.trialKey;
         if (protocol.equipmentType === "warehouse" && patch.minDurationHours !== undefined) {
-          patch.minDurationHours = Math.max(72, patch.minDurationHours);
+          const gi = await getGeneralInfo(input.protocolId);
+          const warehouseMinDurationHours = gi?.whStudyType === "cold_room" ? 24 : 168;
+          patch.minDurationHours = Math.max(warehouseMinDurationHours, patch.minDurationHours);
         }
         if (customMin !== undefined) patch.customMin = customMin === null ? null : String(customMin);
         if (customMax !== undefined) patch.customMax = customMax === null ? null : String(customMax);
@@ -1484,7 +1486,7 @@ export const appRouter = router({
     analyze: protectedProcedure
       .input(z.object({ protocolId: z.number(), trialKey: z.string().max(32).optional() }))
       .mutation(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
         const trialKey = input.trialKey ?? "default";
         const session = await getPVSession(input.protocolId, trialKey);
         if (!session) throw new TRPCError({ code: "NOT_FOUND" });
@@ -1542,9 +1544,15 @@ export const appRouter = router({
         const durationHours = session.startAt && session.endAt
           ? (session.endAt - session.startAt) / 3600000
           : 0;
-        if (durationHours < session.minDurationHours) {
+        const warehouseMinDurationHours = protocol.equipmentType === "warehouse"
+          ? (gi1?.whStudyType === "cold_room" ? 24 : 168)
+          : 72;
+        const minDurationHours = protocol.equipmentType === "warehouse"
+          ? Math.max(warehouseMinDurationHours, session.minDurationHours)
+          : session.minDurationHours;
+        if (durationHours < minDurationHours) {
           failureReasons.push(
-            `Длительность испытания ${durationHours.toFixed(1)} ч меньше минимальной (${session.minDurationHours} ч).`,
+            `Длительность испытания ${durationHours.toFixed(1)} ч меньше минимальной (${minDurationHours} ч).`,
           );
         }
         // Sensor count
@@ -1561,7 +1569,6 @@ export const appRouter = router({
           stats: { min, max, internalCount: internals.length, durationHours } as any,
           deviations: failureReasons as any,
         }, trialKey);
-        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
         const gi = await getGeneralInfo(input.protocolId);
         const requiredTrialKeys = protocol.equipmentType === "thermal-container"
           ? (((gi?.thermalContainerConfig as any)?.selectedModes || [gi?.tempMode || "2-8"]) as string[])
@@ -1896,6 +1903,12 @@ export const appRouter = router({
         const hasPVData = preparedLoggers.some(l => l.series.temp.length > 0);
         const isWarehouseProtocol = isWarehouseLike(protocol.equipmentType);
         const isEnglishWarehouseReport = isWarehouseProtocol && gi?.reportLanguage === "en";
+        const warehouseMinDurationHours = protocol.equipmentType === "warehouse"
+          ? (gi?.whStudyType === "cold_room" ? 24 : 168)
+          : 72;
+        const reportMinDurationHours = protocol.equipmentType === "warehouse"
+          ? Math.max(warehouseMinDurationHours, session?.minDurationHours ?? warehouseMinDurationHours)
+          : (session?.minDurationHours ?? warehouseMinDurationHours);
         const isChamberProtocol =
           protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || gi?.equipmentType === "chamber";
         const effectiveEquipmentType = (gi?.equipmentType as string | null | undefined) || protocol.equipmentType;
@@ -1936,7 +1949,7 @@ export const appRouter = router({
           const durationHours = session?.startAt && session?.endAt
             ? (session.endAt - session.startAt) / 3600000
             : 0;
-          const minDurationHours = session?.minDurationHours ?? 72;
+          const minDurationHours = reportMinDurationHours;
           const minSensorCount = session?.minSensorCount ?? (isWarehouseProtocol ? 8 : 9);
           if (durationHours < minDurationHours) {
             reportFailureReasons.push(
@@ -2172,7 +2185,7 @@ export const appRouter = router({
             rangeMax: max,
             startAt: session?.startAt ?? null,
             endAt: session?.endAt ?? null,
-            minDurationHours: session?.minDurationHours ?? 72,
+            minDurationHours: reportMinDurationHours,
             minSensorCount: session?.minSensorCount ?? (isWarehouseProtocol ? 8 : 9),
             loggers: preparedLoggers.map(({ logger: l, series, stats, deviations }) => ({
               id: l.id,

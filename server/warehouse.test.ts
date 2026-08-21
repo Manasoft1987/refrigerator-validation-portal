@@ -11,11 +11,12 @@ import { generateProtocolPdf } from "./pdfReport";
 /* EAEU Рек. №8 (п. 16д) — расчёт количества регистраторов                    */
 /* -------------------------------------------------------------------------- */
 describe("computeWarehouseSensorCount – EAEU Рек. №8 п. 16д", () => {
-  it("uses a duration from 3 days onward for storage-room studies", () => {
+  it("uses a duration of not less than 7 days for storage-room studies", () => {
     const storageRoomStudies = WAREHOUSE_STUDY_TYPES.filter(study => study.id !== "cold_room");
-    expect(storageRoomStudies.every(study => study.duration === "от 3 суток и далее")).toBe(true);
+    expect(storageRoomStudies.every(study => study.duration === "не менее 7 суток")).toBe(true);
     expect(WAREHOUSE_MAPPING_METHOD_NOTE).toContain("носит рекомендательный характер");
-    expect(WAREHOUSE_MAPPING_METHOD_NOTE).toContain("от 3 суток и далее");
+    expect(WAREHOUSE_MAPPING_METHOD_NOTE).toContain("не менее 7 суток подряд");
+    expect(WAREHOUSE_MAPPING_METHOD_NOTE).toContain("168 часов");
   });
 
   it("returns zero total when dimensions are missing", () => {
@@ -102,6 +103,7 @@ describe("generateProtocolPdf – warehouse / storage zone", () => {
       let imageCallCount = 0;
       let diagramTitlePage: number | undefined;
       let diagramLengthLabelPage: number | undefined;
+      let operationalEventsFound = false;
       const planImageBuffer = Buffer.from("clean room plan background should be embedded");
 
       (PDFDocument.prototype as any).image = function (...args: any[]) {
@@ -117,6 +119,9 @@ describe("generateProtocolPdf – warehouse / storage zone", () => {
         }
         if (text === "25.0 м (длина)") {
           diagramLengthLabelPage = pageId;
+        }
+        if (text === "Журнал эксплуатационных событий") {
+          operationalEventsFound = true;
         }
         return originalText.call(this, text, ...args);
       };
@@ -237,6 +242,7 @@ describe("generateProtocolPdf – warehouse / storage zone", () => {
       expect(imageCallCount).toBeGreaterThan(0);
       expect(diagramTitlePage).toBeDefined();
       expect(diagramLengthLabelPage).toBe(diagramTitlePage);
+      expect(operationalEventsFound).toBe(true);
     },
     90_000,
   );
