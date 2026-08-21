@@ -136,7 +136,7 @@ export type ReportInput = {
     season?: string | null;
     qualificationType?: string | null;
     commissionMembers?: Array<{ name: string; role: string }> | null;
-    // Warehouse / storage zone (EAEU Рек. №8)
+    // Warehouse / storage zone (EEC Rec. №8)
     whLengthM?: string | number | null;
     whWidthM?: string | number | null;
     whHeightM?: string | number | null;
@@ -219,7 +219,7 @@ export type ReportInput = {
     revisionHistory: RevisionHistoryEntry[];
   };
   /**
-   * Warehouse protocol sections (ЕАЭК Рек. №8, разделы 1–7).
+   * Warehouse protocol sections (Рек. ЕЭК №8, разделы 1–7).
    * Key = sectionKey (e.g. "1.1", "2.2.1"), value = text content.
    */
   warehouseSections?: Record<string, string>;
@@ -1192,7 +1192,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   drawPartCover(doc, input, "part1");
   const isWarehouseDoc = isWarehouseEaeu(getReportEquipmentType(input));
   if (isWarehouseDoc) {
-    // ── WAREHOUSE PART I: sections 1–7 per EAEU Rec. #8 ──────────────────────
+    // ── WAREHOUSE PART I: sections 1–7 per EEC Rec. #8 ───────────────────────
     drawWarehouseProtocolPart1(doc, input);
   } else {
     // ── STANDARD PART I ──────────────────────────────────────────────────────
@@ -3271,7 +3271,7 @@ function drawPVPlan(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
         || (isWarehouseLike(getReportEquipmentType(input))
           ? (en
               ? "Data loggers shall be arranged as a representative grid covering the storage area across its length, width and height. Where possible, loggers are positioned at comparable intervals. The external logger monitors the temperature outside the room."
-              : "Регистраторы данных следует располагать в форме сетки и таким образом, чтобы они покрывать зону хранения по всей ее длине и ширине, а также высоте. Регистраторы данных размещаются по возможности с равными интервалами. Внешний датчик — для контроля температуры вне помещения.")
+              : "Регистраторы данных следует располагать в форме сетки и таким образом, чтобы они покрывали зону хранения по всей ее длине и ширине, а также высоте. Регистраторы данных размещаются по возможности с равными интервалами. Внешний датчик — для контроля температуры вне помещения.")
           : "\u0414\u0430\u0442\u0447\u0438\u043a\u0438 \u0440\u0430\u0441\u043f\u043e\u043b\u0430\u0433\u0430\u044e\u0442\u0441\u044f \u0432 \u0445\u0430\u0440\u0430\u043a\u0442\u0435\u0440\u043d\u044b\u0445 \u0442\u043e\u0447\u043a\u0430\u0445 \u043e\u0431\u044a\u0451\u043c\u0430 " + reeferAreaGenitive(getReportEquipmentType(input)) + ": \u043f\u043e \u0441\u0442\u0435\u043d\u0430\u043c \u0438 \u043f\u043e \u0446\u0435\u043d\u0442\u0440\u0443 \u043e\u0431\u044a\u0435\u043a\u0442\u0430. \u0412\u043d\u0435\u0448\u043d\u0438\u0439 \u0434\u0430\u0442\u0447\u0438\u043a \u2014 \u0434\u043b\u044f \u043a\u043e\u043d\u0442\u0440\u043e\u043b\u044f \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u044b \u0432 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u0435."),
     ],
   ];
@@ -4461,10 +4461,10 @@ export function addHeadersAndFooters(doc: PDFKit.PDFDocument, input: ReportInput
 
 
 /* -------------------------------------------------------------------------- */
-/* Warehouse / storage zone (EAEU Рек. №8) — plan diagram + annexes           */
+/* Warehouse / storage zone (EEC Rec. №8) — plan diagram + annexes            */
 /* -------------------------------------------------------------------------- */
 
-/** Draw a top-view plan with EAEU recommended logger grid for warehouse */
+/** Draw a top-view plan with EEC recommended logger grid for warehouse */
 function drawWarehousePlanDiagram(
   doc: PDFKit.PDFDocument,
   input: ReportInput,
@@ -5047,7 +5047,7 @@ function drawWarehousePlanDiagram(
     doc.moveDown(0.4);
     doc.fillColor(MUTED).font("body").fontSize(8)
       .text(
-        "Сетка построена по таблицам п. 16д Рек. ЕАЭК №8 (горизонталь: 2/3/4/5 точек при ≤10/40/60/>60 м; " +
+        "Сетка построена по таблицам п. 16д Рек. ЕЭК №8 (горизонталь: 2/3/4/5 точек при ≤10/40/60/>60 м; " +
         "вертикаль: 1/2/3 точки при ≤1.5 / <5 / ≥5 м).",
         pageLeft,
         doc.y,
@@ -5581,7 +5581,7 @@ function formatDateRange(startMs: number | null, endMs: number | null): string {
 }
 
 /* ============================================================================
- * WAREHOUSE PROTOCOL — PART I (ЕАЭК Рек. №8, разделы 1–7)
+ * WAREHOUSE PROTOCOL — PART I (Рек. ЕЭК №8, разделы 1–7)
  * ============================================================================ */
 
 /**
@@ -5638,13 +5638,15 @@ MKT (Mean Kinetic Temperature) — среднекинетическая темп
 
   "6.1": `Тип регистраторов данных: [указать марку/модель]
 Диапазон измерений: [указать]
-Точность: ±[указать] °C
+Абсолютная погрешность измерения: не более ±0,5 °C. Фактическая погрешность каждого регистратора указывается в реестре и отчёте.
 Интервал записи: [указать] минут
 Дата последней поверки: [указать]
 Свидетельство о поверке №: [указать]`,
 
   "6.2": `Ответственный за проведение картирования: [ФИО, должность]
-Исполнители: [перечислить ФИО и должности]`,
+Исполнители: [перечислить ФИО и должности]
+
+Ответственные лица имеют необходимую подготовку и ознакомлены с настоящим протоколом до начала температурного картирования.`,
 
   "6.3": `Характеристики объекта исследования заполнены в разделе «Общие сведения» (раздел 5).`,
 
@@ -5659,7 +5661,7 @@ MKT (Mean Kinetic Temperature) — среднекинетическая темп
 
   "6.7": `Все регистраторы запрограммированы на одинаковый интервал записи. Дата и время синхронизированы перед началом исследования. Маркировка нанесена на корпус каждого регистратора.`,
 
-  "6.8": `Регистраторы размещены в соответствии со схемой (Приложение № 1). Размещение выполнено до начала периода регистрации.`,
+  "6.8": `Регистраторы размещены в соответствии со схемой (Приложение № 1). Размещение выполнено до начала периода регистрации. Персонал, работающий в зоне хранения, информируется о проведении температурного картирования во избежание случайного нарушения работы, отключения, утраты регистраторов данных или собранных данных.`,
 
   "6.9": `Температурное картирование проводится в условиях штатной эксплуатации помещения хранения. В период исследования двери/ворота открываются в обычном рабочем режиме, связанном с движением персонала, приемкой, размещением, комплектованием и отпуском продукции. Специальное испытание с регламентированным открыванием дверей/ворот не проводится, если иное не указано в протоколе.
 
@@ -5668,7 +5670,7 @@ MKT (Mean Kinetic Temperature) — среднекинетическая темп
 — условия эксплуатации зоны хранения поддерживаются в штатном режиме;
 — длительные или нештатные открытия дверей/ворот, отключение электропитания, ремонтные работы и иные события, способные повлиять на температурный режим, фиксируются с указанием даты, времени, продолжительности и причины.
 
-По завершении периода исследования данные регистраторов извлекаются.`,
+По завершении периода исследования данные регистраторов извлекаются. Выполняется повторная сверка серийных номеров регистраторов данных и мест их размещения с утверждённой схемой и таблицей размещения.`,
 
   "6.10": `Данные с каждого регистратора выгружены с помощью [указать ПО]. Файлы данных объединены для совместного анализа. Исходные файлы сохранены в архиве.`,
 };
@@ -5723,13 +5725,15 @@ e) to define or confirm monitoring sensor placement points.`,
 
   "6.1": `Data logger type: [specify make/model]
 Measurement range: [specify]
-Accuracy: ±[specify] °C
+Absolute measurement accuracy: not more than ±0.5 °C. The actual accuracy of each data logger is specified in the registry and report.
 Recording interval: [specify] minutes
 Last verification date: [specify]
 Verification certificate No.: [specify]`,
 
   "6.2": `Person responsible for temperature mapping: [full name, position]
-Performers: [list full names and positions]`,
+Performers: [list full names and positions]
+
+Responsible personnel have the necessary training and are familiar with this protocol before the start of temperature mapping.`,
 
   "6.3": `Characteristics of the study object are provided in Section 5 "General Information".`,
 
@@ -5744,7 +5748,7 @@ Performers: [list full names and positions]`,
 
   "6.7": `All data loggers are programmed with the same recording interval. Date and time are synchronized before the start of the study. Each logger is marked with its identifier.`,
 
-  "6.8": `Data loggers are placed according to the approved room plan before the start of the recording period.`,
+  "6.8": `Data loggers are placed according to the approved room plan before the start of the recording period. Personnel working in the storage area are informed about the temperature mapping study to prevent accidental disturbance, deactivation, loss of data loggers or collected data.`,
 
   "6.9": `Temperature mapping is performed under routine operation of the storage area. During the study, doors/gates are opened in the normal operating mode related to personnel movement, receipt, placement, picking and release of products. A dedicated test with controlled door/gate opening is not performed unless specified in the protocol.
 
@@ -5753,7 +5757,7 @@ During the study period:
 — operating conditions of the storage area are maintained in routine mode;
 — prolonged or abnormal door/gate openings, power failure, maintenance work and other events that may affect the temperature profile are recorded with date, time, duration and reason.
 
-After completion of the study period, data loggers are retrieved.`,
+After completion of the study period, data loggers are retrieved. Serial numbers of data loggers and their placement locations are re-checked against the approved layout and placement table.`,
 
   "6.10": `Data from each logger are downloaded using appropriate software. Data files are combined for joint analysis. Source files are retained in the archive.`,
 };
@@ -5792,17 +5796,56 @@ function drawWarehouseEquipmentList(doc: PDFKit.PDFDocument, input: ReportInput,
   });
 }
 
+function normalizeWarehouseSectionText(key: string, text: string, en: boolean): string {
+  let out = text;
+  if (!en) {
+    out = out.replace(/ЕАЭК/g, "ЕЭК");
+
+    if (
+      key === "6.1" &&
+      (out.includes("наименование датчиков: SSN-13") ||
+        out.includes("Государственном реестре средств измерений Республики Казахстан"))
+    ) {
+      return WAREHOUSE_DEFAULT_SECTIONS["6.1"] ?? out;
+    }
+
+    if (key === "6.2" && !/подготовк|обучен/i.test(out)) {
+      out += "\n\nОтветственные лица имеют необходимую подготовку и ознакомлены с настоящим протоколом до начала температурного картирования.";
+    }
+    if (key === "6.8" && !out.includes("Персонал, работающий в зоне хранения")) {
+      out += " Персонал, работающий в зоне хранения, информируется о проведении температурного картирования во избежание случайного нарушения работы, отключения, утраты регистраторов данных или собранных данных.";
+    }
+    if (key === "6.9" && !out.includes("повторная сверка")) {
+      out += " По завершении периода исследования выполняется повторная сверка серийных номеров регистраторов данных и мест их размещения с утверждённой схемой и таблицей размещения.";
+    }
+  } else {
+    if (key === "6.2" && !/training|trained/i.test(out)) {
+      out += "\n\nResponsible personnel have the necessary training and are familiar with this protocol before the start of temperature mapping.";
+    }
+    if (key === "6.8" && !out.includes("Personnel working in the storage area")) {
+      out += " Personnel working in the storage area are informed about the temperature mapping study to prevent accidental disturbance, deactivation, loss of data loggers or collected data.";
+    }
+    if (key === "6.9" && !out.includes("re-checked against the approved layout")) {
+      out += " After completion of the study period, serial numbers of data loggers and their placement locations are re-checked against the approved layout and placement table.";
+    }
+  }
+  return out;
+}
+
 /**
- * Renders warehouse protocol Part I with sections 1–7 per EAEU Rec. #8.
+ * Renders warehouse protocol Part I with sections 1–7 per EEC Rec. #8.
  */
 function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput): void {
   const en = isEnglishWarehouse(input);
   const sec = (key: string): string => {
     const custom = input.warehouseSections?.[key];
-    if (custom !== undefined && custom.trim() !== "" && (!en || !hasCyrillic(custom))) return custom;
-    return en
+    if (custom !== undefined && custom.trim() !== "" && (!en || !hasCyrillic(custom))) {
+      return normalizeWarehouseSectionText(key, custom, en);
+    }
+    const fallback = en
       ? (WAREHOUSE_DEFAULT_SECTIONS_EN[key] ?? WAREHOUSE_DEFAULT_SECTIONS[key] ?? "")
       : (WAREHOUSE_DEFAULT_SECTIONS[key] ?? "");
+    return normalizeWarehouseSectionText(key, fallback, en);
   };
 
   // ── Section 1: Сокращения и определения ─────────────────────────────────

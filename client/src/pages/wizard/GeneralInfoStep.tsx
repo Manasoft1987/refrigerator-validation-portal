@@ -57,7 +57,7 @@ export default function GeneralInfoStep({
     season: undefined,
     qualificationType: undefined,
     commissionMembers: [] as CM[],
-    // Warehouse / storage zone (EAEU Рек. №8)
+    // Warehouse / storage zone (EEC Rec. №8)
     whLengthM: "",
     whWidthM: "",
     whHeightM: "",
@@ -422,11 +422,11 @@ export default function GeneralInfoStep({
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
                   <h3 className="font-semibold tracking-tight">
-                    {isWarehouseByEaeu ? "Параметры зоны хранения (Рек. ЕАЭК №8)" : "Параметры зоны хранения (экспертное размещение)"}
+                    {isWarehouseByEaeu ? "Параметры зоны хранения (Рек. ЕЭК №8)" : "Параметры зоны хранения (экспертное размещение)"}
                   </h3>
                   <p className="text-xs text-muted-foreground mt-1">
                     {isWarehouseByEaeu
-                      ? "Размеры используются для расчёта минимальной сетки регистраторов по Рек. ЕАЭК №8."
+                      ? "Размеры используются для расчёта минимальной сетки регистраторов по Рек. ЕЭК №8."
                       : "Размеры можно указать для масштаба схемы; количество датчиков специалист задаёт вручную на этапе PV."}
                   </p>
                 </div>

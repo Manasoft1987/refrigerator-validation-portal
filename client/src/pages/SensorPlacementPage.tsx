@@ -579,7 +579,7 @@ export default function SensorPlacementPage() {
                   </CardTitle>
                   {isWarehouseByEaeu && ready ? (
                     <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-                      Сетка по Рек. ЕАЭК №8 (п. 16д): {calc.nL}×{calc.nW}×{calc.nV}; всего <b>{calc.total}</b> регистраторов.
+                      Сетка по Рек. ЕЭК №8 (п. 16д): {calc.nL}×{calc.nW}×{calc.nV}; всего <b>{calc.total}</b> регистраторов.
                       Кликните по кружку датчика для назначения. Перетащите объект мышью.
                     </p>
                   ) : !isWarehouseByEaeu ? (

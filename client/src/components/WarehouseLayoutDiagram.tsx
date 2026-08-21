@@ -2,7 +2,7 @@
  * WarehouseLayoutDiagram
  *
  * 2D top-view plan of a storage zone with the grid of recommended logger
- * positions according to EAEU Recommendation №8 (clause 16d):
+ * positions according to EEC Recommendation №8 (clause 16d):
  *   • horizontal points: 2 (≤10 m), 3 (≤40 m), 4 (≤60 m), 5 (>60 m);
  *   • vertical points:   1 (≤1.5 m), 2 (<5 m), 3 (≥5 m).
  *

@@ -257,10 +257,10 @@ export default function EquipmentTypeSelector() {
                 <div className="p-3 bg-emerald-100 rounded-lg">
                   <Warehouse className="h-6 w-6 text-emerald-600" />
                 </div>
-                <CardTitle className="text-xl">Помещение / зона (ЕАЭК №8)</CardTitle>
+                <CardTitle className="text-xl">Помещение / зона (Рек. ЕЭК №8)</CardTitle>
               </div>
               <CardDescription className="text-sm">
-                Склад, холодильная камера или зона хранения с авторасчётом по Рек. ЕАЭК №8
+                Склад, холодильная камера или зона хранения с авторасчётом по Рек. ЕЭК №8
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

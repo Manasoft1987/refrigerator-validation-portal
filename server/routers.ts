@@ -872,7 +872,7 @@ export const appRouter = router({
           recommendations: z.string().optional().nullable(),
           reportDate: z.string().optional().nullable(),
           documentValidityPeriod: z.string().optional().nullable(),
-          // ── Warehouse / storage zone (EAEU Рек. №8) ──
+          // ── Warehouse / storage zone (EEC Rec. №8) ──
           whLengthM: z.union([z.number(), z.string()]).optional().nullable(),
           whWidthM: z.union([z.number(), z.string()]).optional().nullable(),
           whHeightM: z.union([z.number(), z.string()]).optional().nullable(),
@@ -2816,7 +2816,7 @@ export const appRouter = router({
   }),
 
   /* ---------------------------------------------------------------- */
-  /* Warehouse Protocol Sections (ЕАЭК Рек. №8 — разделы 1–7)        */
+  /* Warehouse Protocol Sections (EEC Rec. №8 — разделы 1–7)         */
   /* ---------------------------------------------------------------- */
   warehouseSections: router({
     /** Get all section texts for a protocol, returns map {sectionKey: content} */

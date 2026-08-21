@@ -105,7 +105,7 @@ export function isWarehouseEaeu(type: string | null | undefined): boolean {
 /** Returns a human-readable label for any equipmentType value */
 export function getEquipmentLabel(type: string | null | undefined, customName?: string | null): string {
   if (!type) return "Холодильник";
-  if (type === "warehouse") return "Помещение / зона хранения (ЕАЭК №8)";
+  if (type === "warehouse") return "Помещение / зона хранения (Рек. ЕЭК №8)";
   if (type === WAREHOUSE_EXPERT_EQUIPMENT_TYPE) return "Помещение / зона хранения (экспертное)";
   if (type === KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE) return "Авторефрижератор Кыргызстана";
   if (type === "thermal-container") return "Термоконтейнер";
@@ -151,7 +151,7 @@ export const DEFAULT_IQ_QUESTIONS_WAREHOUSE: string[] = [
 ];
 
 /**
- * Опросник OQ для помещения/зоны хранения по ЕАЭК (Рек. №8, 10 пунктов).
+ * Опросник OQ для помещения/зоны хранения по Рекомендации ЕЭК №8 (10 пунктов).
  */
 export const DEFAULT_OQ_QUESTIONS_WAREHOUSE: string[] = [
   "Запускается ли всё оборудование зоны (холодильные установки, кондиционеры, обогреватели) в штатном режиме?",
@@ -236,7 +236,7 @@ export const DEFAULT_OQ_QUESTIONS_CHAMBER: string[] = [
 ];
 
 /**
- * Расчёт минимального количества регистраторов по ЕАЭК (Рек. №8, п. 16д).
+ * Расчёт минимального количества регистраторов по Рекомендации ЕЭК №8 (п. 16д).
  * Возвращает количество точек по длине / ширине / вертикали и итог.
  */
 export function computeWarehouseSensorCount(opts: {

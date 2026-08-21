@@ -8,9 +8,9 @@ import {
 import { generateProtocolPdf } from "./pdfReport";
 
 /* -------------------------------------------------------------------------- */
-/* EAEU Рек. №8 (п. 16д) — расчёт количества регистраторов                    */
+/* EEC Rec. №8 (п. 16д) — расчёт количества регистраторов                     */
 /* -------------------------------------------------------------------------- */
-describe("computeWarehouseSensorCount – EAEU Рек. №8 п. 16д", () => {
+describe("computeWarehouseSensorCount – EEC Rec. №8 п. 16д", () => {
   it("uses a duration of not less than 7 days for storage-room studies", () => {
     const storageRoomStudies = WAREHOUSE_STUDY_TYPES.filter(study => study.id !== "cold_room");
     expect(storageRoomStudies.every(study => study.duration === "не менее 7 суток")).toBe(true);
@@ -93,7 +93,7 @@ function mkSeries(start: number, hours: number, temp: number) {
 
 describe("generateProtocolPdf – warehouse / storage zone", () => {
   it(
-    "produces a non-empty PDF for warehouse with EAEU annexes",
+    "produces a non-empty PDF for warehouse with EEC annexes",
     async () => {
       const now = Date.UTC(2026, 4, 1, 9, 0, 0);
       const series = mkSeries(now, 168, 20);
@@ -125,7 +125,7 @@ describe("generateProtocolPdf – warehouse / storage zone", () => {
         }
         return originalText.call(this, text, ...args);
       };
-      // Generate one logger per (row, col, tier) according to EAEU grid
+      // Generate one logger per (row, col, tier) according to EEC grid
       const loggers: any[] = [];
       let id = 1;
       for (let t = 1; t <= calc.nV; t++) {
