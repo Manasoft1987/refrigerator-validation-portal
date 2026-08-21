@@ -5615,7 +5615,7 @@ MKT (Mean Kinetic Temperature) — среднекинетическая темп
 Назначение: хранение лекарственных средств в условиях контролируемой температурной среды.`,
 
   "2.2.1": `Настоящее температурное картирование проводится в соответствии с:
-• Рекомендацией Коллегии ЕЭК № 8 от 20.04.2021 «О Руководстве по надлежащей практике хранения лекарственных средств для медицинского применения»;
+• Рекомендацией Коллегии ЕЭК от 20.04.2026 № 8 «О Руководстве по проведению температурного картирования зон хранения лекарственных средств»;
 • Требованиями GDP/GPP/GMP в части обеспечения условий хранения лекарственных средств;
 • Внутренними стандартными операционными процедурами организации.`,
 
@@ -5700,7 +5700,7 @@ Address: [specify object address]
 Purpose: storage of medicinal products under controlled temperature conditions.`,
 
   "2.2.1": `This temperature mapping study is performed with consideration of:
-• EEC Board Recommendation No. 8 dated 20.04.2021 on the Guide to Good Storage Practice for medicinal products for human use;
+• EEC Board Recommendation No. 8 dated 20.04.2026 on the Guide for temperature mapping of medicinal product storage areas;
 • GDP / GPP / GMP requirements related to maintaining storage conditions for medicinal products;
 • Internal standard operating procedures of the organization.`,
 
