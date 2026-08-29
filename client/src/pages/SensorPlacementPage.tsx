@@ -50,6 +50,28 @@ const W = 1.6;
 const D = 3.2;
 const H = 1.4;
 
+type DragPos = { x: number; y: number };
+
+function defaultReeferCoolingUnitPos(index = 0): DragPos {
+  const [x, y] = iso(index === 0 ? W * 0.35 : W * 0.65, 0.1, H + 0.11);
+  return { x, y };
+}
+
+function normalizeCoolingUnitPositions(value: unknown, legacy?: DragPos | null): DragPos[] {
+  const positions = Array.isArray(value)
+    ? value
+        .filter((pos): pos is DragPos => Number.isFinite(pos?.x) && Number.isFinite(pos?.y))
+        .slice(0, 2)
+    : [];
+  if (positions.length > 0) return positions;
+  if (legacy && Number.isFinite(legacy.x) && Number.isFinite(legacy.y)) return [legacy];
+  return [];
+}
+
+function ensurePrimaryCoolingUnitPosition(positions: DragPos[]): DragPos[] {
+  return positions.length > 0 ? positions : [defaultReeferCoolingUnitPos(0)];
+}
+
 const SENSOR_POSITIONS = [
   { id: "C1", x: 0,   y: 0,   z: 0,   group: "corner" as const },
   { id: "C2", x: W,   y: 0,   z: 0,   group: "corner" as const },
@@ -281,6 +303,7 @@ export default function SensorPlacementPage() {
   });
 
   const [coolingUnitPos, setCoolingUnitPos] = useState<{ x: number; y: number } | null>(null);
+  const [coolingUnitPositions, setCoolingUnitPositions] = useState<DragPos[]>([]);
   const [doorPos, setDoorPos] = useState<{ x: number; y: number } | null>(null);
   const [floorPlanObjects, setFloorPlanObjects] = useState<FloorPlanObject[]>([]);
   const [refrigeratorLevelCount, setRefrigeratorLevelCount] = useState<number>(7);
@@ -307,6 +330,7 @@ export default function SensorPlacementPage() {
   if (session && !initialized) {
     setInitialized(true);
     if ((session as any).coolingUnitPos) setCoolingUnitPos((session as any).coolingUnitPos);
+    setCoolingUnitPositions(normalizeCoolingUnitPositions((session as any).coolingUnitPositions, (session as any).coolingUnitPos));
     if ((session as any).doorPos) setDoorPos((session as any).doorPos);
     if ((session as any).floorPlanObjects) {
       setFloorPlanObjects((session as any).floorPlanObjects.map((obj: FloorPlanObject) =>
@@ -480,6 +504,39 @@ export default function SensorPlacementPage() {
     );
   }, [isWarehouse, loggers, floorPlanObjects, updateLogger, protocolId, saveSession, trialKey]);
 
+  const effectiveCoolingUnitPositions = isAutoRefrigeratorLike(equipmentType)
+    ? ensurePrimaryCoolingUnitPosition(
+        coolingUnitPositions.length > 0
+          ? coolingUnitPositions
+          : normalizeCoolingUnitPositions((session as any)?.coolingUnitPositions, coolingUnitPos ?? (session as any)?.coolingUnitPos),
+      )
+    : normalizeCoolingUnitPositions((session as any)?.coolingUnitPositions, coolingUnitPos ?? (session as any)?.coolingUnitPos);
+
+  const handleCoolingUnitPositionsChange = useCallback((positions: DragPos[]) => {
+    const normalized = normalizeCoolingUnitPositions(positions).slice(0, 2);
+    setCoolingUnitPositions(normalized);
+    setCoolingUnitPos(normalized[0] ?? null);
+  }, []);
+
+  const addCoolingUnit = useCallback(() => {
+    setCoolingUnitPositions(prev => {
+      const base = ensurePrimaryCoolingUnitPosition(prev.length > 0 ? prev : normalizeCoolingUnitPositions((session as any)?.coolingUnitPositions, coolingUnitPos ?? (session as any)?.coolingUnitPos));
+      if (base.length >= 2) return base;
+      const next = [...base, defaultReeferCoolingUnitPos(base.length)].slice(0, 2);
+      setCoolingUnitPos(next[0] ?? null);
+      return next;
+    });
+  }, [coolingUnitPos, session]);
+
+  const removeCoolingUnit = useCallback((index: number) => {
+    setCoolingUnitPositions(prev => {
+      const base = ensurePrimaryCoolingUnitPosition(prev.length > 0 ? prev : normalizeCoolingUnitPositions((session as any)?.coolingUnitPositions, coolingUnitPos ?? (session as any)?.coolingUnitPos));
+      const next = base.filter((_, i) => i !== index);
+      setCoolingUnitPos(next[0] ?? null);
+      return next;
+    });
+  }, [coolingUnitPos, session]);
+
   const handleSave = useCallback(async () => {
     const L = readDim(lengthRef);
     const W = readDim(widthRef);
@@ -491,7 +548,8 @@ export default function SensorPlacementPage() {
     saveSession.mutate({
       protocolId,
       trialKey,
-      coolingUnitPos: coolingUnitPos ?? undefined,
+      coolingUnitPos: isAutoRefrigeratorLike(equipmentType) ? effectiveCoolingUnitPositions[0] : (coolingUnitPos ?? undefined),
+      coolingUnitPositions: isAutoRefrigeratorLike(equipmentType) ? effectiveCoolingUnitPositions : undefined,
       doorPos: doorPos ?? undefined,
       floorPlanObjects: floorPlanObjects,
       roomLengthM: L,
@@ -508,7 +566,7 @@ export default function SensorPlacementPage() {
         }
       },
     });
-  }, [protocolId, coolingUnitPos, doorPos, floorPlanObjects, saveSession, isWarehouse, captureAndSavePlan]);
+  }, [protocolId, trialKey, equipmentType, effectiveCoolingUnitPositions, coolingUnitPos, doorPos, floorPlanObjects, saveSession, isWarehouse, captureAndSavePlan]);
 
   const handleRefrigeratorDrawerCountChange = useCallback((count: number) => {
     const normalized = Math.max(0, Math.min(2, Math.round(count))) as 0 | 1 | 2;
@@ -913,12 +971,44 @@ export default function SensorPlacementPage() {
               </div>
             </CardHeader>
             <CardContent>
+              {isAutoRefrigeratorLike(equipmentType) && (
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                  <div className="text-muted-foreground">
+                    Отметьте фактическое расположение холодильного агрегата. Если в кузове два агрегата/испарителя — добавьте второй.
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={addCoolingUnit}
+                      disabled={effectiveCoolingUnitPositions.length >= 2}
+                    >
+                      Добавить агрегат 2
+                    </Button>
+                    {effectiveCoolingUnitPositions.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700"
+                        onClick={() => removeCoolingUnit(1)}
+                      >
+                        Убрать агрегат 2
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
               <ReeferTruckDiagram3D
                 loggers={loggers as any}
                 protocolId={protocolId}
+                showDraggables={isAutoRefrigeratorLike(equipmentType)}
                 coolingUnitPos={coolingUnitPos ?? (session as any)?.coolingUnitPos}
+                coolingUnitPositions={effectiveCoolingUnitPositions}
                 doorPos={doorPos ?? (session as any)?.doorPos}
                 onCoolingUnitPosChange={setCoolingUnitPos}
+                onCoolingUnitPositionsChange={handleCoolingUnitPositionsChange}
                 onDoorPosChange={setDoorPos}
                 objectType={isAutoRefrigeratorLike(equipmentType) ? "truck" : equipmentType === "thermal-container" ? "thermal-container" : "chamber"}
               />

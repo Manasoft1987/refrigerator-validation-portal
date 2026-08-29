@@ -115,6 +115,12 @@ export type ReportInput = {
     customMin?: string | number | null;
     customMax?: string | number | null;
     reportLanguage?: "ru" | "en" | string | null;
+    refrigerationUnits?: Array<{
+      manufacturer?: string | null;
+      model?: string | null;
+      serial?: string | null;
+      note?: string | null;
+    }> | null;
     thermalContainerConfig?: {
       selectedModes?: string[];
       volumeLiters?: string | number | null;
@@ -280,6 +286,7 @@ export type ReportInput = {
   }>;
   /** Позиция кондиционера на интерактивной схеме помещения */
   coolingUnitPos?: { x: number; y: number } | null;
+  coolingUnitPositions?: Array<{ x: number; y: number }> | null;
   /** Позиция двери на интерактивной схеме */
   doorPos?: { x: number; y: number } | null;
   refrigeratorDrawerCount?: number | null;
@@ -584,9 +591,59 @@ function reeferUnitLabel(type: string | null | undefined): string {
   return type === "chamber" ? "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430 / \u0430\u0433\u0440\u0435\u0433\u0430\u0442" : "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430";
 }
 
+type RefrigerationUnitInfo = {
+  manufacturer?: string | null;
+  model?: string | null;
+  serial?: string | null;
+  note?: string | null;
+};
+
+function safeTrim(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
+function getRefrigerationUnits(input: ReportInput): RefrigerationUnitInfo[] {
+  const rawUnits = Array.isArray((input.generalInfo as any)?.refrigerationUnits)
+    ? (input.generalInfo as any).refrigerationUnits
+    : [];
+  const units = rawUnits
+    .map((unit: any) => ({
+      manufacturer: safeTrim(unit?.manufacturer),
+      model: safeTrim(unit?.model),
+      serial: safeTrim(unit?.serial),
+      note: safeTrim(unit?.note),
+    }))
+    .filter((unit: RefrigerationUnitInfo) => unit.manufacturer || unit.model || unit.serial || unit.note)
+    .slice(0, 2);
+  if (units.length > 0) return units;
+
+  const legacy = {
+    manufacturer: safeTrim(input.generalInfo?.manufacturer),
+    model: safeTrim(input.generalInfo?.model),
+    serial: safeTrim(input.generalInfo?.serial),
+    note: "",
+  };
+  return legacy.manufacturer || legacy.model || legacy.serial ? [legacy] : [];
+}
+
+function formatRefrigerationUnit(unit: RefrigerationUnitInfo): string {
+  const model = [unit.manufacturer, unit.model].map(safeTrim).filter(Boolean).join(" ");
+  const serial = safeTrim(unit.serial);
+  const note = safeTrim(unit.note);
+  const parts = [
+    model || "—",
+    serial ? `сер. № ${serial}` : "",
+    note ? `расположение: ${note}` : "",
+  ].filter(Boolean);
+  return parts.join("; ");
+}
+
 function reeferConclusionObject(input: ReportInput): string {
-  const unit = ((input.generalInfo?.manufacturer || "") + " " + (input.generalInfo?.model || "")).trim();
-  const serial = input.generalInfo?.serial || "\u2014";
+  const units = getRefrigerationUnits(input);
+  const unit = units.length > 1
+    ? units.map((item, idx) => `№${idx + 1}: ${formatRefrigerationUnit(item)}`).join("; ")
+    : ((input.generalInfo?.manufacturer || "") + " " + (input.generalInfo?.model || "")).trim();
+  const serial = units.length > 1 ? "см. перечень агрегатов" : (input.generalInfo?.serial || "\u2014");
   const type = getReportEquipmentType(input);
   const withUnit = (obj: string) => obj + " \u0441 \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435\u043c \u00ab" + unit + "\u00bb (\u0441\u0435\u0440. \u2116 " + serial + ")";
   if (type === "chamber") return withUnit("\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0443\u044e \u043a\u0430\u043c\u0435\u0440\u0443");
@@ -1298,7 +1355,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
             null,
             null,
             "truck",
-            { showEmptyReferencePositions: false, showReferenceLegend: false },
+            { showEmptyReferencePositions: false, showReferenceLegend: false, coolingUnitPositions: input.coolingUnitPositions },
           );
         } else {
           const referenceTitle = eqType === "chamber"
@@ -1319,7 +1376,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
       if (!useRiskOrientedReeferPlacement) {
         doc.addPage();
         if (isReeferLike(eqType)) {
-          drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, false, "Схема 2. Расстановка датчиков (с серийными номерами)", null, null, eqType === "chamber" || eqType === "thermal-container" ? "chamber" : "truck");
+          drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, false, "Схема 2. Расстановка датчиков (с серийными номерами)", null, null, eqType === "chamber" || eqType === "thermal-container" ? "chamber" : "truck", { coolingUnitPositions: input.coolingUnitPositions });
         } else {
           drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, "Схема 2. Расстановка датчиков (серийные номера и средняя температура)", "serial", input.refrigeratorDrawerCount ?? 2, input.refrigeratorLevelCount ?? 7, null, null);
         }
@@ -1517,6 +1574,7 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
   const objectLabel = isWarehouseLike(eqType)
     ? getEquipmentName(input)
     : EQUIPMENT_LABEL[eqType || ""] || "—";
+  const refrigerationUnits = getRefrigerationUnits(input);
   const refrigerationUnit = `${gi?.manufacturer || ""} ${gi?.model || ""}`.trim() || "—";
   const selectedThermalModes = gi?.thermalContainerConfig?.selectedModes || [];
   const temperatureModeText = selectedThermalModes.length > 0
@@ -1533,8 +1591,12 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
     ...(isReeferLike(eqType)
       ? [
           [reeferLocationLabel(eqType), gi?.location || "\u2014"],
-          [reeferUnitLabel(eqType), refrigerationUnit],
-          ["\u0421\u0435\u0440\u0438\u0439\u043d\u044b\u0439 \u043d\u043e\u043c\u0435\u0440 \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0438", gi?.serial || "\u2014"],
+          ...(isAutoRefrigeratorLike(eqType) && refrigerationUnits.length > 1
+            ? refrigerationUnits.map((unit, idx) => [`${reeferUnitLabel(eqType)} ${idx + 1}`, formatRefrigerationUnit(unit)] as [string, string])
+            : [
+                [reeferUnitLabel(eqType), refrigerationUnit],
+                ["\u0421\u0435\u0440\u0438\u0439\u043d\u044b\u0439 \u043d\u043e\u043c\u0435\u0440 \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0438", gi?.serial || "\u2014"],
+              ] as Array<[string, string]>),
         ] as Array<[string, string]>
       : [
           [en ? "Object address" : "Адрес объекта", gi?.location || "—"],
@@ -1767,11 +1829,16 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
     }
   } else {
     // Refrigerator / auto-refrigerator: show equipment-specific fields
+    const units = getRefrigerationUnits(input);
     rows = [
       ["Тип оборудования", isWarehouseLike(eqType) ? getEquipmentName(input) : EQUIPMENT_LABEL[eqType || ""] || "—"],
-      ["Производитель", gi?.manufacturer || "—"],
-      ["Модель", gi?.model || "—"],
-      ["Серийный номер", gi?.serial || "—"],
+      ...(isAutoRefrigeratorLike(eqType) && units.length > 1
+        ? units.map((unit, idx) => [`Холодильный агрегат ${idx + 1}`, formatRefrigerationUnit(unit)] as [string, string])
+        : [
+            ["Производитель", gi?.manufacturer || "—"],
+            ["Модель", gi?.model || "—"],
+            ["Серийный номер", gi?.serial || "—"],
+          ] as Array<[string, string]>),
       ["Температурный режим", temperatureModeLabel(gi?.tempMode, gi?.customMin, gi?.customMax)],
       ["Место установки", gi?.location || "—"],
       ["Назначение / хранимая продукция", gi?.purpose || "—"],

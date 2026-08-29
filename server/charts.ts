@@ -1913,6 +1913,7 @@ export function drawReeferTruckDiagram3D(
   options: {
     showEmptyReferencePositions?: boolean;
     showReferenceLegend?: boolean;
+    coolingUnitPositions?: Array<{ x: number; y: number }> | null;
   } = {},
 ): void {
   const showEmptyReferencePositions = options.showEmptyReferencePositions ?? true;
@@ -2113,27 +2114,40 @@ export function drawReeferTruckDiagram3D(
     ];
   }
 
-  if (!labelOnly && coolingUnitPos) {
-    const [cx, cy] = svgToPdf(coolingUnitPos.x, coolingUnitPos.y);
+  const coolingUnits = !labelOnly
+    ? (Array.isArray(options.coolingUnitPositions) && options.coolingUnitPositions.length > 0
+      ? options.coolingUnitPositions
+      : coolingUnitPos
+        ? [coolingUnitPos]
+        : [])
+        .filter(pos => Number.isFinite(pos?.x) && Number.isFinite(pos?.y))
+        .slice(0, 2)
+    : [];
+
+  coolingUnits.forEach((unitPos, idx) => {
+    const [cx, cy] = svgToPdf(unitPos.x, unitPos.y);
     doc.save();
     // Shadow
     doc.ellipse(cx, cy + 14, 18, 4).fill("rgba(0,0,0,0.10)");
     // Body rectangle
-    doc.roundedRect(cx - 18, cy - 12, 36, 24, 4).fill("#1e40af").stroke();
-    doc.roundedRect(cx - 18, cy - 12, 36, 24, 4).lineWidth(1).strokeColor("#1d4ed8").stroke();
+    const fill = idx === 0 ? "#1e40af" : "#0f766e";
+    const stroke = idx === 0 ? "#1d4ed8" : "#0d9488";
+    const vent = idx === 0 ? "#3b82f6" : "#2dd4bf";
+    doc.roundedRect(cx - 18, cy - 12, 36, 24, 4).fill(fill).stroke();
+    doc.roundedRect(cx - 18, cy - 12, 36, 24, 4).lineWidth(1).strokeColor(stroke).stroke();
     // Vertical vent lines
     [-8, -3, 2, 7].forEach(lx => {
       doc.moveTo(cx + lx, cy - 8).lineTo(cx + lx, cy + 8)
-        .lineWidth(1).strokeColor("#3b82f6").stroke();
+        .lineWidth(1).strokeColor(vent).stroke();
     });
     // Fan circle
     doc.circle(cx + 12, cy, 7).fill("none").lineWidth(1).strokeColor("#93c5fd").stroke();
     doc.circle(cx + 12, cy, 2).fill("#93c5fd");
     // Label
-    doc.font("bold").fontSize(7).fillColor("#1e40af");
-    doc.text("Агрегат", cx - 20, cy + 14, { width: 40, align: "center", lineBreak: false });
+    doc.font("bold").fontSize(7).fillColor(fill);
+    doc.text(coolingUnits.length > 1 ? `Агрегат ${idx + 1}` : "Агрегат", cx - 24, cy + 14, { width: 48, align: "center", lineBreak: false });
     doc.restore();
-  }
+  });
 
   if (!labelOnly && doorPos) {
     const [dx, dy] = svgToPdf(doorPos.x, doorPos.y);

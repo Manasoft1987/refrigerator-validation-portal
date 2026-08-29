@@ -34,11 +34,15 @@ type Props = {
   readOnly?: boolean;
   showDraggables?: boolean;
   coolingUnitPos?: DragPos | null;
+  coolingUnitPositions?: DragPos[] | null;
   doorPos?: DragPos | null;
   onCoolingUnitPosChange?: (pos: DragPos) => void;
+  onCoolingUnitPositionsChange?: (pos: DragPos[]) => void;
   onDoorPosChange?: (pos: DragPos) => void;
   objectType?: "truck" | "chamber" | "thermal-container";
 };
+
+type DragTarget = { kind: "coolingUnit"; index: number } | { kind: "door" };
 
 // ─── Isometric projection ─────────────────────────────────────────────────────
 // Standard isometric: 30° angles.
@@ -119,9 +123,23 @@ function pts(points: [number, number][]) {
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
-function defaultCoolingUnitPos(): DragPos {
-  const [cx, cy] = iso(W / 2, 0.1, H + 0.11);
+function defaultCoolingUnitPos(index = 0): DragPos {
+  const [cx, cy] = iso(index === 0 ? W * 0.35 : W * 0.65, 0.1, H + 0.11);
   return { x: cx, y: cy };
+}
+
+function normalizeCoolingUnitPositions(
+  positions?: DragPos[] | null,
+  legacyPos?: DragPos | null,
+): DragPos[] {
+  const valid = Array.isArray(positions)
+    ? positions
+        .filter(pos => Number.isFinite(pos?.x) && Number.isFinite(pos?.y))
+        .slice(0, 2)
+    : [];
+  if (valid.length > 0) return valid;
+  if (legacyPos && Number.isFinite(legacyPos.x) && Number.isFinite(legacyPos.y)) return [legacyPos];
+  return [defaultCoolingUnitPos(0)];
 }
 
 function defaultDoorPos(): DragPos {
@@ -135,8 +153,10 @@ export default function ReeferTruckDiagram3D({
   readOnly = false,
   showDraggables = false,
   coolingUnitPos,
+  coolingUnitPositions,
   doorPos,
   onCoolingUnitPosChange,
+  onCoolingUnitPositionsChange,
   onDoorPosChange,
   objectType = "truck",
 }: Props) {
@@ -149,12 +169,12 @@ export default function ReeferTruckDiagram3D({
   const [assigningTo, setAssigningTo] = useState<string | null>(null);
 
   const svgRef = useRef<SVGSVGElement>(null);
-  const [draggingElement, setDraggingElement] = useState<"coolingUnit" | "door" | null>(null);
+  const [draggingElement, setDraggingElement] = useState<DragTarget | null>(null);
   const [dragOffset, setDragOffset] = useState<{ dx: number; dy: number }>({ dx: 0, dy: 0 });
-  const [localCoolingUnitPos, setLocalCoolingUnitPos] = useState<DragPos | null>(null);
+  const [localCoolingUnitPositions, setLocalCoolingUnitPositions] = useState<DragPos[] | null>(null);
   const [localDoorPos, setLocalDoorPos] = useState<DragPos | null>(null);
 
-  const effectiveCoolingUnitPos = localCoolingUnitPos ?? coolingUnitPos ?? defaultCoolingUnitPos();
+  const effectiveCoolingUnitPositions = localCoolingUnitPositions ?? normalizeCoolingUnitPositions(coolingUnitPositions, coolingUnitPos);
   const effectiveDoorPos = localDoorPos ?? doorPos ?? defaultDoorPos();
 
   // positionId → logger
@@ -192,37 +212,40 @@ export default function ReeferTruckDiagram3D({
 
   const handleDragStart = useCallback((
     e: React.MouseEvent | React.TouchEvent,
-    element: "coolingUnit" | "door",
+    element: DragTarget,
   ) => {
     e.preventDefault();
     e.stopPropagation();
     const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
     const clientY = "touches" in e ? e.touches[0].clientY : e.clientY;
     const svgCoords = getSvgCoords(clientX, clientY);
-    const currentPos = element === "coolingUnit" ? effectiveCoolingUnitPos : effectiveDoorPos;
+    const currentPos = element.kind === "coolingUnit" ? effectiveCoolingUnitPositions[element.index] : effectiveDoorPos;
     setDraggingElement(element);
     setDragOffset({ dx: svgCoords.x - currentPos.x, dy: svgCoords.y - currentPos.y });
-  }, [readOnly, showDraggables, effectiveCoolingUnitPos, effectiveDoorPos, getSvgCoords]);
+  }, [readOnly, showDraggables, effectiveCoolingUnitPositions, effectiveDoorPos, getSvgCoords]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
     if (!draggingElement) return;
     const svgCoords = getSvgCoords(e.clientX, e.clientY);
     const newPos = { x: svgCoords.x - dragOffset.dx, y: svgCoords.y - dragOffset.dy };
-    if (draggingElement === "coolingUnit") {
-      setLocalCoolingUnitPos(newPos);
+    if (draggingElement.kind === "coolingUnit") {
+      const next = [...effectiveCoolingUnitPositions];
+      next[draggingElement.index] = newPos;
+      setLocalCoolingUnitPositions(next);
     } else {
       setLocalDoorPos(newPos);
     }
-  }, [draggingElement, dragOffset, getSvgCoords]);
+  }, [draggingElement, dragOffset, effectiveCoolingUnitPositions, getSvgCoords]);
   const handleMouseUp = useCallback(() => {
     if (!draggingElement) return;
-    if (draggingElement === "coolingUnit" && localCoolingUnitPos) {
-      onCoolingUnitPosChange?.(localCoolingUnitPos);
-    } else if (draggingElement === "door" && localDoorPos) {
+    if (draggingElement.kind === "coolingUnit" && localCoolingUnitPositions) {
+      onCoolingUnitPositionsChange?.(localCoolingUnitPositions);
+      onCoolingUnitPosChange?.(localCoolingUnitPositions[0]);
+    } else if (draggingElement.kind === "door" && localDoorPos) {
       onDoorPosChange?.(localDoorPos);
     }
     setDraggingElement(null);
-  }, [draggingElement, localCoolingUnitPos, localDoorPos, onCoolingUnitPosChange, onDoorPosChange]);
+  }, [draggingElement, localCoolingUnitPositions, localDoorPos, onCoolingUnitPosChange, onCoolingUnitPositionsChange, onDoorPosChange]);
   // Attach mouseup/touchend to window so drag always completes even if cursor
   // leaves the SVG element during fast movement.
   useEffect(() => {
@@ -234,8 +257,13 @@ export default function ReeferTruckDiagram3D({
       const touch = e.touches[0];
       const svgCoords = getSvgCoords(touch.clientX, touch.clientY);
       const newPos = { x: svgCoords.x - dragOffset.dx, y: svgCoords.y - dragOffset.dy };
-      if (draggingElement === "coolingUnit") setLocalCoolingUnitPos(newPos);
-      else setLocalDoorPos(newPos);
+      if (draggingElement.kind === "coolingUnit") {
+        const next = [...effectiveCoolingUnitPositions];
+        next[draggingElement.index] = newPos;
+        setLocalCoolingUnitPositions(next);
+      } else {
+        setLocalDoorPos(newPos);
+      }
     };
     window.addEventListener("mouseup", onWindowMouseUp);
     window.addEventListener("touchend", onWindowTouchEnd);
@@ -245,7 +273,7 @@ export default function ReeferTruckDiagram3D({
       window.removeEventListener("touchend", onWindowTouchEnd);
       window.removeEventListener("touchmove", onWindowTouchMove);
     };
-  }, [draggingElement, dragOffset, getSvgCoords, handleMouseUp]);;
+  }, [draggingElement, dragOffset, effectiveCoolingUnitPositions, getSvgCoords, handleMouseUp]);;
 
   // ─── Pre-compute all 8 box vertices ─────────────────────────────────────────
   // Bottom face: b0=front-left, b1=front-right, b2=back-right, b3=back-left
@@ -417,23 +445,25 @@ export default function ReeferTruckDiagram3D({
         {/* ══ DRAGGABLE ELEMENTS (rendered BEFORE sensors so sensors appear on top) ══ */}
         {showDraggables && (
           <>
-            {/* Cooling unit */}
-            {objectType !== "thermal-container" && <g
+            {/* Cooling unit(s) */}
+            {objectType !== "thermal-container" && effectiveCoolingUnitPositions.map((pos, idx) => (
+            <g
+              key={`cooling-unit-${idx}`}
               style={{ cursor: readOnly ? "default" : "grab" }}
-              onMouseDown={e => handleDragStart(e, "coolingUnit")}
-              onTouchStart={e => handleDragStart(e, "coolingUnit")}
-              transform={`translate(${effectiveCoolingUnitPos.x}, ${effectiveCoolingUnitPos.y})`}
+              onMouseDown={e => handleDragStart(e, { kind: "coolingUnit", index: idx })}
+              onTouchStart={e => handleDragStart(e, { kind: "coolingUnit", index: idx })}
+              transform={`translate(${pos.x}, ${pos.y})`}
             >
               <ellipse cx={0} cy={24} rx={30} ry={7} fill="rgba(0,0,0,0.12)" />
-              <rect x={-28} y={-20} width={56} height={38} rx={6} fill="#1e40af" stroke="#1d4ed8" strokeWidth={1.5} />
+              <rect x={-28} y={-20} width={56} height={38} rx={6} fill={idx === 0 ? "#1e40af" : "#0f766e"} stroke={idx === 0 ? "#1d4ed8" : "#0d9488"} strokeWidth={1.5} />
               {[-12, -5, 2, 9].map(lx => (
-                <line key={lx} x1={lx} y1={-13} x2={lx} y2={13} stroke="#3b82f6" strokeWidth={1.5} strokeLinecap="round" />
+                <line key={lx} x1={lx} y1={-13} x2={lx} y2={13} stroke={idx === 0 ? "#3b82f6" : "#2dd4bf"} strokeWidth={1.5} strokeLinecap="round" />
               ))}
               <circle cx={18} cy={0} r={11} fill="none" stroke="#93c5fd" strokeWidth={1.5} />
               <circle cx={18} cy={0} r={3} fill="#93c5fd" />
               <text x={0} y={34} textAnchor="middle" fontSize={11} fontWeight="700"
-                fill="#1e40af" style={{ userSelect: "none", pointerEvents: "none" }}>
-                Агрегат
+                fill={idx === 0 ? "#1e40af" : "#0f766e"} style={{ userSelect: "none", pointerEvents: "none" }}>
+                {effectiveCoolingUnitPositions.length > 1 ? `Агрегат ${idx + 1}` : "Агрегат"}
               </text>
               {!readOnly && (
                 <text x={0} y={46} textAnchor="middle" fontSize={9}
@@ -441,12 +471,13 @@ export default function ReeferTruckDiagram3D({
                   ↕ перетащить
                 </text>
               )}
-            </g>}
+            </g>
+            ))}
             {/* Door */}
             <g
               style={{ cursor: readOnly ? "default" : "grab" }}
-              onMouseDown={e => handleDragStart(e, "door")}
-              onTouchStart={e => handleDragStart(e, "door")}
+              onMouseDown={e => handleDragStart(e, { kind: "door" })}
+              onTouchStart={e => handleDragStart(e, { kind: "door" })}
               transform={`translate(${effectiveDoorPos.x}, ${effectiveDoorPos.y})`}
             >
               <ellipse cx={0} cy={40} rx={22} ry={6} fill="rgba(0,0,0,0.10)" />

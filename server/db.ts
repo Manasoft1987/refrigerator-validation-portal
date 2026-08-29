@@ -790,6 +790,7 @@ export async function insertProtocol(data: InsertProtocol) {
         updatedAt: now,
         samplingStepMinutes: null,
         coolingUnitPos: null,
+        coolingUnitPositions: null,
         doorPos: null,
         floorPlanObjects: null,
         refrigeratorDrawerCount: 2,
@@ -946,6 +947,7 @@ export async function ensureThermalContainerStorage() {
       ["customMin", "decimal(6,2) NULL AFTER tempMode"],
       ["customMax", "decimal(6,2) NULL AFTER customMin"],
       ["reportLanguage", "varchar(8) NULL AFTER customMax"],
+      ["refrigerationUnits", "JSON NULL AFTER reportLanguage"],
     ] as const) {
       const result = await db.execute(sql.raw(`SHOW COLUMNS FROM generalInfo LIKE '${column}'`));
       const rows = (result as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
@@ -1014,6 +1016,7 @@ export async function upsertGeneralInfo(
         customMin: null,
         customMax: null,
         reportLanguage: null,
+        refrigerationUnits: null,
         location: null,
         purpose: null,
         validationDate: null,
@@ -1197,6 +1200,7 @@ async function ensurePVPlanBackgroundStorage() {
       ["planBackgroundImageUrl", "LONGTEXT NULL AFTER planBackgroundImageKey"],
       ["refrigeratorDrawerCount", "int NULL DEFAULT 2 AFTER floorPlanObjects"],
       ["refrigeratorLevelCount", "int NULL DEFAULT 7 AFTER refrigeratorDrawerCount"],
+      ["coolingUnitPositions", "JSON NULL AFTER coolingUnitPos"],
     ] as const) {
       const result = await db.execute(sql.raw(`SHOW COLUMNS FROM pvSessions LIKE '${column}'`));
       const rows = (result as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
@@ -1273,6 +1277,7 @@ export async function updatePVSession(
         updatedAt: now,
         samplingStepMinutes: null,
         coolingUnitPos: null,
+        coolingUnitPositions: null,
         doorPos: null,
         floorPlanObjects: null,
         refrigeratorDrawerCount: 2,

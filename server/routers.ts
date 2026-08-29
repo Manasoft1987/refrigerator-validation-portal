@@ -835,6 +835,12 @@ export const appRouter = router({
           customMin: z.union([z.number(), z.string()]).optional().nullable(),
           customMax: z.union([z.number(), z.string()]).optional().nullable(),
           reportLanguage: z.enum(["ru", "en"]).optional().nullable(),
+          refrigerationUnits: z.array(z.object({
+            manufacturer: z.string().optional().nullable(),
+            model: z.string().optional().nullable(),
+            serial: z.string().optional().nullable(),
+            note: z.string().optional().nullable(),
+          })).max(2).optional().nullable(),
           thermalContainerConfig: z.object({
             selectedModes: z.array(z.enum(["2-8", "8-15", "15-25"])).min(1),
             volumeLiters: z.union([z.number(), z.string()]).optional().nullable(),
@@ -1150,6 +1156,7 @@ export const appRouter = router({
           customMin: z.number().nullable().optional(),
           customMax: z.number().nullable().optional(),
           coolingUnitPos: z.object({ x: z.number(), y: z.number() }).nullable().optional(),
+          coolingUnitPositions: z.array(z.object({ x: z.number(), y: z.number() })).max(2).nullable().optional(),
           doorPos: z.object({ x: z.number(), y: z.number() }).nullable().optional(),
           refrigeratorDrawerCount: z.number().int().min(0).max(2).nullable().optional(),
           refrigeratorLevelCount: z.number().int().min(3).max(9).nullable().optional(),
@@ -1182,7 +1189,7 @@ export const appRouter = router({
       )
       .mutation(async ({ ctx, input }) => {
         const protocol = await ownProtocol(ctx.user.id, input.protocolId);
-        const { protocolId, customMin, customMax, samplingStepMinutes, coolingUnitPos, doorPos, refrigeratorDrawerCount, refrigeratorLevelCount, floorPlanObjects, roomLengthM, roomWidthM, roomHeightM, planImageKey, planImageUrl, planBackgroundImageKey, planBackgroundImageUrl, ...rest } = input;
+        const { protocolId, customMin, customMax, samplingStepMinutes, coolingUnitPos, coolingUnitPositions, doorPos, refrigeratorDrawerCount, refrigeratorLevelCount, floorPlanObjects, roomLengthM, roomWidthM, roomHeightM, planImageKey, planImageUrl, planBackgroundImageKey, planBackgroundImageUrl, ...rest } = input;
         const trialKey = input.trialKey ?? "default";
         const patch: any = { ...rest };
         delete patch.trialKey;
@@ -1218,6 +1225,7 @@ export const appRouter = router({
             samplingStepMinutes === null || samplingStepMinutes === 0 ? null : samplingStepMinutes;
         }
         if (coolingUnitPos !== undefined) patch.coolingUnitPos = coolingUnitPos;
+        if (coolingUnitPositions !== undefined) patch.coolingUnitPositions = coolingUnitPositions;
         if (doorPos !== undefined) patch.doorPos = doorPos;
         if (refrigeratorDrawerCount !== undefined) patch.refrigeratorDrawerCount = refrigeratorDrawerCount === null ? 2 : refrigeratorDrawerCount;
         if (refrigeratorLevelCount !== undefined) patch.refrigeratorLevelCount = refrigeratorLevelCount === null ? 7 : refrigeratorLevelCount;
@@ -2142,6 +2150,7 @@ export const appRouter = router({
             ? {
                 ...gi,
                 commissionMembers: (gi.commissionMembers as any) || null,
+                refrigerationUnits: (gi.refrigerationUnits as any) || null,
                 thermalContainerConfig: (gi.thermalContainerConfig as any) || null,
               }
             : null,
@@ -2238,6 +2247,7 @@ export const appRouter = router({
               (l.avgVal === null ? null : Number(l.avgVal)),
           })),
           coolingUnitPos: session?.coolingUnitPos as any,
+          coolingUnitPositions: (session as any)?.coolingUnitPositions as any,
           doorPos: session?.doorPos as any,
           refrigeratorDrawerCount: Number((session as any)?.refrigeratorDrawerCount ?? 2),
           refrigeratorLevelCount: Number((session as any)?.refrigeratorLevelCount ?? 7),

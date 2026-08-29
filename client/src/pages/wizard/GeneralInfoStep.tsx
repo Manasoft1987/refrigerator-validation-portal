@@ -19,6 +19,7 @@ import {
   computeWarehouseSensorCount,
   getLocationPlaceholder,
   getPurposePlaceholder,
+  isAutoRefrigeratorLike,
   isWarehouseEaeu,
   isWarehouseLike,
 } from "@shared/validation";
@@ -27,6 +28,45 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 type CM = { name: string; role: string; company?: string | null };
+type RefrigerationUnitInfo = { manufacturer?: string | null; model?: string | null; serial?: string | null; note?: string | null };
+
+function cleanRefrigerationUnits(value: unknown, fallback?: RefrigerationUnitInfo): RefrigerationUnitInfo[] {
+  const rows = Array.isArray(value) ? value : [];
+  const cleaned = rows
+    .map((row: any) => ({
+      manufacturer: String(row?.manufacturer ?? "").trim(),
+      model: String(row?.model ?? "").trim(),
+      serial: String(row?.serial ?? "").trim(),
+      note: String(row?.note ?? "").trim(),
+    }))
+    .filter(row => row.manufacturer || row.model || row.serial || row.note)
+    .slice(0, 2);
+
+  if (cleaned.length > 0) return cleaned;
+
+  const legacy = {
+    manufacturer: String(fallback?.manufacturer ?? "").trim(),
+    model: String(fallback?.model ?? "").trim(),
+    serial: String(fallback?.serial ?? "").trim(),
+    note: String(fallback?.note ?? "").trim(),
+  };
+  return legacy.manufacturer || legacy.model || legacy.serial || legacy.note ? [legacy] : [];
+}
+
+function displayRefrigerationUnits(value: unknown, fallback?: RefrigerationUnitInfo): RefrigerationUnitInfo[] {
+  const rows = Array.isArray(value)
+    ? value
+        .map((row: any) => ({
+          manufacturer: String(row?.manufacturer ?? "").trim(),
+          model: String(row?.model ?? "").trim(),
+          serial: String(row?.serial ?? "").trim(),
+          note: String(row?.note ?? "").trim(),
+        }))
+        .slice(0, 2)
+    : [];
+  if (rows.length > 0) return rows;
+  return cleanRefrigerationUnits(undefined, fallback);
+}
 
 export default function GeneralInfoStep({
   protocolId,
@@ -46,6 +86,7 @@ export default function GeneralInfoStep({
     manufacturer: "",
     model: "",
     serial: "",
+    refrigerationUnits: [],
     tempMode: "2-8",
     customMin: "",
     customMax: "",
@@ -97,6 +138,7 @@ export default function GeneralInfoStep({
         ...prev,
         ...giQ.data,
         equipmentType: giQ.data?.equipmentType || initialEquipmentType || prev.equipmentType,
+        refrigerationUnits: cleanRefrigerationUnits((giQ.data as any)?.refrigerationUnits, giQ.data as any),
         commissionMembers: (giQ.data?.commissionMembers as CM[] | null) || [],
         thermalContainerConfig: {
           ...prev.thermalContainerConfig,
@@ -137,6 +179,7 @@ export default function GeneralInfoStep({
   const isWarehouse = isWarehouseLike(form.equipmentType);
   const isWarehouseByEaeu = isWarehouseEaeu(form.equipmentType);
   const isThermalContainer = form.equipmentType === "thermal-container";
+  const isAutoRefrigerator = isAutoRefrigeratorLike(form.equipmentType);
   const standardTempModes = TEMP_MODES.filter(m => m.id !== "custom");
   const supportsCustomTempMode = form.equipmentType === "refrigerator" || form.equipmentType === "freezer";
   const tempModesForEquipment = supportsCustomTempMode
@@ -204,19 +247,22 @@ export default function GeneralInfoStep({
   };
 
   const handleSave = async (goNext: boolean) => {
+    const refrigerationUnits = cleanRefrigerationUnits(form.refrigerationUnits, form);
+    const primaryRefrigerationUnit = isAutoRefrigerator ? (refrigerationUnits[0] ?? {}) : form;
     // Whitelist only the fields the save mutation accepts — prevents
     // accidentally sending DB metadata (id, createdAt, updatedAt) from giQ.data
     // which can cause silent server-side failures.
     const payload: any = {
       protocolId,
       equipmentType: form.equipmentType ?? null,
-      manufacturer: form.manufacturer ?? null,
-      model: form.model ?? null,
-      serial: form.serial ?? null,
+      manufacturer: primaryRefrigerationUnit.manufacturer ?? form.manufacturer ?? null,
+      model: primaryRefrigerationUnit.model ?? form.model ?? null,
+      serial: primaryRefrigerationUnit.serial ?? form.serial ?? null,
       tempMode: form.tempMode ?? null,
       customMin: form.tempMode === "custom" && form.customMin !== "" && form.customMin != null ? Number(String(form.customMin).replace(",", ".")) : null,
       customMax: form.tempMode === "custom" && form.customMax !== "" && form.customMax != null ? Number(String(form.customMax).replace(",", ".")) : null,
       reportLanguage: isWarehouse ? (form.reportLanguage || "ru") : null,
+      refrigerationUnits: isAutoRefrigerator ? refrigerationUnits : null,
       thermalContainerConfig: isThermalContainer ? form.thermalContainerConfig : null,
       location: form.location ?? null,
       purpose: form.purpose ?? null,
@@ -280,6 +326,43 @@ export default function GeneralInfoStep({
       ...prev,
       thermalContainerConfig: { ...(prev.thermalContainerConfig || {}), ...patch },
     }));
+  };
+
+  const displayedRefrigerationUnits = displayRefrigerationUnits(form.refrigerationUnits, form);
+
+  const updateRefrigerationUnit = (index: number, patch: Partial<RefrigerationUnitInfo>) => {
+    const next = [...displayedRefrigerationUnits];
+    while (next.length <= index) next.push({ manufacturer: "", model: "", serial: "", note: "" });
+    next[index] = { ...next[index], ...patch };
+    const cleaned = cleanRefrigerationUnits(next);
+    const first = cleaned[0] ?? next[0] ?? {};
+    setForm({
+      ...form,
+      refrigerationUnits: cleaned.length > 0 ? cleaned : next.slice(0, 1),
+      manufacturer: first.manufacturer ?? "",
+      model: first.model ?? "",
+      serial: first.serial ?? "",
+    });
+  };
+
+  const addRefrigerationUnit = () => {
+    if (displayedRefrigerationUnits.length >= 2) return;
+    setForm({
+      ...form,
+      refrigerationUnits: [...displayedRefrigerationUnits, { manufacturer: "", model: "", serial: "", note: "" }],
+    });
+  };
+
+  const removeRefrigerationUnit = (index: number) => {
+    const next = displayedRefrigerationUnits.filter((_, i) => i !== index);
+    const first = next[0] ?? {};
+    setForm({
+      ...form,
+      refrigerationUnits: next,
+      manufacturer: first.manufacturer ?? "",
+      model: first.model ?? "",
+      serial: first.serial ?? "",
+    });
   };
 
   const toggleThermalMode = (mode: string) => {
@@ -606,6 +689,70 @@ export default function GeneralInfoStep({
                 onChange={e => setForm({ ...form, serial: e.target.value })}
               />
             </Field>
+            {isAutoRefrigerator && (
+              <div className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold text-slate-900">Холодильные агрегаты авторефрижератора</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Если в кузове два агрегата/испарителя, внесите оба. Первый агрегат синхронизируется с основными полями выше.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={addRefrigerationUnit}
+                    disabled={displayedRefrigerationUnits.length >= 2}
+                  >
+                    <Plus className="h-4 w-4 mr-1" /> Добавить агрегат
+                  </Button>
+                </div>
+                {(displayedRefrigerationUnits.length > 0 ? displayedRefrigerationUnits : [{ manufacturer: form.manufacturer, model: form.model, serial: form.serial, note: "" }]).map((unit, idx) => (
+                  <div key={idx} className="grid md:grid-cols-4 gap-3 rounded-lg border bg-white p-3">
+                    <div className="md:col-span-4 flex items-center justify-between gap-2">
+                      <div className="text-sm font-medium text-slate-700">Агрегат {idx + 1}</div>
+                      {idx > 0 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600 hover:text-red-700"
+                          onClick={() => removeRefrigerationUnit(idx)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" /> Удалить
+                        </Button>
+                      )}
+                    </div>
+                    <Field label="Производитель">
+                      <Input
+                        value={unit.manufacturer || ""}
+                        onChange={e => updateRefrigerationUnit(idx, { manufacturer: e.target.value })}
+                      />
+                    </Field>
+                    <Field label="Модель">
+                      <Input
+                        value={unit.model || ""}
+                        onChange={e => updateRefrigerationUnit(idx, { model: e.target.value })}
+                      />
+                    </Field>
+                    <Field label="Серийный номер">
+                      <Input
+                        value={unit.serial || ""}
+                        onChange={e => updateRefrigerationUnit(idx, { serial: e.target.value })}
+                      />
+                    </Field>
+                    <Field label="Расположение / прим.">
+                      <Input
+                        value={unit.note || ""}
+                        onChange={e => updateRefrigerationUnit(idx, { note: e.target.value })}
+                        placeholder="например, передний / задний"
+                      />
+                    </Field>
+                  </div>
+                ))}
+              </div>
+            )}
             <Field label="Процент загруженности объекта">
               <Input
                 type="number"
