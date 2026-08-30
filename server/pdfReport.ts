@@ -3481,6 +3481,10 @@ function drawAttachmentsSection(doc: PDFKit.PDFDocument, input: ReportInput) {
   const contentW = right - left;
 
   attachments.forEach((attachment, index) => {
+    if (index > 0) {
+      doc.addPage();
+    }
+
     const label = REPORT_ATTACHMENT_LABELS[String(attachment.kind ?? "")] || "Приложение";
     const title = (attachment.title || label).trim();
     const metaRows = [
