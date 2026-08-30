@@ -1434,7 +1434,8 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
 
   ensureSpace(doc, 50 + 24 + input.pv.loggers.length * 26);
   drawSubTitle(doc, isEnglishWarehouse(input) ? "Sensor Summary Statistics" : "Сводная статистика по датчикам");
-  drawStatsTable(doc, input.pv.loggers, input.pv.hotIdx, input.pv.coldIdx, input.pv.extIndices, input);
+  const statsCritical = calculateCriticalLoggerIndices(input.pv.loggers);
+  drawStatsTable(doc, input.pv.loggers, statsCritical.hotIdx, statsCritical.coldIdx, input.pv.extIndices, input);
 
   doc.addPage();
   drawSubTitle(doc, isEnglishWarehouse(input) ? "Measurement Results Table" : "Таблица результатов измерений");
@@ -2408,6 +2409,11 @@ function drawPVCriticalPointsSummary(doc: PDFKit.PDFDocument, input: ReportInput
   }
 
   const critical = calculateCriticalLoggerIndices(pv.loggers);
+  drawPVInfoBox(
+    doc,
+    "Критические точки PV определяются риск-ориентированно, а не только по среднему значению. Приоритет для горячей точки: отклонения выше диапазона, их суммарная длительность и тяжесть, затем Max, MKT и Avg. Приоритет для холодной точки: отклонения ниже диапазона, их суммарная длительность и тяжесть, затем Min и Avg. Поэтому логгер с максимальным Avg может не быть горячей точкой, если другой логгер имеет более высокий Max или более высокий температурный риск.",
+    { bg: "#f8fafc", border: BORDER, color: ACCENT },
+  );
   const rows: string[][] = [];
   const addRow = (kind: "hot" | "cold", index: number | null) => {
     if (index === null) return;
