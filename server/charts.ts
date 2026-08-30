@@ -882,31 +882,43 @@ function drawTemperaturePoint(
   coldSensor?: DiagramSensor | null,
   radius = 14,
 ): void {
-  const cx = rect.x + point.x * rect.w;
-  const cy = rect.y + point.y * rect.h;
+  const r = radius;
+  const markerMargin = r + 4;
+  const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+  const cx = clamp(rect.x + point.x * rect.w, rect.x + markerMargin, rect.x + rect.w - markerMargin);
+  const cy = clamp(rect.y + point.y * rect.h, rect.y + markerMargin, rect.y + rect.h - markerMargin);
   let color = sensorBadgeColor(idx);
   const label = shortTemperatureMapLabel(point.sensor);
   const tempLabel = `${formatSensorAvg(point.avg) ?? point.avg.toFixed(1).replace(".", ",")}°C`;
   const isHot = hotSensor === point.sensor;
   const isCold = coldSensor === point.sensor;
   color = (isHot || isCold) ? semanticSensorBadgeColor(isHot, isCold) : color;
-  const r = radius;
+  const labelFontSize = label.length >= 4 ? Math.max(5.2, r * 0.48) : Math.max(5.8, r * 0.52);
+  const tempFontSize = Math.max(4.7, r * 0.39);
+  const textWidth = Math.max(r * 2 - 2, label.length >= 4 ? r * 2 + 4 : r * 2);
+  const textX = cx - textWidth / 2;
+  const criticalIconX = cx + (cx > rect.x + rect.w - r * 2.2 ? -(r + 8) : r + 8);
+  const criticalIconY = cy + (cy < rect.y + r * 2.2 ? r + 8 : -(r + 8));
 
   doc.save();
   doc.circle(cx, cy, r + 2).fill("#ffffff");
   doc.circle(cx, cy, r).fill(color).strokeColor("#ffffff").lineWidth(1.6).stroke();
   if (isHot) {
     doc.circle(cx, cy, r + 4).strokeColor("#ef4444").lineWidth(1.6).stroke();
-    drawStar(doc, cx + r + 8, cy - r - 8, 5, "#ef4444");
+    drawStar(doc, criticalIconX, criticalIconY, 5, "#ef4444");
   }
   if (isCold) {
     doc.circle(cx, cy, r + (isHot ? 7 : 4)).strokeColor("#2563eb").lineWidth(1.6).stroke();
-    drawDiamond(doc, cx + r + 8, cy + (isHot ? 7 : -r - 8), 5, "#2563eb");
+    const coldIconX = cx + (cx > rect.x + rect.w - r * 2.2 ? -(r + 8) : r + 8);
+    const coldIconY = isHot
+      ? cy + (cy > rect.y + rect.h - r * 2.2 ? -(r + 8) : r + 8)
+      : criticalIconY;
+    drawDiamond(doc, coldIconX, coldIconY, 5, "#2563eb");
   }
-  doc.font("bold").fontSize(6.8).fillColor("#ffffff");
-  doc.text(label, cx - r + 1, cy - 7.8, { width: r * 2 - 2, align: "center", lineBreak: false });
-  doc.font("bold").fontSize(5.5).fillColor("#ffffff");
-  doc.text(tempLabel, cx - r + 1, cy + 1.8, { width: r * 2 - 2, align: "center", lineBreak: false });
+  doc.font("bold").fontSize(labelFontSize).fillColor("#ffffff");
+  doc.text(label, textX, cy - r * 0.52, { width: textWidth, align: "center", lineBreak: false });
+  doc.font("bold").fontSize(tempFontSize).fillColor("#ffffff");
+  doc.text(tempLabel, textX, cy + r * 0.14, { width: textWidth, align: "center", lineBreak: false });
   doc.restore();
 }
 
@@ -1817,7 +1829,7 @@ export function drawTemperatureMapSummary(
       doc.circle(wx, sy(306), sv(13)).fill("#e5e7eb").strokeColor("#64748b").lineWidth(sv(1)).stroke();
     });
     doc.restore();
-    displayPoints.forEach((point, idx) => drawTemperaturePoint(doc, point, body, lo, hi, idx, hotSensor, coldSensor, 11));
+    displayPoints.forEach((point, idx) => drawTemperaturePoint(doc, point, body, lo, hi, idx, hotSensor, coldSensor, 13));
     drawTemperatureLegend(doc, sx(126), sy(324), sv(500), lo, hi);
   } else {
     const shelfCount = normalizeFridgeLevelCount(options.levelCount ?? fridgeShelfCount(sensors));
