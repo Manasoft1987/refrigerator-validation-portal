@@ -2187,15 +2187,15 @@ export function drawReeferTruckDiagram3D(
     if (!assigned && !showEmptyReferencePositions) return;
     
     // Check if this is a critical sensor (hot or cold) by comparing labels
-    const isCriticalHot = Boolean(hotLabel && assigned && assigned.label === hotLabel);
-    const isCriticalCold = Boolean(coldLabel && assigned && assigned.label === coldLabel);
+    const isCriticalHot = Boolean(assigned && sensorMatchesCriticalLabel(assigned, hotLabel));
+    const isCriticalCold = Boolean(assigned && sensorMatchesCriticalLabel(assigned, coldLabel));
     const isCritical = isCriticalHot || isCriticalCold;
     const color = assigned && isCritical
       ? semanticSensorBadgeColor(isCriticalHot, isCriticalCold)
       : REEFER_GROUP_COLORS[sp.group];
 
     const label = assigned
-      ? shortLabelStr(assigned.label)
+      ? shortTemperatureMapLabel(assigned)
       : sp.id;
 
     doc.save();
@@ -2248,7 +2248,7 @@ export function drawReeferTruckDiagram3D(
       const bx = anchorX + EXT_OFFSET_X; // badge centre X (to the left = behind rear wall)
       const by = extStartY + idx * EXT_SPACING + EXT_BADGE_H; // badge centre Y
       const color = "#475569"; // slate-600 — consistent color for external sensors
-      const label = shortLabelStr(s.label);
+      const label = shortTemperatureMapLabel(s);
       // Dashed connector line from rear-left face to badge
       doc.save();
       doc.moveTo(anchorX - 2, anchorY)
