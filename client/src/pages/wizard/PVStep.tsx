@@ -370,7 +370,8 @@ export default function PVStep({
             >
               <Input
                 type="number"
-                min={isWarehouseByEaeu ? warehouseMinDurationHours : isChamber ? 24 : 1}
+                min={isWarehouseByEaeu ? warehouseMinDurationHours : isChamber ? 24 : 0.01}
+                step="0.01"
                 value={form.minDurationHours}
                 onChange={e => setForm({ ...form, minDurationHours: e.target.value })}
                 onBlur={e => {

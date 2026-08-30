@@ -89,7 +89,7 @@ CREATE TABLE `pvSessions` (
 	`tempMode` varchar(16),
 	`startAt` bigint,
 	`endAt` bigint,
-	`minDurationHours` int NOT NULL DEFAULT 72,
+	`minDurationHours` double NOT NULL DEFAULT 72,
 	`minSensorCount` int NOT NULL DEFAULT 9,
 	`customMin` decimal(6,2),
 	`customMax` decimal(6,2),

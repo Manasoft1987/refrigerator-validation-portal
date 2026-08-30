@@ -1181,6 +1181,13 @@ async function ensurePVTrialStorage() {
         "ALTER TABLE pvSessions ADD UNIQUE INDEX pvSessions_protocolId_trialKey_unique (protocolId, trialKey)",
       ));
     }
+
+    const minDurationResult = await db.execute(sql.raw("SHOW COLUMNS FROM pvSessions LIKE 'minDurationHours'"));
+    const minDurationRows = (minDurationResult as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
+    const minDurationType = String(minDurationRows[0]?.Type ?? minDurationRows[0]?.type ?? "").toLowerCase();
+    if (minDurationRows.length > 0 && minDurationType && !/(double|float|decimal)/.test(minDurationType)) {
+      await db.execute(sql.raw("ALTER TABLE pvSessions MODIFY COLUMN minDurationHours DOUBLE NOT NULL DEFAULT 72"));
+    }
   })().catch(error => {
     pvTrialSchemaPromise = null;
     throw error;

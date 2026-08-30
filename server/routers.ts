@@ -1145,7 +1145,7 @@ export const appRouter = router({
           const targetDuration = Number((gi?.thermalContainerConfig as any)?.targetDurationHours || 24);
           session = await updatePVSession(input.protocolId, {
             tempMode: trialKey,
-            minDurationHours: Number.isFinite(targetDuration) && targetDuration > 0 ? Math.ceil(targetDuration) : 24,
+            minDurationHours: Number.isFinite(targetDuration) && targetDuration > 0 ? targetDuration : 24,
             minSensorCount: 5,
           }, trialKey);
         }
@@ -1182,7 +1182,7 @@ export const appRouter = router({
           tempMode: TEMP_MODE_SCHEMA.optional(),
           startAt: z.number().nullable().optional(),
           endAt: z.number().nullable().optional(),
-          minDurationHours: z.number().int().positive().optional(),
+          minDurationHours: z.number().positive().optional(),
           minSensorCount: z.number().int().positive().optional(),
           samplingStepMinutes: z.number().int().nonnegative().nullable().optional(),
           customMin: z.number().nullable().optional(),
@@ -1237,7 +1237,7 @@ export const appRouter = router({
               ? warehouseMinDurationHours
               : effectiveEquipmentType === "chamber"
                 ? 24
-                : 1;
+                : 0.01;
           patch.minDurationHours = Math.max(minimumDurationHours, patch.minDurationHours);
         }
         if (customMin !== undefined) patch.customMin = customMin === null ? null : String(customMin);

@@ -1,4 +1,4 @@
-import { mysqlTable, mysqlSchema, AnyMySqlColumn, int, mysqlEnum, text, timestamp, varchar, json, index, bigint, decimal, longtext } from "drizzle-orm/mysql-core"
+import { mysqlTable, mysqlSchema, AnyMySqlColumn, int, mysqlEnum, text, timestamp, varchar, json, index, bigint, decimal, longtext, double } from "drizzle-orm/mysql-core"
 import { sql } from "drizzle-orm"
 
 export const checklistAnswers = mysqlTable("checklistAnswers", {
@@ -220,7 +220,7 @@ export const pvSessions = mysqlTable("pvSessions", {
 	tempMode: varchar({ length: 16 }),
 	startAt: bigint({ mode: "number" }),
 	endAt: bigint({ mode: "number" }),
-	minDurationHours: int().default(72).notNull(),
+	minDurationHours: double().default(72).notNull(),
 	minSensorCount: int().default(9).notNull(),
 	customMin: decimal({ precision: 6, scale: 2 }),
 	customMax: decimal({ precision: 6, scale: 2 }),
