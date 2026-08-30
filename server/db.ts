@@ -2369,7 +2369,7 @@ async function ensureProtocolAttachmentStorage() {
         comment text,
         fileName varchar(255) NOT NULL,
         fileKey varchar(512) NOT NULL,
-        fileUrl varchar(512) NOT NULL,
+        fileUrl LONGTEXT NOT NULL,
         contentType varchar(128),
         size int NOT NULL DEFAULT 0,
         includeInPdf int NOT NULL DEFAULT 1,
@@ -2379,6 +2379,13 @@ async function ensureProtocolAttachmentStorage() {
         KEY protocolAttachments_protocolId_idx (protocolId)
       )
     `));
+
+    const fileUrlColumn = await db.execute(sql.raw("SHOW COLUMNS FROM protocolAttachments LIKE 'fileUrl'"));
+    const fileUrlRows = (fileUrlColumn as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
+    const fileUrlType = String(fileUrlRows[0]?.Type ?? fileUrlRows[0]?.type ?? "").toLowerCase();
+    if (fileUrlRows.length > 0 && fileUrlType && fileUrlType !== "longtext") {
+      await db.execute(sql.raw("ALTER TABLE protocolAttachments MODIFY COLUMN fileUrl LONGTEXT NOT NULL"));
+    }
   })().catch(error => {
     protocolAttachmentSchemaPromise = null;
     throw error;

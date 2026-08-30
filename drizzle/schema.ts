@@ -1,4 +1,4 @@
-import { mysqlTable, mysqlSchema, AnyMySqlColumn, int, mysqlEnum, text, timestamp, varchar, json, index, bigint, decimal } from "drizzle-orm/mysql-core"
+import { mysqlTable, mysqlSchema, AnyMySqlColumn, int, mysqlEnum, text, timestamp, varchar, json, index, bigint, decimal, longtext } from "drizzle-orm/mysql-core"
 import { sql } from "drizzle-orm"
 
 export const checklistAnswers = mysqlTable("checklistAnswers", {
@@ -176,7 +176,7 @@ export const protocolAttachments = mysqlTable("protocolAttachments", {
 	comment: text(),
 	fileName: varchar({ length: 255 }).notNull(),
 	fileKey: varchar({ length: 512 }).notNull(),
-	fileUrl: varchar({ length: 512 }).notNull(),
+	fileUrl: longtext().notNull(),
 	contentType: varchar({ length: 128 }),
 	size: int().default(0).notNull(),
 	includeInPdf: int().default(1).notNull(),

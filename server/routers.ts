@@ -250,6 +250,28 @@ async function storePlanImageOrInline(
   }
 }
 
+async function storeProtocolAttachmentFileOrInline(
+  relKey: string,
+  buffer: Buffer,
+  contentType: string,
+): Promise<{ key: string; url: string; stored: boolean }> {
+  try {
+    const { key, url } = await storagePut(relKey, buffer, contentType);
+    return { key, url, stored: true };
+  } catch (error) {
+    if (contentType.startsWith("image/")) {
+      console.warn("[Attachment] Image storage write failed; keeping inline image:", error);
+      const hash = createHash("sha256").update(buffer).digest("hex").slice(0, 16);
+      return {
+        key: `inline:attachment-${hash}`,
+        url: `data:${contentType};base64,${buffer.toString("base64")}`,
+        stored: false,
+      };
+    }
+    throw error;
+  }
+}
+
 function normalizeUserEmail(email: string) {
   return email.trim().toLowerCase();
 }
@@ -1762,7 +1784,11 @@ export const appRouter = router({
       .query(async ({ ctx, input }) => {
         const protocol = await ownProtocol(ctx.user.id, input.protocolId);
         if (!isAutoRefrigeratorLike(protocol.equipmentType)) return [];
-        return listProtocolAttachments(input.protocolId);
+        const attachments = await listProtocolAttachments(input.protocolId);
+        return attachments.map(item => ({
+          ...item,
+          fileUrl: item.fileUrl?.startsWith("data:") ? "" : item.fileUrl,
+        }));
       }),
     upload: protectedProcedure
       .input(z.object({
@@ -1791,13 +1817,13 @@ export const appRouter = router({
           });
         }
         const safeName = sanitizeStorageFileName(input.fileName);
-        const { key, url } = await storagePut(
+        const { key, url } = await storeProtocolAttachmentFileOrInline(
           `protocol-${input.protocolId}/attachments/${Date.now()}-${safeName}`,
           buffer,
           contentType,
         );
         const title = nonBlankString(input.title) || ATTACHMENT_KIND_LABELS[input.kind];
-        return createProtocolAttachment({
+        const attachment = await createProtocolAttachment({
           protocolId: input.protocolId,
           kind: input.kind,
           title,
@@ -1809,6 +1835,10 @@ export const appRouter = router({
           size: buffer.length,
           includeInPdf: input.includeInPdf === false ? 0 : 1,
         });
+        return {
+          ...attachment,
+          fileUrl: attachment.fileUrl?.startsWith("data:") ? "" : attachment.fileUrl,
+        };
       }),
     update: protectedProcedure
       .input(z.object({
@@ -2086,7 +2116,12 @@ export const appRouter = router({
                     try {
                       imageBuffer = (await storageReadBuffer(item.fileKey)).data;
                     } catch (error) {
-                      console.warn("Attachment image fetch failed:", error);
+                      const inlineImage = item.fileUrl?.match(/^data:image\/[^;]+;base64,(.+)$/);
+                      if (inlineImage) {
+                        imageBuffer = Buffer.from(inlineImage[1], "base64");
+                      } else {
+                        console.warn("Attachment image fetch failed:", error);
+                      }
                     }
                   }
                   return {
