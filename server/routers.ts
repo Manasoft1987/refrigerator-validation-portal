@@ -273,12 +273,22 @@ function secureStringEquals(a: string, b: string) {
 }
 
 function sanitizeStorageFileName(value: string) {
-  const cleaned = value
+  const trimmed = value.trim();
+  const extMatch = trimmed.match(/\.([a-zA-Z0-9]{1,12})$/);
+  const ext = extMatch ? `.${extMatch[1].toLowerCase()}` : "";
+  const base = ext ? trimmed.slice(0, -ext.length) : trimmed;
+  const hash = createHash("sha256").update(trimmed || "attachment").digest("hex").slice(0, 10);
+  const cleanedBase = base
+    .normalize("NFKD")
+    .replace(/[^\x00-\x7F]/g, "")
     .replace(/[/\\?%*:|"<>]+/g, "_")
+    .replace(/[^a-zA-Z0-9._-]+/g, "_")
     .replace(/\s+/g, "_")
     .replace(/_+/g, "_")
-    .slice(0, 160);
-  return cleaned || "attachment";
+    .replace(/^[_\-.]+|[_\-.]+$/g, "")
+    .slice(0, 120);
+  const safeBase = cleanedBase || "attachment";
+  return `${safeBase}-${hash}${ext}`.slice(0, 160);
 }
 
 function parseDataUrlOrBase64(value: string, fallbackContentType?: string | null) {
