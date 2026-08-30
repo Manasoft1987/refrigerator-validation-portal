@@ -4492,24 +4492,38 @@ export function addHeadersAndFooters(doc: PDFKit.PDFDocument, input: ReportInput
     const pageH = doc.page.height;
 
     if (i > 0) {
-      doc.save();
-      doc.strokeColor(BORDER).lineWidth(0.4).moveTo(left, 38).lineTo(right, 38).stroke();
-      doc.restore();
-      const protoW = doc.widthOfString(protocolLabel);
+      const headerY = 22;
+      const headerFontSize = 8;
+      const maxProtoW = Math.min(170, (right - left) * 0.38);
+      const protoW = Math.max(118, Math.min(maxProtoW, doc.widthOfString(protocolLabel) + 4));
       const headerGap = 18;
       const orgHeaderW = Math.max(120, right - left - protoW - headerGap);
+      doc.font("body").fontSize(headerFontSize);
+      const orgText = fitTextToWidth(doc, input.org.name, orgHeaderW);
+      const orgH = doc.heightOfString(orgText, {
+        width: orgHeaderW,
+        lineBreak: false,
+      });
+      const protoH = doc.heightOfString(protocolLabel, {
+        width: protoW,
+        align: "left",
+      });
       doc
         .fillColor(MUTED)
         .font("body")
-        .fontSize(8)
-        .text(fitTextToWidth(doc, input.org.name, orgHeaderW), left, 22, {
+        .fontSize(headerFontSize)
+        .text(orgText, left, headerY, {
           width: orgHeaderW,
           lineBreak: false,
         })
-        .text(protocolLabel, right - protoW, 22, {
+        .text(protocolLabel, right - protoW, headerY, {
           width: protoW,
-          lineBreak: false,
+          align: "left",
         });
+      const headerLineY = Math.max(38, headerY + Math.max(orgH, protoH) + 6);
+      doc.save();
+      doc.strokeColor(BORDER).lineWidth(0.4).moveTo(left, headerLineY).lineTo(right, headerLineY).stroke();
+      doc.restore();
     }
 
     doc.save();
