@@ -34,6 +34,14 @@ export type WarehouseGeometry = {
   externalEnv: boolean;
 };
 
+function shortSensorCode(value: string | null | undefined): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const compact = raw.replace(/[^a-zA-Z0-9]/g, "");
+  if (compact.length >= 4) return compact.slice(-4);
+  return raw.length > 4 ? raw.slice(-4) : raw;
+}
+
 export function buildWarehousePositions(g: WarehouseGeometry): {
   id: string;
   row: number;
@@ -265,14 +273,14 @@ export default function WarehouseLayoutDiagram({
                   const placed = placedMap.get(p.id);
                   const fill = placed ? "#10b981" : "#e2e8f0";
                   const stroke = placed ? "#047857" : "#94a3b8";
-                  const text = placed ? (placed.customName || placed.label) : `${p.row}-${p.col}`;
+                  const text = placed ? (shortSensorCode(placed.label) || shortSensorCode(placed.customName) || placed.label) : `${p.row}-${p.col}`;
                   return (
                     <g key={p.id} style={{ cursor: readOnly ? "default" : "pointer" }}
                        onClick={() => handleCellClick(p.id)}>
                       <circle cx={cx} cy={cy} r={18} fill={fill} stroke={stroke} strokeWidth={2} />
                       <text x={cx} y={cy + 4} textAnchor="middle" fontSize={10}
                             fontWeight={700} fill={placed ? "white" : "#475569"}>
-                        {text.slice(0, 6)}
+                        {text}
                       </text>
                     </g>
                   );

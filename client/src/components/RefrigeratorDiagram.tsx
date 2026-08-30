@@ -61,10 +61,10 @@ function loggerTitle(logger: Logger): string {
 }
 
 function badgeLabel(logger: Logger): string {
-  const src = loggerTitle(logger);
-  const digits = src.replace(/\D/g, "");
-  if (digits.length >= 4) return digits.slice(-4);
-  return src.length > 6 ? src.slice(-6) : src;
+  const src = String(logger.label || logger.customName || loggerTitle(logger)).trim();
+  const compact = src.replace(/[^a-zA-Z0-9]/g, "");
+  if (compact.length >= 4) return compact.slice(-4);
+  return src.length > 4 ? src.slice(-4) : src;
 }
 
 function avgLabel(logger: Logger): string | null {

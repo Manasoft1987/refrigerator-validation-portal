@@ -753,13 +753,18 @@ function semanticSensorBadgeColor(isCriticalHot?: boolean | null, isCriticalCold
   return "#0891b2";
 }
 
+function lastFourSensorCode(value: string | null | undefined): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const compact = raw.replace(/[^a-zA-Z0-9]/g, "");
+  if (compact.length >= 4) return compact.slice(-4);
+  return raw.length > 4 ? raw.slice(-4) : raw;
+}
+
 function refrigeratorBadgeLabel(sensor: DiagramSensor): string {
-  const serial = String(sensor.label ?? "").trim();
-  const digits = serial.replace(/\D/g, "");
-  if (digits.length >= 4) return digits.slice(-4);
-  if (serial.length > 0) return serial.length > 6 ? serial.slice(-6) : serial;
-  const fallback = String(sensor.customName ?? "").trim();
-  return fallback.length > 6 ? fallback.slice(0, 6) : fallback;
+  const serial = lastFourSensorCode(sensor.label);
+  if (serial) return serial;
+  return lastFourSensorCode(sensor.customName);
 }
 
 function formatSensorAvg(avg: DiagramSensor["avg"]): string | null {
@@ -837,10 +842,8 @@ function idwTemperature(
 }
 
 function shortTemperatureMapLabel(sensor: DiagramSensor): string {
-  const primary = String(sensor.customName || sensor.label || "").trim();
-  const digits = primary.replace(/\D/g, "");
-  if (digits.length >= 4) return digits.slice(-4);
-  if (primary) return primary.length > 8 ? primary.slice(-8) : primary;
+  const primary = lastFourSensorCode(sensor.label) || lastFourSensorCode(sensor.customName);
+  if (primary) return primary;
   return String(sensor.id || "");
 }
 
@@ -2388,5 +2391,5 @@ export function drawReeferTruckDiagram3D(
 
 /** Returns last 4 chars of a serial number label */
 function shortLabelStr(label: string): string {
-  return label.length > 4 ? label.slice(-4) : label;
+  return lastFourSensorCode(label) || label;
 }

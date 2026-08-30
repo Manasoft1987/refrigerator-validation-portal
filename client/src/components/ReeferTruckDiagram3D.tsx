@@ -64,6 +64,14 @@ function iso(x: number, y: number, z: number): [number, number] {
   ];
 }
 
+function shortSensorCode(value: string | null | undefined): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const compact = raw.replace(/[^a-zA-Z0-9]/g, "");
+  if (compact.length >= 4) return compact.slice(-4);
+  return raw.length > 4 ? raw.slice(-4) : raw;
+}
+
 // ─── Box dimensions (world units) ────────────────────────────────────────────
 // Realistic reefer truck cargo body: long, moderate width, moderate height
 const W = 1.6;  // width  (X: left → right)
@@ -510,7 +518,7 @@ export default function ReeferTruckDiagram3D({
           const BH = 18;                  // box height
           const RX = 4;                   // corner radius
           const displayName = assigned
-            ? (assigned.label.length > 4 ? assigned.label.slice(-4) : assigned.label)
+            ? shortSensorCode(assigned.label) || shortSensorCode(assigned.customName) || assigned.label
             : sp.id;
           return (
             <g

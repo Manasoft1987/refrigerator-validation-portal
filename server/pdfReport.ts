@@ -855,8 +855,7 @@ function getStageTrace(input: ReportInput, stage: "IQ" | "OQ" | "PV"): DataInteg
  * If customName is provided, appends it on a new line.
  */
 function shortLabel(label: string, customName?: string | null): string {
-  const short = shortSensorId(label) || label;
-  return customName ? `${short}\n${customName}` : short;
+  return shortSensorId(label) || shortSensorId(customName) || label || customName || "";
 }
 
 function normalizeSensorNumber(value: string | null | undefined): string {
@@ -875,9 +874,9 @@ function formatDiagramAverageTemp(value: number | string | null | undefined): st
 function shortSensorId(value: string | null | undefined): string {
   const raw = String(value ?? "").trim();
   if (!raw) return "";
-  const digits = raw.replace(/\D/g, "");
-  if (digits.length >= 4) return digits.slice(-4);
-  return raw.length > 6 ? raw.slice(-6) : raw;
+  const compact = raw.replace(/[^a-zA-Z0-9]/g, "");
+  if (compact.length >= 4) return compact.slice(-4);
+  return raw.length > 4 ? raw.slice(-4) : raw;
 }
 
 function buildSensorAverageMap(input: ReportInput): Map<string, string> {
@@ -917,6 +916,9 @@ function sensorTokenVariants(value: string | number | null | undefined): string[
   const tokens = new Set<string>();
   const compact = normalizeSensorNumber(raw);
   if (compact) tokens.add(compact);
+  const compactAlnum = raw.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  if (compactAlnum) tokens.add(compactAlnum);
+  if (compactAlnum.length >= 4) tokens.add(compactAlnum.slice(-4));
   const digits = raw.replace(/\D/g, "");
   if (digits) tokens.add(digits);
   if (digits.length >= 4) tokens.add(digits.slice(-4));
@@ -1152,7 +1154,8 @@ function buildActiveSensorTokens(input: ReportInput): Set<string> {
     const token = normalizeSensorNumber(value);
     if (!token) return;
     tokens.add(token);
-    if (token.length > 4) tokens.add(token.slice(-4));
+    const shortToken = normalizeSensorNumber(shortSensorId(value));
+    if (shortToken) tokens.add(shortToken);
   };
 
   input.pv.loggers.forEach(logger => {
@@ -1182,7 +1185,8 @@ export function filterProtocolSensorsForReport(input: ReportInput): ReportInput[
   return protocolSensors.filter(sensor => {
     const number = normalizeSensorNumber(sensor.number);
     if (!number) return false;
-    return activeTokens.has(number) || (number.length > 4 && activeTokens.has(number.slice(-4)));
+    const shortNumber = normalizeSensorNumber(shortSensorId(sensor.number));
+    return activeTokens.has(number) || Boolean(shortNumber && activeTokens.has(shortNumber));
   });
 }
 
@@ -2307,13 +2311,11 @@ function fmtTempMetric(value: number | null | undefined, digits = 1): string {
 }
 
 function shortLoggerDisplay(logger: Pick<LoggerSummary, "label" | "customName"> | null | undefined): string {
-  const customName = String(logger?.customName ?? "").trim();
-  if (customName) return customName;
   const label = String(logger?.label ?? "").trim();
-  if (!label) return "—";
-  const digits = label.replace(/\D/g, "");
-  if (digits.length >= 4) return digits.slice(-4);
-  return label;
+  const labelShort = shortSensorId(label);
+  if (labelShort) return labelShort;
+  const customName = String(logger?.customName ?? "").trim();
+  return shortSensorId(customName) || "—";
 }
 
 function findPlacementLogger(input: ReportInput, logger: LoggerSummary | null | undefined) {
@@ -2568,8 +2570,8 @@ function drawStatsTable(
     let role = l.role === "external" ? (en ? "external" : "внеш.") : (en ? "internal" : "внутр.");
     if (idx === hotIdx) role = en ? "internal hot" : "внутр. гор.";
     if (idx === coldIdx) role = en ? "internal cold" : "внутр. хол.";
-    const rawLabel = l.label.length > 4 ? l.label.slice(-4) : l.label;
-    const name = l.customName ? `${rawLabel} · ${l.customName}` : rawLabel;
+    const rawLabel = shortSensorId(l.label) || l.label;
+    const name = rawLabel;
     const cells = [
       name,
       role,
@@ -2863,8 +2865,8 @@ function drawStagePVVerdict(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], inpu
     if (isWarehouseLike(getReportEquipmentType(input))) {
       const hotSensor = pv.hotIdx !== null ? pv.loggers[pv.hotIdx] : null;
       const coldSensor = pv.coldIdx !== null ? pv.loggers[pv.coldIdx] : null;
-      const hotLabel = hotSensor ? `${en ? "logger" : "датчик"} "${hotSensor.customName || hotSensor.label}"` : (en ? "logger" : "датчик");
-      const coldLabel = coldSensor ? `${en ? "logger" : "датчик"} "${coldSensor.customName || coldSensor.label}"` : (en ? "logger" : "датчик");
+      const hotLabel = hotSensor ? `${en ? "logger" : "датчик"} "${shortLoggerDisplay(hotSensor)}"` : (en ? "logger" : "датчик");
+      const coldLabel = coldSensor ? `${en ? "logger" : "датчик"} "${shortLoggerDisplay(coldSensor)}"` : (en ? "logger" : "датчик");
       const internalCount = pv.loggers.filter(l => l.role === "internal").length;
       
       text = en
@@ -4887,11 +4889,12 @@ function drawWarehousePlanDiagram(
         for (let t = 1; t <= calc.nV; t++) {
           const id = `L${r}-c${c}-t${t}`;
           const placed = placedById.get(id);
-          if (placed) matches.push((placed.customName || placed.label));
+          const placedLabel = placed ? String(placed.label || placed.customName || "").trim() : "";
+          if (placedLabel) matches.push(placedLabel);
         }
         if (matches.length) {
           const firstLabel = matches[0];
-          const shortSensorLabel = firstLabel.length > 4 ? firstLabel.slice(-4) : firstLabel;
+          const shortSensorLabel = shortSensorId(firstLabel) || firstLabel;
           label = matches.length > 1 ? `${shortSensorLabel}+` : shortSensorLabel;
         }
       }
@@ -5047,7 +5050,7 @@ function drawWarehousePlanDiagram(
       const col = idx % 2;
       const x = startX + col * (badgeW + gap);
       const y = startY + row * 22;
-      const rawLabel = String(logger.customName || logger.label || "EXT");
+      const rawLabel = String(logger.label || logger.customName || "EXT");
       const label = shortSensorId(rawLabel) || "EXT";
       doc.fillColor("#f1f5f9").strokeColor("#64748b").lineWidth(0.8)
         .roundedRect(x, y, badgeW, badgeH, 9)
@@ -5365,14 +5368,16 @@ function drawWarehouseAnnex1(doc: PDFKit.PDFDocument, input: ReportInput) {
       const lbl = obj.label.trim();
       sensorHeightMap.set(lbl, obj.heightM);
       // Also index by last-4 for fuzzy matching against full serial numbers
-      if (lbl.length > 4) sensorHeightMap.set(lbl.slice(-4), obj.heightM);
+      const shortLbl = shortSensorId(lbl);
+      if (shortLbl) sensorHeightMap.set(shortLbl, obj.heightM);
     }
     // Secondary: sensors array on objects (future-proof)
     (obj.sensors ?? []).forEach(s => {
       if (s.sensorId && s.heightFromFloor != null) {
         const sid = s.sensorId.trim();
         sensorHeightMap.set(sid, s.heightFromFloor);
-        if (sid.length > 4) sensorHeightMap.set(sid.slice(-4), s.heightFromFloor);
+        const shortSid = shortSensorId(sid);
+        if (shortSid) sensorHeightMap.set(shortSid, s.heightFromFloor);
       }
     });
   });
@@ -5381,7 +5386,7 @@ function drawWarehouseAnnex1(doc: PDFKit.PDFDocument, input: ReportInput) {
     if (!label) return undefined;
     const direct = sensorHeightMap.get(label);
     if (direct != null) return direct;
-    const last4 = label.length >= 4 ? label.slice(-4) : label;
+    const last4 = shortSensorId(label) || label;
     return sensorHeightMap.get(last4);
   };
 
@@ -5453,7 +5458,7 @@ function drawWarehouseAnnex1(doc: PDFKit.PDFDocument, input: ReportInput) {
   internalPvLoggers.forEach((pvLogger, i) => {
     const pvL = (input.pvLoggers ?? []).find(p => p.label === pvLogger.label);
     const rawLabel = pvLogger.label || "";
-    const last4 = rawLabel.length >= 4 ? rawLabel.slice(-4) : rawLabel;
+    const last4 = shortSensorId(rawLabel) || rawLabel;
     const idDisplay = last4 || "—";
     const serialNum = pvLogger.label || "—";
     const schemeNum = last4 || "—";
@@ -5466,7 +5471,7 @@ function drawWarehouseAnnex1(doc: PDFKit.PDFDocument, input: ReportInput) {
   // External sensors
   externals.forEach((ext, ei) => {
     const rawLabel = ext.label || "";
-    const last4 = rawLabel.length >= 4 ? rawLabel.slice(-4) : rawLabel;
+    const last4 = shortSensorId(rawLabel) || rawLabel;
     const extId = last4 || "—";
     const serialNum = ext.label || "—";
     const schemeNum = last4 || "—";
@@ -5597,10 +5602,10 @@ function drawWarehouseAnnex2(doc: PDFKit.PDFDocument, input: ReportInput) {
       return v >= input.pv.rangeMin && v <= input.pv.rangeMax;
     };
     const ok = inRange(l.min) && inRange(l.max) && inRange(l.mkt);
-    // ID: last 4 digits of serial number (label), or position if assigned
+    // ID: last 4 alphanumeric characters of serial number (label), or position if assigned
     const pvLogger = (input.pvLoggers ?? []).find(p => p.label === l.label);
     const rawLabel = l.label || "";
-    const last4 = rawLabel.length >= 4 ? rawLabel.slice(-4) : rawLabel;
+    const last4 = shortSensorId(rawLabel) || rawLabel;
     const positionId = (pvLogger?.position && pvLogger.position !== "unset") ? pvLogger.position : last4 || "—";
     const fmt = (n: number | null | undefined) => (n != null && Number.isFinite(n) ? n.toFixed(2) : "—");
     // cells: ID, Serial, T min, T max, T avg, да-mark, нет-mark

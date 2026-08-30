@@ -146,12 +146,23 @@ function loggerName(logger: SensorLogger | undefined): string {
   return String(logger.customName || logger.label || "").trim();
 }
 
+function shortSensorCode(value: string | null | undefined): string {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  const compact = raw.replace(/[^a-zA-Z0-9]/g, "");
+  if (compact.length >= 4) return compact.slice(-4);
+  return raw.length > 4 ? raw.slice(-4) : raw;
+}
+
 function sensorTokenVariants(value: string | number | null | undefined): string[] {
   const raw = String(value ?? "").trim();
   if (!raw) return [];
   const tokens = new Set<string>();
   const compact = raw.toLowerCase().replace(/[^a-z0-9а-яё]/gi, "");
   if (compact) tokens.add(compact);
+  const compactAlnum = raw.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  if (compactAlnum) tokens.add(compactAlnum);
+  if (compactAlnum.length >= 4) tokens.add(compactAlnum.slice(-4));
   const digits = raw.replace(/\D/g, "");
   if (digits) tokens.add(digits);
   if (digits.length >= 4) tokens.add(digits.slice(-4));
@@ -1198,8 +1209,7 @@ export function FloorPlanEditor({
                   style={{ pointerEvents: "none" }}
                 />
                 {externalLoggers.slice(0, 3).map((logger, idx) => {
-                  const label = logger.customName || logger.label;
-                  const shortLabel = label.length > 8 ? label.slice(-8) : label;
+                  const shortLabel = shortSensorCode(logger.label) || shortSensorCode(logger.customName) || loggerName(logger);
                   return (
                     <g key={logger.id} transform={`translate(0, ${idx * 30})`}>
                       <rect
