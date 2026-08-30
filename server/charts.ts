@@ -897,28 +897,59 @@ function drawTemperaturePoint(
   const tempFontSize = Math.max(4.7, r * 0.39);
   const textWidth = Math.max(r * 2 - 2, label.length >= 4 ? r * 2 + 4 : r * 2);
   const textX = cx - textWidth / 2;
-  const criticalIconX = cx + (cx > rect.x + rect.w - r * 2.2 ? -(r + 8) : r + 8);
-  const criticalIconY = cy + (cy < rect.y + r * 2.2 ? r + 8 : -(r + 8));
+  const glyphRadius = Math.max(4.2, r * 0.34);
+  const glyphOffset = r * 0.88;
+  const badgeClearance = glyphRadius + 1.5;
+  const pickCriticalBadgePosition = (preferred: Array<[number, number]>): [number, number] => {
+    for (const [dx, dy] of preferred) {
+      const bx = cx + dx * glyphOffset;
+      const by = cy + dy * glyphOffset;
+      if (
+        bx >= rect.x + badgeClearance &&
+        bx <= rect.x + rect.w - badgeClearance &&
+        by >= rect.y + badgeClearance &&
+        by <= rect.y + rect.h - badgeClearance
+      ) {
+        return [bx, by];
+      }
+    }
+    const [dx, dy] = preferred[0] ?? [1, -1];
+    return [
+      clamp(cx + dx * glyphOffset, rect.x + badgeClearance, rect.x + rect.w - badgeClearance),
+      clamp(cy + dy * glyphOffset, rect.y + badgeClearance, rect.y + rect.h - badgeClearance),
+    ];
+  };
+  const drawCriticalBadge = (kind: "hot" | "cold", bx: number, by: number) => {
+    const color = kind === "hot" ? "#ef4444" : "#2563eb";
+    doc.save();
+    doc.circle(bx, by, glyphRadius + 2).fill("#ffffff");
+    doc.circle(bx, by, glyphRadius + 1).strokeColor(color).lineWidth(0.8).stroke();
+    if (kind === "hot") drawStar(doc, bx, by, glyphRadius, color);
+    else drawDiamond(doc, bx, by, glyphRadius, color);
+    doc.restore();
+  };
 
   doc.save();
   doc.circle(cx, cy, r + 2).fill("#ffffff");
   doc.circle(cx, cy, r).fill(color).strokeColor("#ffffff").lineWidth(1.6).stroke();
   if (isHot) {
     doc.circle(cx, cy, r + 4).strokeColor("#ef4444").lineWidth(1.6).stroke();
-    drawStar(doc, criticalIconX, criticalIconY, 5, "#ef4444");
   }
   if (isCold) {
     doc.circle(cx, cy, r + (isHot ? 7 : 4)).strokeColor("#2563eb").lineWidth(1.6).stroke();
-    const coldIconX = cx + (cx > rect.x + rect.w - r * 2.2 ? -(r + 8) : r + 8);
-    const coldIconY = isHot
-      ? cy + (cy > rect.y + rect.h - r * 2.2 ? -(r + 8) : r + 8)
-      : criticalIconY;
-    drawDiamond(doc, coldIconX, coldIconY, 5, "#2563eb");
   }
   doc.font("bold").fontSize(labelFontSize).fillColor("#ffffff");
   doc.text(label, textX, cy - r * 0.52, { width: textWidth, align: "center", lineBreak: false });
   doc.font("bold").fontSize(tempFontSize).fillColor("#ffffff");
   doc.text(tempLabel, textX, cy + r * 0.14, { width: textWidth, align: "center", lineBreak: false });
+  if (isHot) {
+    const [bx, by] = pickCriticalBadgePosition([[1, -1], [-1, -1], [1, 1], [-1, 1]]);
+    drawCriticalBadge("hot", bx, by);
+  }
+  if (isCold) {
+    const [bx, by] = pickCriticalBadgePosition(isHot ? [[-1, 1], [1, 1], [-1, -1], [1, -1]] : [[1, -1], [-1, -1], [1, 1], [-1, 1]]);
+    drawCriticalBadge("cold", bx, by);
+  }
   doc.restore();
 }
 
