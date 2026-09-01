@@ -59,7 +59,7 @@ export default function ProtocolsIndex() {
   const [orgF, setOrgF] = useState<string>("all");
   const [createOpen, setCreateOpen] = useState(false);
   const [createStep, setCreateStep] = useState<1 | 2>(1);
-  const [createEquipmentType, setCreateEquipmentType] = useState<"refrigerator" | "freezer" | "auto-refrigerator" | "auto-refrigerator-kg" | "chamber" | "thermal-container" | "computerized-system" | "warehouse" | "warehouse-expert" | "other" | null>(null);
+  const [createEquipmentType, setCreateEquipmentType] = useState<"refrigerator" | "freezer" | "auto-refrigerator" | "auto-refrigerator-kg" | "chamber" | "thermal-container" | "computerized-system" | "warehouse" | "warehouse-kg" | "warehouse-expert" | "other" | null>(null);
   const [createCustomName, setCreateCustomName] = useState("");
   const [createOrg, setCreateOrg] = useState<number | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
@@ -353,6 +353,7 @@ export default function ProtocolsIndex() {
                   { id: "thermal-container", label: "Термоконтейнер", icon: "📦", desc: "Пассивный изотермический контейнер с термоэлементами" },
                   { id: "computerized-system", label: "Компьютеризированная система", icon: "💻", desc: "GxP-система: GAMP, URS, риски, тестирование и выпуск" },
                   { id: "warehouse", label: "Помещение / зона хранения (Рек. ЕЭК №8)", icon: "🏢", desc: "Склад, камера или зона с расчётом количества регистраторов по Рек. ЕЭК №8" },
+                  { id: "warehouse-kg", label: "Помещение / зона хранения Кыргызстана", icon: "🏢", desc: "Склад или зона хранения: GDP ЕАЭС + требования Кыргызской Республики" },
                   { id: "warehouse-expert", label: "Помещение / зона хранения (экспертное)", icon: "🏬", desc: "Количество датчиков задаёт менеджер или специалист по валидации" },
                   { id: "other", label: "Другое", icon: "📦", desc: "Иное оборудование" },
                 ] as const).map(opt => (

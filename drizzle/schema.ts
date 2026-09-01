@@ -164,7 +164,7 @@ export const protocols = mysqlTable("protocols", {
 	createdAt: timestamp({ mode: 'string' }).default('CURRENT_TIMESTAMP').notNull(),
 	updatedAt: timestamp({ mode: 'string' }).defaultNow().onUpdateNow().notNull(),
 	companyId: int().default(0).notNull(),
-	equipmentType: mysqlEnum(['refrigerator','freezer','auto-refrigerator','auto-refrigerator-kg','thermal-container','computerized-system','warehouse','warehouse-expert','other']).default('refrigerator').notNull(),
+	equipmentType: mysqlEnum(['refrigerator','freezer','auto-refrigerator','auto-refrigerator-kg','thermal-container','computerized-system','warehouse','warehouse-kg','warehouse-expert','other']).default('refrigerator').notNull(),
 	customEquipmentName: varchar({ length: 255 }),
 });
 
@@ -255,7 +255,7 @@ export const questionTemplates = mysqlTable("questionTemplates", {
 	text: text().notNull(),
 	isDefault: int().default(1).notNull(),
 	companyId: int(),
-	equipmentType: mysqlEnum(['refrigerator','freezer','auto-refrigerator','auto-refrigerator-kg','chamber','thermal-container','computerized-system','warehouse','warehouse-expert','other']).default('refrigerator'),
+	equipmentType: mysqlEnum(['refrigerator','freezer','auto-refrigerator','auto-refrigerator-kg','chamber','thermal-container','computerized-system','warehouse','warehouse-kg','warehouse-expert','other']).default('refrigerator'),
 	equipmentKind: mysqlEnum(['conditioner','ventilation','heat_curtain','chiller','fan_coil','other']),
 });
 

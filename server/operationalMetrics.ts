@@ -229,12 +229,14 @@ export function calculateAllOperationalMetrics(
     : equipmentType === "refrigerator" ? "Холодильник"
     : equipmentType === "freezer" ? "Морозильник"
     : equipmentType === "auto-refrigerator-kg" ? "Авторефрижератор Кыргызстана"
+    : equipmentType === "warehouse-kg" ? "Помещение (зона) хранения Кыргызстана"
     : "Авторефрижератор";
   const retentionSubject =
     equipmentType === "chamber" ? "камера способна"
     : equipmentType === "thermal-container" ? "термоконтейнер способен"
     : equipmentType === "refrigerator" ? "холодильник способен"
     : equipmentType === "freezer" ? "морозильник способен"
+    : equipmentType === "warehouse-kg" ? "помещение (зона) хранения способно"
     : "кузов способен";
 
   return {

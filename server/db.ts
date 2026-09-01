@@ -671,6 +671,7 @@ type ProtocolEquipmentTypeCode =
   | "thermal-container"
   | "computerized-system"
   | "warehouse"
+  | "warehouse-kg"
   | "warehouse-expert"
   | "other"
   | string
@@ -689,6 +690,8 @@ export function protocolObjectCode(equipmentType: ProtocolEquipmentTypeCode): st
       return "TC";
     case "computerized-system":
       return "CS";
+    case "warehouse-kg":
+      return "STR-KG";
     case "warehouse":
     case "warehouse-expert":
       return "STR";
@@ -905,11 +908,12 @@ export async function ensureThermalContainerStorage() {
       !protocolType.includes("'thermal-container'") ||
       !protocolType.includes("'computerized-system'") ||
       !protocolType.includes("'warehouse-expert'") ||
+      !protocolType.includes("'warehouse-kg'") ||
       !protocolType.includes("'auto-refrigerator-kg'")
     ) {
       await db.execute(sql.raw(
         "ALTER TABLE protocols MODIFY COLUMN equipmentType " +
-        "enum('refrigerator','freezer','auto-refrigerator','auto-refrigerator-kg','thermal-container','computerized-system','warehouse','warehouse-expert','other') " +
+        "enum('refrigerator','freezer','auto-refrigerator','auto-refrigerator-kg','thermal-container','computerized-system','warehouse','warehouse-kg','warehouse-expert','other') " +
         "DEFAULT 'refrigerator'",
       ));
     }
@@ -925,11 +929,12 @@ export async function ensureThermalContainerStorage() {
       !questionTemplateType.includes("'thermal-container'") ||
       !questionTemplateType.includes("'computerized-system'") ||
       !questionTemplateType.includes("'warehouse-expert'") ||
+      !questionTemplateType.includes("'warehouse-kg'") ||
       !questionTemplateType.includes("'auto-refrigerator-kg'")
     ) {
       await db.execute(sql.raw(
         "ALTER TABLE questionTemplates MODIFY COLUMN equipmentType " +
-        "enum('refrigerator','freezer','auto-refrigerator','auto-refrigerator-kg','chamber','thermal-container','computerized-system','warehouse','warehouse-expert','other') " +
+        "enum('refrigerator','freezer','auto-refrigerator','auto-refrigerator-kg','chamber','thermal-container','computerized-system','warehouse','warehouse-kg','warehouse-expert','other') " +
         "DEFAULT 'refrigerator'",
       ));
     }
@@ -1433,12 +1438,13 @@ export async function ensureChamberQuestionTemplateStorage(
       columnType.includes("'thermal-container'") &&
       columnType.includes("'computerized-system'") &&
       columnType.includes("'warehouse-expert'") &&
+      columnType.includes("'warehouse-kg'") &&
       columnType.includes("'auto-refrigerator-kg'");
 
     if (!chamberSchemaReady) {
       await db.execute(sql.raw(
         "ALTER TABLE questionTemplates MODIFY COLUMN equipmentType " +
-          "enum('refrigerator','freezer','auto-refrigerator','auto-refrigerator-kg','chamber','thermal-container','computerized-system','warehouse','warehouse-expert','other') " +
+          "enum('refrigerator','freezer','auto-refrigerator','auto-refrigerator-kg','chamber','thermal-container','computerized-system','warehouse','warehouse-kg','warehouse-expert','other') " +
         "NOT NULL DEFAULT 'refrigerator'",
       ));
     }

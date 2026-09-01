@@ -28,6 +28,7 @@ import {
   computeWarehouseSensorCount,
   isAutoRefrigeratorLike,
   isKyrgyzstanAutoRefrigerator,
+  isKyrgyzstanWarehouse,
   isWarehouseEaeu,
   isWarehouseLike,
   normalizeSensorAccuracyC,
@@ -365,6 +366,7 @@ const EQUIPMENT_LABEL: Record<string, string> = {
   freezer: "Морозильник",
   chamber: "Холодильная камера",
   warehouse: "Помещение (зона) хранения", // Note: use getEquipmentName() for proper display
+  "warehouse-kg": "Помещение (зона) хранения Кыргызстана",
   "warehouse-expert": "Помещение (зона) хранения",
   other: "Оборудование",
 };
@@ -505,6 +507,7 @@ function getEquipmentName(input: ReportInput): string {
   // For warehouse, always use "помещение (зона) хранения" instead of "авторефрижератор"
   if (isWarehouseLike(type)) {
     if (isEnglishWarehouse(input)) return "storage room / storage area";
+    if (isKyrgyzstanWarehouse(type)) return "помещение (зона) хранения Кыргызстана";
     return "помещение (зона) хранения";
   }
   return EQUIPMENT_LABEL[type || ""] || "Оборудование";
@@ -526,6 +529,15 @@ function getEquipmentNameWithCase(input: ReportInput, gramCase: "nominative" | "
     }
   }
   if (isWarehouseLike(type)) {
+    if (isKyrgyzstanWarehouse(type)) {
+      switch (gramCase) {
+        case "genitive": return "помещения (зоны) хранения Кыргызстана";
+        case "accusative": return "помещение (зону) хранения Кыргызстана";
+        case "instrumental": return "помещением (зоной) хранения Кыргызстана";
+        case "nominative":
+        default: return "Помещение (зона) хранения Кыргызстана";
+      }
+    }
     switch (gramCase) {
       case "genitive": return "помещения (зоны) хранения";
       case "accusative": return "помещение (зону) хранения";
@@ -2277,7 +2289,7 @@ function drawPVParams(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Re
     [en ? "Test end" : "Окончание испытания", pv.endAt ? fmtDate(pv.endAt) : "—"],
     [en ? "Actual duration" : "Фактическая длительность", durationMs ? fmtDuration(durationMs) : "—"],
     [
-      getReportEquipmentType(input) === "warehouse"
+      isWarehouseEaeu(getReportEquipmentType(input))
         ? (en ? "Required duration" : "Требуемая длительность")
         : "Минимальная длительность (по умолчанию)",
       durationRequirement,
@@ -2672,7 +2684,7 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
       doc,
       en
         ? "The hot point chart shows the internal logger selected by PV temperature-risk ranking: out-of-range excursions, excursion duration and severity, maximum temperature, MKT and average temperature. This supports worst-case assessment of the warmest/least favourable area."
-        : getReportEquipmentType(input) === "warehouse"
+        : isWarehouseLike(getReportEquipmentType(input))
         ? "График горячей точки показывает внутренний датчик, выбранный по риск-оценке PV: отклонения за пределы режима, длительность и выраженность отклонений, максимальная температура, MKT и среднее значение. Это поддерживает оценку наихудшей тёплой зоны помещения."
         : "График горячей точки показывает внутренний датчик, выбранный по риск-оценке PV: отклонения за пределы режима, длительность и выраженность отклонений, максимальная температура, MKT и среднее значение. Это поддерживает оценку наихудшей тёплой зоны в " + reeferAreaAfterIn(getReportEquipmentType(input)) + "."
     );
@@ -2694,7 +2706,7 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
       doc,
       en
         ? "The cold point chart shows the internal logger selected by PV temperature-risk ranking: out-of-range low excursions, excursion duration and severity, minimum temperature and average temperature. This supports worst-case assessment of the coldest area."
-        : getReportEquipmentType(input) === "warehouse"
+        : isWarehouseLike(getReportEquipmentType(input))
         ? "График холодной точки показывает внутренний датчик, выбранный по риск-оценке PV: отклонения ниже режима, длительность и выраженность отклонений, минимальная температура и среднее значение. Это поддерживает оценку наихудшей холодной зоны помещения."
         : "График холодной точки показывает внутренний датчик, выбранный по риск-оценке PV: отклонения ниже режима, длительность и выраженность отклонений, минимальная температура и среднее значение. Это поддерживает оценку наихудшей холодной зоны в " + reeferAreaAfterIn(getReportEquipmentType(input)) + "."
     );
@@ -2714,7 +2726,7 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
       doc,
       en
         ? "The heat map shows distribution of average temperatures across all internal loggers in the storage room / storage area."
-        : getReportEquipmentType(input) === "warehouse"
+        : isWarehouseLike(getReportEquipmentType(input))
         ? "\u0422\u0435\u043f\u043b\u043e\u0432\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u043f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442 \u0440\u0430\u0441\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u0438\u0435 \u0441\u0440\u0435\u0434\u043d\u0438\u0445 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440 \u043f\u043e \u0432\u0441\u0435\u043c \u0434\u0430\u0442\u0447\u0438\u043a\u0430\u043c \u0432 \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0438 (\u0437\u043e\u043d\u0435) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f."
         : "\u0422\u0435\u043f\u043b\u043e\u0432\u0430\u044f \u043a\u0430\u0440\u0442\u0430 \u043f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442 \u0440\u0430\u0441\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u0438\u0435 \u0441\u0440\u0435\u0434\u043d\u0438\u0445 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440 \u043f\u043e \u0432\u0441\u0435\u043c \u0434\u0430\u0442\u0447\u0438\u043a\u0430\u043c \u0432 " + reeferAreaAfterIn(getReportEquipmentType(input)) + "."
     );
@@ -3023,7 +3035,7 @@ function drawSensorPlacementAnalysis(
 
   // External sensor role
   if (externals.length > 0) {
-    if (getReportEquipmentType(input) === "warehouse") {
+    if (isWarehouseLike(getReportEquipmentType(input))) {
       analysisText +=
         "Внешний датчик (расположенный вне помещения (зоны) хранения) служит для мониторинга параметров окружающей среды " +
         "и не входит в расчёт основных критериев приемлемости этапа PV. Данные внешнего датчика используются для " +
@@ -5870,6 +5882,28 @@ After completion of the study period, data loggers are retrieved. Serial numbers
   "6.10": `Data from each logger are downloaded using appropriate software. Data files are combined for joint analysis. Source files are retained in the archive.`,
 };
 
+function warehouseDefaultSectionText(key: string, input: ReportInput, en: boolean): string {
+  if (isKyrgyzstanWarehouse(getReportEquipmentType(input))) {
+    if (en && key === "2.2.1") {
+      return `This temperature mapping study is performed with consideration of:
+• EEC Council Decision No. 80 dated 03.11.2016 approving the Rules of Good Distribution Practice within the Eurasian Economic Union;
+• EEC Board Recommendation No. 8 dated 20.04.2026 on the Guide for temperature mapping of medicinal product storage areas, used as a methodological reference;
+• Law of the Kyrgyz Republic No. 13 dated 12.01.2024 "On Circulation of Medicinal Products";
+• Internal standard operating procedures of the process owner for storage of thermolabile medicinal products.`;
+    }
+    if (!en && key === "2.2.1") {
+      return `Настоящее температурное картирование проводится с учётом:
+• Решения Совета Евразийской экономической комиссии от 03.11.2016 № 80 «Об утверждении Правил надлежащей дистрибьюторской практики в рамках Евразийского экономического союза»;
+• Рекомендации Коллегии ЕЭК от 20.04.2026 № 8 «О Руководстве по проведению температурного картирования зон хранения лекарственных средств» как методической основы;
+• Закона Кыргызской Республики от 12.01.2024 № 13 «Об обращении лекарственных средств»;
+• внутренних стандартных операционных процедур владельца процесса по хранению термолабильной продукции.`;
+    }
+  }
+  return en
+    ? (WAREHOUSE_DEFAULT_SECTIONS_EN[key] ?? WAREHOUSE_DEFAULT_SECTIONS[key] ?? "")
+    : (WAREHOUSE_DEFAULT_SECTIONS[key] ?? "");
+}
+
 const WAREHOUSE_MAPPING_METHOD_NOTE_EN =
   "The guide for temperature mapping of medicinal product storage areas approved by EEC Board Recommendation No. 8 is used as a methodological reference. " +
   "This protocol is adapted to its structure and approach. For warehouses, controlled-environment rooms, reception and dispatch areas, " +
@@ -5950,9 +5984,7 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
     if (custom !== undefined && custom.trim() !== "" && (!en || !hasCyrillic(custom))) {
       return normalizeWarehouseSectionText(key, custom, en);
     }
-    const fallback = en
-      ? (WAREHOUSE_DEFAULT_SECTIONS_EN[key] ?? WAREHOUSE_DEFAULT_SECTIONS[key] ?? "")
-      : (WAREHOUSE_DEFAULT_SECTIONS[key] ?? "");
+    const fallback = warehouseDefaultSectionText(key, input, en);
     return normalizeWarehouseSectionText(key, fallback, en);
   };
 

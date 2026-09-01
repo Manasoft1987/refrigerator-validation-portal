@@ -15,9 +15,11 @@ import {
   AUTO_REFRIGERATOR_STAGE_TEMPLATES,
   AUTO_REFRIGERATOR_KG_STAGE_TEMPLATES,
   KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE,
+  KYRGYZSTAN_WAREHOUSE_EQUIPMENT_TYPE,
   CHAMBER_STAGE_TEMPLATES,
   THERMAL_CONTAINER_STAGE_TEMPLATES,
   WAREHOUSE_STAGE_TEMPLATES,
+  WAREHOUSE_KG_STAGE_TEMPLATES,
   TEMP_MODES,
   DEFAULT_SENSOR_ACCURACY_C,
   applySensorAccuracyGuardBand,
@@ -26,6 +28,7 @@ import {
   aggregateTrialVerdicts,
   isAutoRefrigeratorLike,
   isKyrgyzstanAutoRefrigerator,
+  isWarehouseEaeu,
   isWarehouseLike,
 } from "@shared/validation";
 import { TRPCError } from "@trpc/server";
@@ -775,7 +778,7 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .query(({ ctx, input }) => ownProtocol(ctx.user.id, input.id)),
     create: protectedProcedure
-      .input(z.object({ organizationId: z.number(), companyId: z.number().optional(), equipmentType: z.enum(["refrigerator", "freezer", "auto-refrigerator", "auto-refrigerator-kg", "chamber", "thermal-container", "computerized-system", "warehouse", "warehouse-expert", "other"]).optional(), customEquipmentName: z.string().optional() }))
+      .input(z.object({ organizationId: z.number(), companyId: z.number().optional(), equipmentType: z.enum(["refrigerator", "freezer", "auto-refrigerator", "auto-refrigerator-kg", "chamber", "thermal-container", "computerized-system", "warehouse", "warehouse-kg", "warehouse-expert", "other"]).optional(), customEquipmentName: z.string().optional() }))
       .mutation(async ({ ctx, input }) => {
         // Admins can always create; regular users must belong to an approved company
         if (ctx.user.role !== "admin") {
@@ -810,6 +813,7 @@ export const appRouter = router({
           requestedEquipmentType === "freezer" ||
           requestedEquipmentType === "thermal-container" ||
           requestedEquipmentType === "computerized-system" ||
+          requestedEquipmentType === KYRGYZSTAN_WAREHOUSE_EQUIPMENT_TYPE ||
           requestedEquipmentType === "warehouse-expert" ||
           requestedEquipmentType === KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE
         ) await ensureThermalContainerStorage();
@@ -995,7 +999,11 @@ export const appRouter = router({
         if (usesProtocolEquipmentType) {
           delete coerced.equipmentType;
         }
-        if (requestedEquipmentType === "freezer" || requestedEquipmentType === KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE) {
+        if (
+          requestedEquipmentType === "freezer" ||
+          requestedEquipmentType === KYRGYZSTAN_WAREHOUSE_EQUIPMENT_TYPE ||
+          requestedEquipmentType === KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE
+        ) {
           await ensureThermalContainerStorage();
         }
         const saved = await upsertGeneralInfo(protocolId, coerced);
@@ -1005,6 +1013,7 @@ export const appRouter = router({
           "auto-refrigerator",
           KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE,
           "warehouse",
+          KYRGYZSTAN_WAREHOUSE_EQUIPMENT_TYPE,
           "warehouse-expert",
           "other",
         ]);
@@ -1067,7 +1076,7 @@ export const appRouter = router({
     stageBlocks: publicProcedure
       .input(z.object({ stage: z.enum(["iq", "oq", "pv"]), equipmentType: z.string().optional() }))
       .query(({ input }) => isWarehouseLike(input.equipmentType)
-        ? WAREHOUSE_STAGE_TEMPLATES[input.stage]
+        ? (input.equipmentType === KYRGYZSTAN_WAREHOUSE_EQUIPMENT_TYPE ? WAREHOUSE_KG_STAGE_TEMPLATES : WAREHOUSE_STAGE_TEMPLATES)[input.stage]
         : input.equipmentType === "chamber"
         ? CHAMBER_STAGE_TEMPLATES[input.stage]
         : input.equipmentType === "thermal-container"
@@ -1233,7 +1242,7 @@ export const appRouter = router({
               : ((gi?.equipmentType as string | null | undefined) || protocol.equipmentType);
           const warehouseMinDurationHours = gi?.whStudyType === "cold_room" ? 24 : 168;
           const minimumDurationHours =
-            protocol.equipmentType === "warehouse"
+            isWarehouseEaeu(effectiveEquipmentType)
               ? warehouseMinDurationHours
               : effectiveEquipmentType === "chamber"
                 ? 24
@@ -1596,10 +1605,11 @@ export const appRouter = router({
           : 0;
         const isChamberProtocolForAnalysis =
           protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || gi1?.equipmentType === "chamber";
-        const warehouseMinDurationHours = protocol.equipmentType === "warehouse"
+        const effectiveAnalysisEquipmentType = (gi1?.equipmentType as string | null | undefined) || protocol.equipmentType;
+        const warehouseMinDurationHours = isWarehouseEaeu(effectiveAnalysisEquipmentType)
           ? (gi1?.whStudyType === "cold_room" ? 24 : 168)
           : 72;
-        const minDurationHours = protocol.equipmentType === "warehouse"
+        const minDurationHours = isWarehouseEaeu(effectiveAnalysisEquipmentType)
           ? Math.max(warehouseMinDurationHours, session.minDurationHours)
           : isChamberProtocolForAnalysis
             ? Math.max(24, session.minDurationHours)
@@ -1963,25 +1973,29 @@ export const appRouter = router({
         const reportFailureReasons: string[] = [];
         const reportInternalLoggers = preparedLoggers.filter(l => l.logger.role === "internal");
         const hasPVData = preparedLoggers.some(l => l.series.temp.length > 0);
-        const isWarehouseProtocol = isWarehouseLike(protocol.equipmentType);
+        const effectiveEquipmentType = (gi?.equipmentType as string | null | undefined) || protocol.equipmentType;
+        const isWarehouseProtocol = isWarehouseLike(effectiveEquipmentType);
         const isEnglishWarehouseReport = isWarehouseProtocol && gi?.reportLanguage === "en";
         const isChamberProtocol =
           protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || gi?.equipmentType === "chamber";
-        const warehouseMinDurationHours = protocol.equipmentType === "warehouse"
+        const warehouseMinDurationHours = isWarehouseEaeu(effectiveEquipmentType)
           ? (gi?.whStudyType === "cold_room" ? 24 : 168)
           : 72;
-        const reportMinDurationHours = protocol.equipmentType === "warehouse"
+        const reportMinDurationHours = isWarehouseEaeu(effectiveEquipmentType)
           ? Math.max(warehouseMinDurationHours, session?.minDurationHours ?? warehouseMinDurationHours)
           : isChamberProtocol
             ? Math.max(24, session?.minDurationHours ?? warehouseMinDurationHours)
             : (session?.minDurationHours ?? warehouseMinDurationHours);
-        const effectiveEquipmentType = (gi?.equipmentType as string | null | undefined) || protocol.equipmentType;
         const isAutoRefrigeratorProtocol = isAutoRefrigeratorLike(effectiveEquipmentType);
         const isKyrgyzstanAutoRefrigeratorProtocol = isKyrgyzstanAutoRefrigerator(effectiveEquipmentType);
         const isThermalContainerProtocol =
           effectiveEquipmentType === "thermal-container";
         const reportStageTemplates = isWarehouseProtocol
-          ? (isEnglishWarehouseReport ? WAREHOUSE_STAGE_TEMPLATES_EN : WAREHOUSE_STAGE_TEMPLATES)
+          ? (isEnglishWarehouseReport
+              ? WAREHOUSE_STAGE_TEMPLATES_EN
+              : effectiveEquipmentType === KYRGYZSTAN_WAREHOUSE_EQUIPMENT_TYPE
+                ? WAREHOUSE_KG_STAGE_TEMPLATES
+                : WAREHOUSE_STAGE_TEMPLATES)
           : isChamberProtocol
             ? CHAMBER_STAGE_TEMPLATES
             : isAutoRefrigeratorProtocol
@@ -2386,7 +2400,10 @@ export const appRouter = router({
       }).optional())
       .query(async ({ input }) => {
         if (input?.equipmentType === "chamber" || input?.equipmentType === "thermal-container") await ensureChamberQuestionsReady();
-        if (input?.equipmentType === KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE) await ensureThermalContainerStorage();
+        if (
+          input?.equipmentType === KYRGYZSTAN_WAREHOUSE_EQUIPMENT_TYPE ||
+          input?.equipmentType === KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE
+        ) await ensureThermalContainerStorage();
         return listAllQuestionTemplates(input?.equipmentType, input?.equipmentKind);
       }),
     create: protectedProcedure
@@ -2394,7 +2411,7 @@ export const appRouter = router({
         z.object({
           stage: z.enum(["iq", "oq"]),
           text: z.string().min(1),
-          equipmentType: z.enum(["refrigerator", "freezer", "auto-refrigerator", "auto-refrigerator-kg", "chamber", "thermal-container", "warehouse", "warehouse-expert", "other"]).optional(),
+          equipmentType: z.enum(["refrigerator", "freezer", "auto-refrigerator", "auto-refrigerator-kg", "chamber", "thermal-container", "warehouse", "warehouse-kg", "warehouse-expert", "other"]).optional(),
           /** For warehouse: which equipment kind these questions apply to */
           equipmentKind: z.enum(["conditioner", "ventilation", "heat_curtain", "chiller", "fan_coil", "other"]).nullable().optional(),
         }),
@@ -2443,12 +2460,15 @@ export const appRouter = router({
       }),
     seedDefaults: protectedProcedure
       .input(z.object({
-        equipmentType: z.enum(["refrigerator", "freezer", "auto-refrigerator", "auto-refrigerator-kg", "chamber", "thermal-container", "warehouse", "warehouse-expert", "other"]),
+        equipmentType: z.enum(["refrigerator", "freezer", "auto-refrigerator", "auto-refrigerator-kg", "chamber", "thermal-container", "warehouse", "warehouse-kg", "warehouse-expert", "other"]),
         overwrite: z.boolean().optional(),
       }))
       .mutation(async ({ input }) => {
         if (input.equipmentType === "chamber" || input.equipmentType === "thermal-container") await ensureChamberQuestionsReady();
-        if (input.equipmentType === KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE) await ensureThermalContainerStorage();
+        if (
+          input.equipmentType === KYRGYZSTAN_WAREHOUSE_EQUIPMENT_TYPE ||
+          input.equipmentType === KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE
+        ) await ensureThermalContainerStorage();
         const existing = await listAllQuestionTemplates(input.equipmentType);
         if (existing.length > 0 && !input.overwrite) {
           return { inserted: 0, skipped: existing.length };
@@ -2978,11 +2998,17 @@ export const appRouter = router({
     autoQuestions: protectedProcedure
       .input(z.object({ protocolId: z.number(), stage: z.enum(["iq", "oq"]) }))
       .query(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
+        const templateEquipmentType = protocol.equipmentType === KYRGYZSTAN_WAREHOUSE_EQUIPMENT_TYPE
+          ? KYRGYZSTAN_WAREHOUSE_EQUIPMENT_TYPE
+          : "warehouse";
         const equipment = await listWarehouseEquipment(input.protocolId);
         // Build question list using DB templates where available
         // Common questions (equipmentKind=null) first, then kind-specific
-        const commonDbTemplates = await listAllQuestionTemplates("warehouse", null);
+        let commonDbTemplates = await listAllQuestionTemplates(templateEquipmentType, null);
+        if (commonDbTemplates.length === 0 && templateEquipmentType !== "warehouse") {
+          commonDbTemplates = await listAllQuestionTemplates("warehouse", null);
+        }
         const commonQuestions = commonDbTemplates
           .filter(t => t.stage === input.stage)
           .sort((a, b) => a.ord - b.ord)
@@ -2997,7 +3023,10 @@ export const appRouter = router({
         // For each kind, check if DB templates exist; fall back to static
         const kindQuestions: string[] = [];
         for (const kind of seenKinds) {
-          const kindDbTemplates = await listAllQuestionTemplates("warehouse", kind);
+          let kindDbTemplates = await listAllQuestionTemplates(templateEquipmentType, kind);
+          if (kindDbTemplates.length === 0 && templateEquipmentType !== "warehouse") {
+            kindDbTemplates = await listAllQuestionTemplates("warehouse", kind);
+          }
           const kindStageTemplates = kindDbTemplates
             .filter(t => t.stage === input.stage)
             .sort((a, b) => a.ord - b.ord)

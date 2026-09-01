@@ -27,7 +27,7 @@ import { toast } from "sonner";
 import { GripVertical, Pencil, Trash2, Plus, Check, X, Thermometer, Info } from "lucide-react";
 
 type Stage = "iq" | "oq";
-type EquipmentType = "refrigerator" | "freezer" | "auto-refrigerator" | "auto-refrigerator-kg" | "chamber" | "thermal-container" | "warehouse" | "warehouse-expert" | "other";
+type EquipmentType = "refrigerator" | "freezer" | "auto-refrigerator" | "auto-refrigerator-kg" | "chamber" | "thermal-container" | "warehouse" | "warehouse-kg" | "warehouse-expert" | "other";
 type EquipmentKind = "conditioner" | "ventilation" | "heat_curtain" | "chiller" | "fan_coil" | "other" | null;
 
 const EQUIPMENT_OPTIONS: { value: EquipmentType; label: string }[] = [
@@ -38,6 +38,7 @@ const EQUIPMENT_OPTIONS: { value: EquipmentType; label: string }[] = [
   { value: "chamber", label: "Холодильная камера" },
   { value: "thermal-container", label: "Термоконтейнер" },
   { value: "warehouse", label: "Помещение / зона хранения" },
+  { value: "warehouse-kg", label: "Помещение / зона хранения Кыргызстана" },
   { value: "warehouse-expert", label: "Помещение / зона хранения (экспертное)" },
   { value: "other", label: "Другое оборудование" },
 ];
@@ -165,7 +166,8 @@ function QuestionList({
   }
 
   // For warehouse kind-specific tabs: show info about static defaults when no custom templates
-  const isWarehouseKind = equipmentType === "warehouse" && equipmentKind !== null;
+  const isWarehouseType = equipmentType === "warehouse" || equipmentType === "warehouse-kg";
+  const isWarehouseKind = isWarehouseType && equipmentKind !== null;
   const showStaticDefaultsInfo = isWarehouseKind && questions.length === 0 && !adding;
 
   return (
@@ -202,7 +204,7 @@ function QuestionList({
       )}
 
       {/* General warehouse: show seed button when empty */}
-      {equipmentType === "warehouse" && equipmentKind === null && questions.length === 0 && !adding && (
+      {isWarehouseType && equipmentKind === null && questions.length === 0 && !adding && (
         <div className="py-8 text-center space-y-3">
           <p className="text-muted-foreground text-sm">
             Нет общих вопросов для помещений хранения.
@@ -371,7 +373,7 @@ function QuestionList({
   );
 }
 
-function WarehouseKindPanel({ kind }: { kind: EquipmentKind }) {
+function WarehouseKindPanel({ kind, equipmentType }: { kind: EquipmentKind; equipmentType: EquipmentType }) {
   const kindInfo = WAREHOUSE_KIND_TABS.find(k => k.value === kind)!;
 
   return (
@@ -398,7 +400,7 @@ function WarehouseKindPanel({ kind }: { kind: EquipmentKind }) {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <QuestionList stage="iq" equipmentType="warehouse" equipmentKind={kind} />
+              <QuestionList stage="iq" equipmentType={equipmentType} equipmentKind={kind} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -414,7 +416,7 @@ function WarehouseKindPanel({ kind }: { kind: EquipmentKind }) {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <QuestionList stage="oq" equipmentType="warehouse" equipmentKind={kind} />
+              <QuestionList stage="oq" equipmentType={equipmentType} equipmentKind={kind} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -456,7 +458,7 @@ export default function QuestionTemplates() {
       </div>
 
       {/* Warehouse: show equipment kind tabs */}
-      {equipmentType === "warehouse" ? (
+      {equipmentType === "warehouse" || equipmentType === "warehouse-kg" ? (
         <div className="space-y-4">
           {/* Kind tabs */}
           <div className="flex flex-wrap gap-2">
@@ -478,7 +480,7 @@ export default function QuestionTemplates() {
           </div>
 
           {/* Active kind panel */}
-          <WarehouseKindPanel kind={warehouseKind} />
+          <WarehouseKindPanel kind={warehouseKind} equipmentType={equipmentType} />
         </div>
       ) : (
         /* Standard equipment: IQ/OQ tabs */

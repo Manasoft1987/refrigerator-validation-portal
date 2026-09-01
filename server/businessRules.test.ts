@@ -30,6 +30,7 @@ describe("protocol number format", () => {
       [2026, 1, "refrigerator", "VAL-REF-2026-001"],
       [2026, 2, "freezer", "VAL-FRZ-2026-002"],
       [2026, 42, "warehouse", "VAL-STR-2026-042"],
+      [2026, 44, "warehouse-kg", "VAL-STR-KG-2026-044"],
       [2026, 43, "warehouse-expert", "VAL-STR-2026-043"],
       [2026, 7, "auto-refrigerator", "VAL-TRK-2026-007"],
       [2026, 8, "auto-refrigerator-kg", "VAL-TRK-KG-2026-008"],
@@ -49,6 +50,7 @@ describe("protocol number format", () => {
     expect(protocolObjectCode("refrigerator")).toBe("REF");
     expect(protocolObjectCode("freezer")).toBe("FRZ");
     expect(protocolObjectCode("warehouse")).toBe("STR");
+    expect(protocolObjectCode("warehouse-kg")).toBe("STR-KG");
     expect(protocolObjectCode("warehouse-expert")).toBe("STR");
     expect(protocolObjectCode("auto-refrigerator")).toBe("TRK");
     expect(protocolObjectCode("auto-refrigerator-kg")).toBe("TRK-KG");

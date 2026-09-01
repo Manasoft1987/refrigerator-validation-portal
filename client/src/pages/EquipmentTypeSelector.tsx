@@ -6,7 +6,7 @@ import { Snowflake, Truck, Package, Warehouse } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "wouter";
 
-type EquipmentType = "refrigerator" | "auto-refrigerator" | "auto-refrigerator-kg" | "chamber" | "thermal-container" | "warehouse" | "warehouse-expert" | "other";
+type EquipmentType = "refrigerator" | "auto-refrigerator" | "auto-refrigerator-kg" | "chamber" | "thermal-container" | "warehouse" | "warehouse-kg" | "warehouse-expert" | "other";
 
 export default function EquipmentTypeSelector() {
   const [, setLocation] = useLocation();
@@ -284,6 +284,46 @@ export default function EquipmentTypeSelector() {
                 variant="outline"
               >
                 Выбрать помещение
+              </Button>
+            </CardContent>
+          </Card>
+
+          {/* Kyrgyzstan Warehouse / Storage Zone Card */}
+          <Card
+            className={`relative overflow-hidden hover:shadow-lg transition-all cursor-pointer border-2 ${
+              selectedType === "warehouse-kg" ? "border-primary shadow-md" : "hover:border-primary/50"
+            }`}
+            onClick={() => handleSelectEquipment("warehouse-kg")}
+          >
+            <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-emerald-100 to-transparent opacity-50 rounded-full -mr-12 -mt-12" />
+            <CardHeader>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-3 bg-emerald-100 rounded-lg">
+                  <Warehouse className="h-6 w-6 text-emerald-600" />
+                </div>
+                <CardTitle className="text-xl">Помещение / зона Кыргызстана</CardTitle>
+              </div>
+              <CardDescription className="text-sm">
+                Склад или зона хранения с расчётом по методике ЕЭК №8 и нормативной базой ЕАЭС/Кыргызстана
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <ul className="space-y-2 text-sm text-muted-foreground">
+                <li className="flex items-start gap-2">
+                  <span className="text-primary mt-1">✓</span>
+                  <span>Нумерация VAL-STR-KG</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-primary mt-1">✓</span>
+                  <span>GDP ЕАЭС + Закон КР об обращении лекарственных средств</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-primary mt-1">✓</span>
+                  <span>Схема помещения, PV и приложения как у объекта хранения</span>
+                </li>
+              </ul>
+              <Button className="w-full mt-6" size="lg" variant="outline">
+                Выбрать помещение Кыргызстана
               </Button>
             </CardContent>
           </Card>
