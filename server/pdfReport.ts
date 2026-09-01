@@ -6067,19 +6067,19 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
   });
 
   // 6.11 IQ plan
-  doc.addPage();
+  ensureSpace(doc, 260);
   drawSubTitle(doc, en ? "6.11. IQ Plan — Installation Qualification" : "6.11. План IQ — Квалификация монтажа");
   drawStageBlocks(doc, input.iq, input);
   drawChecklistPlan(doc, input.iq.items, input);
 
   // 6.12 OQ plan
-  doc.addPage();
+  ensureSpace(doc, 260);
   drawSubTitle(doc, en ? "6.12. OQ Plan — Operational Qualification" : "6.12. План OQ — Квалификация функционирования");
   drawStageBlocks(doc, input.oq, input);
   drawChecklistPlan(doc, input.oq.items, input);
 
   // 6.13 PV plan
-  doc.addPage();
+  ensureSpace(doc, 260);
   drawSubTitle(doc, en ? "6.13. PV Plan — Performance Qualification" : "6.13. План PV — Эксплуатационная квалификация");
   drawStageBlocks(doc, input.pv, input);
   drawPVPlan(doc, input.pv, input);

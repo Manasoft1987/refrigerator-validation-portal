@@ -603,7 +603,7 @@ export default function SensorPlacementPage() {
           : "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a";
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+    <div className={`${isWarehouse ? "max-w-[90rem]" : "max-w-5xl"} mx-auto px-4 py-6 space-y-6`}>
       <div className="flex items-center gap-3">
         <Button
           variant="outline"

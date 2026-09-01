@@ -19,7 +19,7 @@ import { useState, useRef, useCallback, useEffect, useId } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RotateCw, Trash2, Plus, Move, Layers, X, ChevronRight } from "lucide-react";
+import { RotateCw, Trash2, Plus, Move, Layers, X, ChevronRight, Maximize2, Minimize2 } from "lucide-react";
 import { nanoid } from "nanoid";
 import {
   resizeFloorPlanRect,
@@ -734,6 +734,7 @@ export function FloorPlanEditor({
   const [panX, setPanX] = useState(0);
   const [panY, setPanY] = useState(0);
   const [isPanning, setIsPanning] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   // Live preview rect while drawing a new object by dragging (in room %)
   const [draftRect, setDraftRect] = useState<{ xPct: number; yPct: number; wPct: number; hPct: number } | null>(null);
 
@@ -746,6 +747,15 @@ export function FloorPlanEditor({
   // so the freshly created (and selected) object is not immediately deselected.
   const suppressCanvasClickRef = useRef(false);
   const externalLoggers = sensorLoggers.filter(logger => logger.role === "external");
+
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isFullscreen]);
 
   // Active drag/resize state stored in ref to avoid stale closure issues
   const dragState = useRef<{
@@ -1045,7 +1055,7 @@ export function FloorPlanEditor({
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-2">
+    <div className={`space-y-2 ${isFullscreen ? "fixed inset-0 z-50 overflow-auto bg-background p-4 sm:p-6" : ""}`}>
       {/* Toolbar */}
       {!readOnly && (
         <div className="border rounded-md bg-muted/30 p-2">
@@ -1107,7 +1117,7 @@ export function FloorPlanEditor({
         <svg
           ref={svgRef}
           viewBox={`0 0 ${SVG_W} ${SVG_H}`}
-          className="w-full max-w-3xl mx-auto bg-white rounded-md border"
+          className={`w-full max-w-none bg-white rounded-md border ${readOnly ? "mx-auto" : isFullscreen ? "h-[calc(100vh-210px)] min-h-[520px]" : "min-h-[560px] max-h-[980px]"}`}
           style={{ touchAction: "none", cursor: isPanning ? "grabbing" : (placingType ? "crosshair" : "default"), display: "block" }}
           onClick={(e) => {
             if (suppressCanvasClickRef.current) { suppressCanvasClickRef.current = false; return; }
@@ -1326,6 +1336,18 @@ export function FloorPlanEditor({
         </div>
 
         {/* Side panel for selected object — opens on double-click */}
+          {!readOnly && (
+            <div className="absolute top-12 right-2 bg-white rounded-md border shadow-sm p-1 z-20">
+              <button
+                onClick={() => setIsFullscreen(v => !v)}
+                className="px-2 py-1 text-xs font-medium hover:bg-gray-100 rounded transition-colors inline-flex items-center gap-1"
+                title={isFullscreen ? "Выйти из полноэкранного режима" : "Открыть схему на весь экран"}
+              >
+                {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+                {isFullscreen ? "Обычный" : "На весь экран"}
+              </button>
+            </div>
+          )}
         {selectedObj && panelOpen && !readOnly && (
           <SidePanel
             obj={selectedObj}
