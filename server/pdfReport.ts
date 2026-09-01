@@ -3491,6 +3491,7 @@ function drawAttachmentsSection(doc: PDFKit.PDFDocument, input: ReportInput) {
   const left = PAGE_MARGIN;
   const right = doc.page.width - PAGE_MARGIN;
   const contentW = right - left;
+  const pageBottom = () => doc.page.height - PAGE_MARGIN;
 
   attachments.forEach((attachment, index) => {
     if (index > 0) {
@@ -3499,6 +3500,59 @@ function drawAttachmentsSection(doc: PDFKit.PDFDocument, input: ReportInput) {
 
     const label = REPORT_ATTACHMENT_LABELS[String(attachment.kind ?? "")] || "Приложение";
     const title = (attachment.title || label).trim();
+    const isImage = (attachment.contentType ?? "").startsWith("image/") && attachment.imageBuffer;
+
+    if (isImage && attachment.imageBuffer) {
+      try {
+        const image = (doc as any).openImage(attachment.imageBuffer);
+        ensureSpace(doc, 300);
+        drawSubTitle(doc, `Приложение ${index + 1}. ${title}`);
+        doc
+          .font("body")
+          .fontSize(8.5)
+          .fillColor(MUTED)
+          .text(
+            [
+              `Тип: ${label}`,
+              `Файл: ${attachment.fileName || "—"}`,
+              attachment.comment?.trim() ? `Комментарий: ${attachment.comment.trim()}` : null,
+            ].filter(Boolean).join(" · "),
+            left,
+            doc.y,
+            { width: contentW, lineGap: 1.2 },
+          );
+        doc.moveDown(0.5);
+
+        const availableH = Math.max(220, pageBottom() - doc.y - 14);
+        const maxW = contentW - 16;
+        const maxH = Math.min(560, availableH);
+        const scale = Math.min(maxW / image.width, maxH / image.height, 2.4);
+        const imageW = image.width * scale;
+        const imageH = image.height * scale;
+        const x = left + (contentW - imageW) / 2;
+        const y = doc.y + 6;
+
+        doc.save();
+        doc
+          .roundedRect(x - 8, y - 8, imageW + 16, imageH + 16, 8)
+          .fill("#ffffff")
+          .strokeColor(BORDER)
+          .stroke();
+        doc.restore();
+        doc.image(attachment.imageBuffer, x, y, { width: imageW, height: imageH });
+        doc.y = y + imageH + 14;
+      } catch {
+        drawSubTitle(doc, `Приложение ${index + 1}. ${title}`);
+        doc
+          .fillColor(MUTED)
+          .font("body")
+          .fontSize(9)
+          .text("Изображение не удалось встроить в PDF, файл сохранён как приложение.", left, doc.y, { width: contentW });
+        doc.moveDown(0.6);
+      }
+      return;
+    }
+
     const metaRows = [
       ["Тип", label],
       ["Файл", attachment.fileName || "—"],
@@ -3510,36 +3564,7 @@ function drawAttachmentsSection(doc: PDFKit.PDFDocument, input: ReportInput) {
     ensureSpace(doc, 130);
     drawSubTitle(doc, `Приложение ${index + 1}. ${title}`);
     drawSimpleTable(doc, ["Поле", "Значение"], metaRows, [0.24, 0.76]);
-
-    const isImage = (attachment.contentType ?? "").startsWith("image/") && attachment.imageBuffer;
-    if (!isImage || !attachment.imageBuffer) {
-      doc.moveDown(0.2);
-      return;
-    }
-
-    try {
-      const image = (doc as any).openImage(attachment.imageBuffer);
-      const maxW = contentW;
-      const maxH = 430;
-      const scale = Math.min(maxW / image.width, maxH / image.height, 1);
-      const imageW = image.width * scale;
-      const imageH = image.height * scale;
-      ensureSpace(doc, imageH + 22);
-      const x = left + (contentW - imageW) / 2;
-      const y = doc.y + 4;
-      doc.save();
-      doc.roundedRect(x - 8, y - 8, imageW + 16, imageH + 16, 8).fill("#ffffff").strokeColor(BORDER).stroke();
-      doc.restore();
-      doc.image(attachment.imageBuffer, x, y, { width: imageW, height: imageH });
-      doc.y = y + imageH + 14;
-    } catch {
-      doc
-        .fillColor(MUTED)
-        .font("body")
-        .fontSize(9)
-        .text("Изображение не удалось встроить в PDF, файл сохранён как приложение.", left, doc.y, { width: contentW });
-      doc.moveDown(0.6);
-    }
+    doc.moveDown(0.2);
   });
 }
 
