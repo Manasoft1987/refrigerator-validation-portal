@@ -280,16 +280,14 @@ function ObjectShape({
   const HR = 7;  // visible handle radius (larger = easier to grab)
   const HIT = 15; // invisible hit-area radius around each handle
 
-  // Sensor point: render as circle with ID label + height below
+  // Sensor point: keep warehouse markers compact; full sensor IDs stay in tables.
   if (obj.type === "sensor_point") {
-    // Fixed radius: ~14px so 4 digits are readable but not huge
-    const r = 17;
+    const r = 13;
     const cx2 = x + w / 2;
     const cy2 = y + h / 2;
     const logger = sensorPointLogger(obj, sensorLoggers);
     const displayTitle = loggerName(logger) || String(obj.label || "?").trim() || "?";
-    const shortId = displayTitle.length > 7 ? displayTitle.slice(-7) : displayTitle;
-    const avgLabel = formatTemp(logger?.avgVal);
+    const shortId = shortSensorCode(displayTitle) || "?";
     const colors = sensorPointColors(logger, rangeMin, rangeMax, selected);
     const critical = criticalSensorIds(sensorLoggers);
     const isCriticalHot = !!logger && critical.hotId === logger.id;
@@ -324,14 +322,9 @@ function ObjectShape({
         )}
         <circle cx={cx2 - r + 5} cy={cy2 - r + 5} r={4.2} fill={colors.badge} opacity={0.95} />
         {selected && <circle cx={cx2} cy={cy2} r={r + 4} fill="none" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4 2" />}
-        <text x={cx2} y={cy2 + (avgLabel ? -1 : 4)} textAnchor="middle" fontSize={8} fontWeight={800} fill={colors.text} style={{ pointerEvents: "none", userSelect: "none" }}>
+        <text x={cx2} y={cy2 + 3} textAnchor="middle" fontSize={7.5} fontWeight={800} fill={colors.text} style={{ pointerEvents: "none", userSelect: "none" }}>
           {shortId}
         </text>
-        {avgLabel && (
-          <text x={cx2} y={cy2 + 9} textAnchor="middle" fontSize={7} fontWeight={700} fill={colors.text} style={{ pointerEvents: "none", userSelect: "none" }}>
-            {avgLabel}°C
-          </text>
-        )}
         {htLabel && (
           <text x={cx2} y={cy2 + r + 9} textAnchor="middle" fontSize={7} fill={colors.text} fontWeight={600} style={{ pointerEvents: "none", userSelect: "none" }}>
             {htLabel}

@@ -4923,7 +4923,6 @@ function drawWarehousePlanDiagram(
   const allFloorObjs = (input.floorPlanObjects ?? []);
   const floorObjs = allFloorObjs.filter((o: { type: string }) => o.type !== "sensor_point");
   const sensorPointObjs = allFloorObjs.filter((o: { type: string }) => o.type === "sensor_point");
-  const avgBySensor = buildSensorAverageMap(input);
   const criticalSensorTokens = buildWarehouseCriticalSensorTokens(input);
   if (floorObjs.length > 0) {
     // Object type visual properties
@@ -5077,7 +5076,7 @@ function drawWarehousePlanDiagram(
     const baseX = planX + (sp.xPct / 100) * drawW;
     const baseY = planY + (sp.yPct / 100) * drawH;
     const spR = Math.min((sp.widthPct / 100) * drawW, (sp.heightPct / 100) * drawH) / 2;
-    const r = Math.max(8, Math.min(16, spR));
+    const r = Math.max(7, Math.min(11, spR));
     const [x, y] = chooseWarehouseBubblePosition(baseX, baseY, r, markerPlanBox, occupiedSensorBubbles);
     occupiedSensorBubbles.push(warehouseMarkerBox(x, y, r + 4));
     return { sp, baseX, baseY, x, y, r };
@@ -5085,48 +5084,12 @@ function drawWarehousePlanDiagram(
   const sensorLabelBoxes: WarehouseMarkerBox[] = [...occupiedSensorBubbles];
   for (const display of sensorDisplays) {
     const { sp, baseX, baseY, x: spX, y: spY, r } = display;
-    const label = sensorLabelWithAverage(sp.label, avgBySensor);
-    const labelFont = label.includes("(") ? 6.2 : Math.max(5, Math.min(8, r * 0.7));
+    const label = shortSensorId(sp.label) || "D";
+    const labelFont = Math.max(5.5, Math.min(7, r * 0.65));
     const isCriticalHot = floorSensorPointMatchesTokens(sp, criticalSensorTokens.hot);
     const isCriticalCold = floorSensorPointMatchesTokens(sp, criticalSensorTokens.cold);
     doc.save();
     doc.font("bold").fontSize(labelFont);
-    const labelW = Math.min(78, Math.max(r * 2, doc.widthOfString(label) + 8));
-    const hasFloatingLabel = label.includes("(");
-    const labelH = 12;
-    const nearLeft = spX - planX < 42;
-    const nearRight = planX + drawW - spX < 42;
-    const nearTop = spY - planY < 30;
-    const nearBottom = planY + drawH - spY < 30;
-    const labelCandidates: Array<[number, number]> = [
-      ...(nearTop ? [[spX - labelW / 2, spY + r + 4] as [number, number]] : []),
-      ...(nearBottom ? [[spX - labelW / 2, spY - r - 14] as [number, number]] : []),
-      ...(nearLeft ? [[spX + r + 6, spY - labelH / 2] as [number, number]] : []),
-      ...(nearRight ? [[spX - labelW - r - 6, spY - labelH / 2] as [number, number]] : []),
-      [spX + r + 6, spY - labelH / 2],
-      [spX - labelW - r - 6, spY - labelH / 2],
-      [spX - labelW / 2, spY - r - 14],
-      [spX - labelW / 2, spY + r + 4],
-      [spX + r + 6, spY - r - 14],
-      [spX - labelW - r - 6, spY + r + 4],
-    ];
-    const labelBox = hasFloatingLabel
-      ? chooseWarehouseFloatingLabelPosition(
-        labelCandidates,
-        markerPlanBox,
-        sensorLabelBoxes,
-        labelW,
-        labelH,
-      )
-      : null;
-    if (labelBox) {
-      sensorLabelBoxes.push({
-        x: labelBox.x - 2,
-        y: labelBox.y - 2,
-        w: labelBox.w + 4,
-        h: labelBox.h + 4,
-      });
-    }
     const occupiedMarkerBoxes: WarehouseMarkerBox[] = [...sensorLabelBoxes];
     if (isCriticalHot) {
       doc.circle(spX, spY, r + 2.5).lineWidth(2.0).strokeColor("#ef4444").stroke();
@@ -5144,26 +5107,9 @@ function drawWarehousePlanDiagram(
       doc.fillColor("#0369a1").opacity(0.55).circle(baseX, baseY, 1.8).fill();
       doc.restore();
     }
-    if (hasFloatingLabel && labelBox) {
-      const labelAnchorX = Math.max(labelBox.x, Math.min(labelBox.x + labelBox.w, spX));
-      const labelAnchorY = spY < labelBox.y ? labelBox.y : labelBox.y + labelBox.h;
-      doc.save();
-      doc.strokeColor("#0ea5e9").lineWidth(0.45).opacity(0.45)
-        .moveTo(spX, spY)
-        .lineTo(labelAnchorX, labelAnchorY)
-        .stroke();
-      doc.restore();
-    }
     doc.fillColor("#7dd3fc").strokeColor("#0369a1").lineWidth(1.5).circle(spX, spY, r).fillAndStroke();
-    if (hasFloatingLabel) {
-      doc.fillColor("white").strokeColor("#0369a1").lineWidth(0.5)
-        .roundedRect(labelBox!.x, labelBox!.y, labelW, labelH, 3).fillAndStroke();
-      doc.fillColor("#0c4a6e")
-        .text(label, labelBox!.x + 3, labelBox!.y + 3, { width: labelW - 6, align: "center", lineBreak: false });
-    } else {
-      doc.fillColor("#0c4a6e")
-        .text(label, spX - r, spY - 4, { width: r * 2, align: "center" });
-    }
+    doc.fillColor("#0c4a6e")
+      .text(label, spX - r, spY - labelFont / 2 + 1, { width: r * 2, align: "center", lineBreak: false });
     if (isCriticalHot) {
       const [markerX, markerY] = chooseWarehouseCriticalMarkerPosition([
         [spX + r + 9, spY + r + 10],
