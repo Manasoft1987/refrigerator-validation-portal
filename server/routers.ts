@@ -1273,6 +1273,8 @@ export const appRouter = router({
             heightM: z.number().optional().default(0),
             rotation: z.number(),
             label: z.string(),
+            leaderEndXPct: z.number().nullable().optional(),
+            leaderEndYPct: z.number().nullable().optional(),
             sensors: z.array(z.object({
               sensorId: z.string(),
               heightFromFloor: z.number(),

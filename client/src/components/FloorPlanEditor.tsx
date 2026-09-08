@@ -51,6 +51,8 @@ export interface FloorPlanObject {
   rotation: number;   // 0 | 90 | 180 | 270
   label: string;
   sensors?: ObjectSensor[]; // up to 4 sensors attached to this object
+  leaderEndXPct?: number | null; // optional arrow tip X for exact sensor placement
+  leaderEndYPct?: number | null; // optional arrow tip Y for exact sensor placement
 }
 
 // ─── Object catalogue ─────────────────────────────────────────────────────────
@@ -216,6 +218,18 @@ function diamondPoints(cx: number, cy: number, size: number): string {
   return `${cx},${cy - size} ${cx + size},${cy} ${cx},${cy + size} ${cx - size},${cy}`;
 }
 
+function arrowHeadPoints(fromX: number, fromY: number, toX: number, toY: number, size: number): string {
+  const angle = Math.atan2(toY - fromY, toX - fromX);
+  const wing = size * 0.58;
+  const backX = toX - Math.cos(angle) * size;
+  const backY = toY - Math.sin(angle) * size;
+  return [
+    [toX, toY],
+    [backX + Math.sin(angle) * wing, backY - Math.cos(angle) * wing],
+    [backX - Math.sin(angle) * wing, backY + Math.cos(angle) * wing],
+  ].map(([x, y]) => `${x},${y}`).join(" ");
+}
+
 function sensorPointColors(
   logger: SensorLogger | undefined,
   rangeMin: number | null | undefined,
@@ -244,6 +258,7 @@ function ObjectShape({
   rangeMax,
   selected,
   onPointerDown,
+  onLeaderPointerDown,
   onResizePointerDown,
   onDoubleClick,
 }: {
@@ -256,6 +271,7 @@ function ObjectShape({
   rangeMax?: number | null;
   selected: boolean;
   onPointerDown: (id: string, e: React.PointerEvent) => void;
+  onLeaderPointerDown: (id: string, e: React.PointerEvent) => void;
   onResizePointerDown: (id: string, corner: ResizeCorner, e: React.PointerEvent) => void;
   onDoubleClick: (id: string) => void;
 }) {
@@ -293,12 +309,46 @@ function ObjectShape({
     const isCriticalHot = !!logger && critical.hotId === logger.id;
     const isCriticalCold = !!logger && critical.coldId === logger.id;
     const htLabel = (obj.heightM ?? 0) > 0 ? `${(obj.heightM as number).toFixed(1)}м` : "";
+    const hasLeader =
+      typeof obj.leaderEndXPct === "number" &&
+      typeof obj.leaderEndYPct === "number" &&
+      Number.isFinite(obj.leaderEndXPct) &&
+      Number.isFinite(obj.leaderEndYPct);
+    const leaderEndX = hasLeader ? planX + ((obj.leaderEndXPct as number) / 100) * drawW : cx2 + r + 12;
+    const leaderEndY = hasLeader ? planY + ((obj.leaderEndYPct as number) / 100) * drawH : cy2;
+    const leaderDx = leaderEndX - cx2;
+    const leaderDy = leaderEndY - cy2;
+    const leaderDist = Math.hypot(leaderDx, leaderDy);
+    const leaderUx = leaderDist > 0 ? leaderDx / leaderDist : 1;
+    const leaderUy = leaderDist > 0 ? leaderDy / leaderDist : 0;
+    const leaderStartX = cx2 + leaderUx * (r + 1.5);
+    const leaderStartY = cy2 + leaderUy * (r + 1.5);
+    const canDrawLeader = hasLeader && leaderDist > r + 7;
     return (
       <g
         style={{ cursor: "move", userSelect: "none" }}
         onPointerDown={e => { e.stopPropagation(); onPointerDown(obj.id, e); }}
         onDoubleClick={e => { e.stopPropagation(); onDoubleClick(obj.id); }}
       >
+        {canDrawLeader && (
+          <>
+            <line
+              x1={leaderStartX}
+              y1={leaderStartY}
+              x2={leaderEndX}
+              y2={leaderEndY}
+              stroke="#0f172a"
+              strokeWidth={1.4}
+              strokeLinecap="round"
+              style={{ pointerEvents: "none" }}
+            />
+            <polygon
+              points={arrowHeadPoints(leaderStartX, leaderStartY, leaderEndX, leaderEndY, 7)}
+              fill="#0f172a"
+              style={{ pointerEvents: "none" }}
+            />
+          </>
+        )}
         {isCriticalHot && <circle cx={cx2} cy={cy2} r={r + 2.6} fill="none" stroke="#ef4444" strokeWidth={2.2} />}
         {isCriticalCold && <circle cx={cx2} cy={cy2} r={r + (isCriticalHot ? 5.2 : 2.6)} fill="none" stroke="#2563eb" strokeWidth={2} />}
         <circle cx={cx2} cy={cy2} r={r} fill={colors.fill} stroke={colors.stroke} strokeWidth={selected ? 2.5 : 1.7} />
@@ -339,6 +389,16 @@ function ObjectShape({
           <text x={cx2} y={cy2 + r + 9} textAnchor="middle" fontSize={7} fill={colors.text} fontWeight={600} style={{ pointerEvents: "none", userSelect: "none" }}>
             {htLabel}
           </text>
+        )}
+        {selected && (
+          <g
+            style={{ cursor: "crosshair", pointerEvents: "all" }}
+            onPointerDown={ev => { ev.stopPropagation(); onLeaderPointerDown(obj.id, ev); }}
+          >
+            <circle cx={leaderEndX} cy={leaderEndY} r={9} fill="transparent" />
+            <circle cx={leaderEndX} cy={leaderEndY} r={4.6} fill="#f59e0b" stroke="white" strokeWidth={1.5} />
+            <title>{hasLeader ? "Перетащите наконечник стрелки к точному месту датчика" : "Потяните, чтобы добавить стрелку к точному месту датчика"}</title>
+          </g>
         )}
         {selected && (
           <>
@@ -532,6 +592,19 @@ function SidePanel({
         heightPct: clamp((v / (roomWidthM || 1)) * 100, MIN_SIZE_PCT, 100),
       });
     };
+    const hasLeader =
+      typeof obj.leaderEndXPct === "number" &&
+      typeof obj.leaderEndYPct === "number" &&
+      Number.isFinite(obj.leaderEndXPct) &&
+      Number.isFinite(obj.leaderEndYPct);
+    const addLeader = () => {
+      const cxPct = obj.xPct + obj.widthPct / 2;
+      const cyPct = obj.yPct + obj.heightPct / 2;
+      onUpdate({
+        leaderEndXPct: clamp(cxPct + 4, 0, 100),
+        leaderEndYPct: clamp(cyPct + 4, 0, 100),
+      });
+    };
     return (
       <div className="absolute top-0 right-0 w-52 bg-white border rounded-lg shadow-lg p-3 space-y-2.5 z-10 text-xs">
         <div className="flex items-center justify-between">
@@ -576,6 +649,16 @@ function SidePanel({
             onKeyDown={e => { if (e.key === "Enter") handleMarkerDiameter((e.target as HTMLInputElement).value); }}
           />
         </div>
+        <div className="rounded-md border bg-muted/30 p-2 text-[11px] leading-snug text-muted-foreground">
+          Для точного места: выделите датчик и потяните оранжевую точку — появится стрелка-указатель.
+        </div>
+        <Button
+          variant="outline" size="sm"
+          className="w-full h-7 text-[11px]"
+          onClick={hasLeader ? () => onUpdate({ leaderEndXPct: null, leaderEndYPct: null }) : addLeader}
+        >
+          {hasLeader ? "Убрать стрелку" : "Добавить стрелку"}
+        </Button>
         <Button
           variant="outline" size="sm"
           className="w-full h-7 text-[11px] text-destructive hover:text-destructive bg-background"
@@ -719,7 +802,8 @@ function SidePanel({
 
 type DragMode =
   | { kind: "move"; id: string }
-  | { kind: "resize"; id: string; corner: ResizeCorner };
+  | { kind: "resize"; id: string; corner: ResizeCorner }
+  | { kind: "leader"; id: string };
 
 export interface FloorPlanEditorProps {
   objects: FloorPlanObject[];
@@ -885,6 +969,29 @@ export function FloorPlanEditor({
     };
   }, [readOnly, objects, clientToCanvasSvg]);
 
+  const handleLeaderPointerDown = useCallback((id: string, e: React.PointerEvent) => {
+    if (readOnly) return;
+    e.preventDefault();
+    (e.target as Element).setPointerCapture(e.pointerId);
+    setSelectedId(id);
+    const { x, y } = clientToCanvasSvg(e.clientX, e.clientY);
+    const obj = objects.find(o => o.id === id);
+    if (!obj) return;
+    const point = svgToRoomPct(x, y);
+    const stepX = gridStep("x");
+    const stepY = gridStep("y");
+    onChange(objects.map(o => o.id === id
+      ? { ...o, leaderEndXPct: snapVal(point.x, stepX), leaderEndYPct: snapVal(point.y, stepY) }
+      : o,
+    ));
+    dragState.current = {
+      mode: { kind: "leader", id },
+      startSvgX: x,
+      startSvgY: y,
+      snapshot: { ...obj },
+    };
+  }, [readOnly, objects, clientToCanvasSvg, svgToRoomPct, gridStep, onChange]);
+
   // ── Global pointer move / up ───────────────────────────────────────────────
 
   useEffect(() => {
@@ -916,7 +1023,12 @@ export function FloorPlanEditor({
       const stepX = gridStep("x");
       const stepY = gridStep("y");
 
-      if (ds.mode.kind === "move") {
+      if (ds.mode.kind === "leader") {
+        const point = svgToRoomPct(svgX, svgY);
+        const newX = clamp(snapVal(point.x, stepX), 0, 100);
+        const newY = clamp(snapVal(point.y, stepY), 0, 100);
+        onChange(objects.map(o => o.id === ds.mode.id ? { ...o, leaderEndXPct: newX, leaderEndYPct: newY } : o));
+      } else if (ds.mode.kind === "move") {
         // Snap position to the grid, keep object fully inside the room
         const newX = clamp(snapVal(snap.xPct + dxPct, stepX), 0, Math.max(0, 100 - snap.widthPct));
         const newY = clamp(snapVal(snap.yPct + dyPct, stepY), 0, Math.max(0, 100 - snap.heightPct));
@@ -1298,6 +1410,7 @@ export function FloorPlanEditor({
                 rangeMax={rangeMax}
                 selected={selectedId === obj.id}
                 onPointerDown={handleObjectPointerDown}
+                onLeaderPointerDown={handleLeaderPointerDown}
                 onResizePointerDown={handleResizePointerDown}
                 onDoubleClick={(id) => { setSelectedId(id); setPanelOpen(true); }}
               />

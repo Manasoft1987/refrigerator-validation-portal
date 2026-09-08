@@ -304,6 +304,8 @@ export type ReportInput = {
     rotation: number;
     label: string;
     sensors?: Array<{ sensorId: string; heightFromFloor: number }> | null;
+    leaderEndXPct?: number | null;
+    leaderEndYPct?: number | null;
   }> | null;
   /**
    * Saved PNG screenshot of the FloorPlanEditor (stored in S3).
@@ -1054,6 +1056,29 @@ function drawPdfDiamond(doc: PDFKit.PDFDocument, cx: number, cy: number, size: n
   ];
   doc.save();
   doc.fillColor(color).strokeColor("#ffffff").lineWidth(0.9).polygon(...points).fillAndStroke();
+  doc.restore();
+}
+
+function drawPdfArrowHead(
+  doc: PDFKit.PDFDocument,
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  size: number,
+  color: string,
+): void {
+  const angle = Math.atan2(toY - fromY, toX - fromX);
+  const wing = size * 0.58;
+  const backX = toX - Math.cos(angle) * size;
+  const backY = toY - Math.sin(angle) * size;
+  const points: [number, number][] = [
+    [toX, toY],
+    [backX + Math.sin(angle) * wing, backY - Math.cos(angle) * wing],
+    [backX - Math.sin(angle) * wing, backY + Math.cos(angle) * wing],
+  ];
+  doc.save();
+  doc.fillColor(color).strokeColor(color).lineWidth(0.5).polygon(...points).fillAndStroke();
   doc.restore();
 }
 
@@ -5215,14 +5240,21 @@ function drawWarehousePlanDiagram(
     // Render the PDF marker at the same visual center as the portal.
     const baseX = planX + ((sp.xPct + sp.widthPct / 2) / 100) * drawW;
     const baseY = planY + ((sp.yPct + sp.heightPct / 2) / 100) * drawH;
+    const hasLeader =
+      typeof sp.leaderEndXPct === "number" &&
+      typeof sp.leaderEndYPct === "number" &&
+      Number.isFinite(sp.leaderEndXPct) &&
+      Number.isFinite(sp.leaderEndYPct);
+    const leaderEndX = hasLeader ? planX + ((sp.leaderEndXPct as number) / 100) * drawW : null;
+    const leaderEndY = hasLeader ? planY + ((sp.leaderEndYPct as number) / 100) * drawH : null;
     const r = uniformSensorMarkerRadius;
     const markerBox = warehouseMarkerBox(baseX, baseY, r + 4);
     occupiedSensorBubbles.push(markerBox);
-    return { sp, baseX, baseY, x: baseX, y: baseY, r, markerBox };
+    return { sp, baseX, baseY, x: baseX, y: baseY, r, markerBox, leaderEndX, leaderEndY };
   });
   const sensorLabelBoxes: WarehouseMarkerBox[] = [...occupiedSensorBubbles];
   for (const display of sensorDisplays) {
-    const { sp, baseX, baseY, x: spX, y: spY, r, markerBox } = display;
+    const { sp, baseX, baseY, x: spX, y: spY, r, markerBox, leaderEndX, leaderEndY } = display;
     const label = shortSensorId(sp.label) || "D";
     const directSensorKey = normalizeSensorNumber(sp.label);
     const avgLabel = showAverageLabels
@@ -5253,6 +5285,24 @@ function drawWarehousePlanDiagram(
         .stroke();
       doc.fillColor("#0369a1").opacity(0.55).circle(baseX, baseY, 1.8).fill();
       doc.restore();
+    }
+    if (leaderEndX !== null && leaderEndY !== null) {
+      const dx = leaderEndX - spX;
+      const dy = leaderEndY - spY;
+      const dist = Math.hypot(dx, dy);
+      if (dist > r + 7) {
+        const ux = dx / dist;
+        const uy = dy / dist;
+        const startX = spX + ux * (r + 1.5);
+        const startY = spY + uy * (r + 1.5);
+        doc.save();
+        doc.strokeColor("#0f172a").lineWidth(1.0)
+          .moveTo(startX, startY)
+          .lineTo(leaderEndX, leaderEndY)
+          .stroke();
+        doc.restore();
+        drawPdfArrowHead(doc, startX, startY, leaderEndX, leaderEndY, 5.2, "#0f172a");
+      }
     }
     doc.fillColor("#7dd3fc").strokeColor("#0369a1").lineWidth(1.5).circle(spX, spY, r).fillAndStroke();
     doc.fillColor("#0c4a6e")
