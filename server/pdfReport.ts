@@ -1432,6 +1432,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
       // Warehouse: single floor plan diagram only (no ISPE grid schema)
       drawWarehousePlanDiagram(doc, input, false, isEnglishWarehouse(input) ? "Diagram. Sensor placement on the storage area plan (ID and average temperature)" : "Схема. Расстановка датчиков на плане помещения (ID и средняя температура)", {
         showAverageLabels: true,
+        showPlacementTable: false,
       });
     } else {
       // Non-warehouse: Schema 1/2 describe planned/actual placement only.
@@ -4934,7 +4935,7 @@ function drawWarehousePlanDiagram(
   const showAverageLabels = options.showAverageLabels ?? false;
   const showSensorLabels = options.showSensorLabels ?? true;
   const showHeightLabels = options.showHeightLabels ?? false;
-  const showPlacementTable = options.showPlacementTable ?? true;
+  const showPlacementTable = options.showPlacementTable ?? false;
   const showCaption = options.showCaption ?? true;
   const gi = input.generalInfo;
   const isEaeuWarehouse = isWarehouseEaeu(getReportEquipmentType(input));
