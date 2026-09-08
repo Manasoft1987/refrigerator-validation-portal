@@ -1305,6 +1305,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     drawSectionTitle(doc, "4. План PV — Эксплуатационная квалификация");
     drawStageBlocks(doc, input.pv, input);
     drawPVPlan(doc, input.pv, input);
+    drawPVPlacementPlan(doc, input);
     doc.addPage();
     drawSectionTitle(doc, "5. Подписи к Протоколу");
     drawSignaturesBlock(doc, getSignatoriesPart1(input), "Настоящий протокол квалификации рассмотрен и утверждён:", input);
@@ -1358,8 +1359,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
       // Non-warehouse: Schema 1/2 describe planned/actual placement only.
       // Hot/cold critical markers are PV result interpretation and are shown
       // on the final temperature map instead of the placement diagrams.
-      if (isReeferLike(eqType)) {
-        if (useRiskOrientedReeferPlacement) {
+      if (isReeferLike(eqType) && useRiskOrientedReeferPlacement) {
           drawReeferTruckDiagram3D(
             doc,
             input.pvLoggers as DiagramSensor[],
@@ -1373,18 +1373,6 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
             "truck",
             { showEmptyReferencePositions: false, showReferenceLegend: false, coolingUnitPositions: input.coolingUnitPositions },
           );
-        } else {
-          const referenceTitle = eqType === "chamber"
-            ? "Схема 1. Эталонные позиции размещения регистраторов в холодильной камере"
-            : eqType === "thermal-container"
-              ? "Схема 1. Эталонные позиции размещения регистраторов в термоконтейнере"
-              : "Схема 1. Эталонные позиции ISPE (C1–C8, W1–W4, V1–V3)";
-          drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, true, referenceTitle, null, null, eqType === "chamber" || eqType === "thermal-container" ? "chamber" : "truck");
-        }
-      } else {
-        doc.addPage();
-        const shelfObjectName = eqType === "freezer" ? "\u043c\u043e\u0440\u043e\u0437\u0438\u043b\u044c\u043d\u0438\u043a\u0430" : "\u0445\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0438\u043a\u0430";
-        drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, null, null, "\u0421\u0445\u0435\u043c\u0430 1. \u041f\u043e\u0437\u0438\u0446\u0438\u0438 \u0440\u0430\u0437\u043c\u0435\u0449\u0435\u043d\u0438\u044f \u0434\u0430\u0442\u0447\u0438\u043a\u043e\u0432 \u043f\u043e \u043f\u043e\u043b\u043a\u0430\u043c " + shelfObjectName, "position", input.refrigeratorDrawerCount ?? 2, input.refrigeratorLevelCount ?? 7, null, null);
       }
       // Schema 2: with serial numbers. For reduced auto-refrigerator studies
       // the first diagram is already the actual risk-based placement, so avoid
@@ -1437,7 +1425,6 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
         coldLabel,
       });
     }
-    drawSensorPlacementAnalysis(doc, input.pvLoggers as DiagramSensor[], input);
     if (isWarehouseEaeu(eqType)) {
       drawWarehouseAnnex1(doc, input);
       drawWarehouseAnnex2(doc, input);
@@ -3354,6 +3341,64 @@ function drawChecklistPlan(doc: PDFKit.PDFDocument, items: ChecklistItem[], inpu
     doc.y = ry + rowH;
   });
   doc.moveDown(0.4);
+}
+
+function drawPVPlacementPlan(doc: PDFKit.PDFDocument, input: ReportInput) {
+  const sensors = input.pvLoggers ?? [];
+  if (sensors.length === 0) return;
+
+  const eqType = getReportEquipmentType(input);
+  const en = isEnglishWarehouse(input);
+  doc.addPage();
+  drawSectionTitle(
+    doc,
+    en
+      ? "4.1. PV sensor placement plan and risk assessment"
+      : "4.1. План расстановки датчиков и оценка рисков",
+  );
+
+  if (isWarehouseLike(eqType)) {
+    drawWarehousePlanDiagram(
+      doc,
+      input,
+      true,
+      en
+        ? "Diagram 1. Planned logger positions on the storage area plan"
+        : "Схема 1. Планируемые позиции регистраторов на плане помещения",
+    );
+  } else if (isReeferLike(eqType)) {
+    drawReeferTruckDiagram3D(
+      doc,
+      sensors as DiagramSensor[],
+      PAGE_MARGIN,
+      null,
+      null,
+      true,
+      en
+        ? "Diagram 1. Reference logger positions in the cargo body"
+        : "Схема 1. Эталонные позиции размещения регистраторов в грузовом отсеке",
+      null,
+      null,
+      eqType === "chamber" || eqType === "thermal-container" ? "chamber" : "truck",
+    );
+  } else {
+    const shelfObjectName = eqType === "freezer" ? "морозильника" : "холодильника";
+    drawRefrigeratorDiagram(
+      doc,
+      sensors as DiagramSensor[],
+      PAGE_MARGIN,
+      null,
+      null,
+      `Схема 1. Планируемые позиции размещения датчиков по полкам ${shelfObjectName}`,
+      "position",
+      input.refrigeratorDrawerCount ?? 2,
+      input.refrigeratorLevelCount ?? 7,
+      null,
+      null,
+    );
+  }
+
+  drawSensorPlacementAnalysis(doc, sensors as DiagramSensor[], input);
 }
 
 function drawPVPlan(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: ReportInput) {
