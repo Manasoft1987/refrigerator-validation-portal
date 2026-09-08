@@ -23,7 +23,7 @@ import {
   type EventMarker,
 } from "./charts";
 import { calculateAllOperationalMetrics } from "./operationalMetrics";
-import { calculateCriticalLoggerIndices } from "./pvCriticalPoints";
+import { calculateCriticalLoggerIndices, criticalLoggerScore } from "./pvCriticalPoints";
 import {
   computeWarehouseSensorCount,
   isAutoRefrigeratorLike,
@@ -2460,6 +2460,103 @@ function drawPVExpertSummary(doc: PDFKit.PDFDocument, input: ReportInput) {
   drawPVResultInterpretation(doc, input);
 }
 
+const CRITICAL_SCORE_LABELS: Record<"hot" | "cold", string[]> = {
+  hot: [
+    "наличие превышений",
+    "суммарная длительность превышений",
+    "наиболее выраженное превышение",
+    "Max",
+    "MKT",
+    "Avg",
+  ],
+  cold: [
+    "наличие понижений",
+    "суммарная длительность понижений",
+    "наиболее выраженное понижение",
+    "Min",
+    "Avg",
+  ],
+};
+
+function compareCriticalScoreTuples(a: number[], b: number[]): number {
+  const length = Math.max(a.length, b.length);
+  for (let i = 0; i < length; i++) {
+    const diff = (a[i] ?? 0) - (b[i] ?? 0);
+    if (Math.abs(diff) > 1e-9) return diff;
+  }
+  return 0;
+}
+
+function criticalDeviationEvidence(logger: LoggerSummary, kind: "hot" | "cold"): string {
+  const relevant = (logger.deviations ?? []).filter(dev => kind === "hot" ? dev.type === "high" : dev.type === "low");
+  if (relevant.length === 0) {
+    return kind === "hot"
+      ? "превышений верхней границы не зарегистрировано"
+      : "понижений ниже нижней границы не зарегистрировано";
+  }
+  const totalDuration = relevant.reduce((sum, dev) => sum + Math.max(0, dev.durationMs), 0);
+  const worst = kind === "hot"
+    ? relevant.reduce((max, dev) => Math.max(max, dev.value), -Infinity)
+    : relevant.reduce((min, dev) => Math.min(min, dev.value), Infinity);
+  return `${relevant.length} откл.; суммарно ${fmtDuration(totalDuration)}; худшее значение ${fmtTempMetric(worst)}`;
+}
+
+function criticalScoreFactorValue(logger: LoggerSummary, kind: "hot" | "cold", factorIndex: number): string {
+  if (factorIndex === 0) {
+    const count = (logger.deviations ?? []).filter(dev => kind === "hot" ? dev.type === "high" : dev.type === "low").length;
+    return count > 0 ? "есть" : "нет";
+  }
+  if (factorIndex === 1) {
+    const totalDuration = (logger.deviations ?? [])
+      .filter(dev => kind === "hot" ? dev.type === "high" : dev.type === "low")
+      .reduce((sum, dev) => sum + Math.max(0, dev.durationMs), 0);
+    return fmtDuration(totalDuration);
+  }
+  if (factorIndex === 2) {
+    const relevant = (logger.deviations ?? []).filter(dev => kind === "hot" ? dev.type === "high" : dev.type === "low");
+    if (relevant.length === 0) return "—";
+    const worst = kind === "hot"
+      ? relevant.reduce((max, dev) => Math.max(max, dev.value), -Infinity)
+      : relevant.reduce((min, dev) => Math.min(min, dev.value), Infinity);
+    return fmtTempMetric(worst);
+  }
+  if (kind === "hot") {
+    if (factorIndex === 3) return fmtTempMetric(logger.max);
+    if (factorIndex === 4) return fmtTempMetric(logger.mkt);
+    if (factorIndex === 5) return fmtTempMetric(logger.avg);
+  } else {
+    if (factorIndex === 3) return fmtTempMetric(logger.min);
+    if (factorIndex === 4) return fmtTempMetric(logger.avg);
+  }
+  return "—";
+}
+
+function criticalSelectionEvidence(input: ReportInput, logger: LoggerSummary, kind: "hot" | "cold"): string {
+  const ranked = input.pv.loggers
+    .map((item, index) => ({ item, index, score: criticalLoggerScore(item, kind) }))
+    .filter(entry => entry.item.role === "internal" && [entry.item.min, entry.item.max, entry.item.avg, entry.item.mkt].some(value => finiteNumberOrNull(value) !== null))
+    .sort((a, b) => compareCriticalScoreTuples(b.score, a.score));
+  const currentIndex = input.pv.loggers.indexOf(logger);
+  const rankIndex = ranked.findIndex(entry => entry.index === currentIndex);
+  const next = ranked.find(entry => entry.index !== currentIndex);
+  const metricSummary = kind === "hot"
+    ? `Max ${fmtTempMetric(logger.max)}, MKT ${fmtTempMetric(logger.mkt)}, Avg ${fmtTempMetric(logger.avg)}`
+    : `Min ${fmtTempMetric(logger.min)}, Avg ${fmtTempMetric(logger.avg)}`;
+  const rankText = rankIndex >= 0 ? `Ранг ${rankIndex + 1} из ${ranked.length}` : "Выбран";
+  if (!next) {
+    return `${rankText} по комплексному скору: ${criticalDeviationEvidence(logger, kind)}; ${metricSummary}.`;
+  }
+
+  const firstDiffIndex = logger
+    ? criticalLoggerScore(logger, kind).findIndex((value, index) => Math.abs(value - (next.score[index] ?? 0)) > 1e-9)
+    : -1;
+  const firstDiffText = firstDiffIndex >= 0
+    ? `Первый отличающийся фактор с ближайшей альтернативой ${shortLoggerDisplay(next.item)}: ${CRITICAL_SCORE_LABELS[kind][firstDiffIndex]} (${criticalScoreFactorValue(logger, kind, firstDiffIndex)} против ${criticalScoreFactorValue(next.item, kind, firstDiffIndex)}).`
+    : `Ближайшая альтернатива: ${shortLoggerDisplay(next.item)}; различия по расчетному скору минимальны.`;
+
+  return `${rankText} по комплексному скору: ${criticalDeviationEvidence(logger, kind)}; ${metricSummary}. ${firstDiffText}`;
+}
+
 function drawPVCriticalPointsSummary(doc: PDFKit.PDFDocument, input: ReportInput) {
   const pv = input.pv;
   const internal = pv.loggers.filter(logger => logger.role === "internal" && finiteNumberOrNull(logger.avg) !== null);
@@ -2477,7 +2574,7 @@ function drawPVCriticalPointsSummary(doc: PDFKit.PDFDocument, input: ReportInput
   const critical = calculateCriticalLoggerIndices(pv.loggers);
   drawPVInfoBox(
     doc,
-    "Критические точки PV определяются риск-ориентированно, а не только по среднему значению. Приоритет для горячей точки: отклонения выше диапазона, их суммарная длительность и тяжесть, затем Max, MKT и Avg. Приоритет для холодной точки: отклонения ниже диапазона, их суммарная длительность и тяжесть, затем Min и Avg. Поэтому логгер с максимальным Avg может не быть горячей точкой, если другой логгер имеет более высокий Max или более высокий температурный риск.",
+    "Критические точки PV определяются по комплексной оценке PV, риск-ориентированно, а не по одному минимальному или максимальному значению. Для каждого внутреннего логгера формируется ранжирующий набор факторов. Для горячей точки последовательно учитываются: наличие превышений верхней границы, суммарная длительность превышений, наиболее выраженное превышение, Max, MKT и Avg. Для холодной точки последовательно учитываются: наличие понижений ниже нижней границы, суммарная длительность понижений, наиболее выраженное понижение, Min и Avg. Сравнение выполняется по первому отличающемуся фактору в указанном порядке; поэтому логгер с самым высоким Avg не обязательно является горячей точкой, если другой логгер имеет более значимый температурный риск.",
     { bg: "#f8fafc", border: BORDER, color: ACCENT },
   );
   const rows: string[][] = [];
@@ -2491,9 +2588,7 @@ function drawPVCriticalPointsSummary(doc: PDFKit.PDFDocument, input: ReportInput
       placementLabel(input, logger),
       `${fmtTempMetric(logger.min)} / ${fmtTempMetric(logger.avg)} / ${fmtTempMetric(logger.max)}`,
       fmtTempMetric(logger.mkt),
-      kind === "hot"
-        ? "наибольший тепловой риск по комплексной оценке PV"
-        : "наибольший холодовой риск по комплексной оценке PV",
+      criticalSelectionEvidence(input, logger, kind),
     ]);
   };
 
@@ -2507,9 +2602,9 @@ function drawPVCriticalPointsSummary(doc: PDFKit.PDFDocument, input: ReportInput
 
   drawSimpleTable(
     doc,
-    ["Точка", "Логгер", "Позиция", "Min / Avg / Max", "MKT", "Основание"],
+    ["Точка", "Логгер", "Позиция", "Min / Avg / Max", "MKT", "Доказательство выбора"],
     rows,
-    [0.16, 0.11, 0.13, 0.22, 0.11, 0.27],
+    [0.13, 0.10, 0.12, 0.20, 0.09, 0.36],
   );
 }
 
