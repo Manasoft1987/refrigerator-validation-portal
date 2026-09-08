@@ -1095,6 +1095,30 @@ function drawRefrigeratorDiagramPortalStyle(
     placements.set(placementCode(placement.shelf, placement.zone), { sensor, idx });
   });
 
+  // Schema 1 is a placement reference, so its T-numbers must describe the
+  // visual order of positions rather than the import order of the loggers.
+  // Keep the order stable: shelf top-to-bottom, then position left-to-right.
+  const positionNumberBySensorId = new Map<number, number>();
+  if (badgeMode === "position") {
+    const zoneOrder = new Map(zoneEntries.map((zone, index) => [zone.code, index]));
+    const orderedPlacements = Array.from(placements.entries()).sort(([keyA], [keyB]) => {
+      const parsedA = keyA.match(/^RF:S(\d+):(BL|BC|BR|FL|FC|FR)$/);
+      const parsedB = keyB.match(/^RF:S(\d+):(BL|BC|BR|FL|FC|FR)$/);
+      if (!parsedA || !parsedB) return 0;
+      const shelfDelta = Number(parsedA[1]) - Number(parsedB[1]);
+      if (shelfDelta !== 0) return shelfDelta;
+      const pointA = project(Number(parsedA[1]), parsedA[2] as FridgeZoneCode);
+      const pointB = project(Number(parsedB[1]), parsedB[2] as FridgeZoneCode);
+      const xDelta = pointA.x - pointB.x;
+      if (Math.abs(xDelta) > 0.001) return xDelta;
+      return (zoneOrder.get(parsedA[2] as FridgeZoneCode) ?? 0)
+        - (zoneOrder.get(parsedB[2] as FridgeZoneCode) ?? 0);
+    });
+    orderedPlacements.forEach(([, entry], index) => {
+      positionNumberBySensorId.set(entry.sensor.id, index + 1);
+    });
+  }
+
   const titleH = title ? 34 : 0;
   const availableW = doc.page.width - pageMargin * 2;
   const usableH = Math.max(240, doc.page.height - doc.page.margins.bottom - doc.y - titleH - 8);
@@ -1245,8 +1269,11 @@ function drawRefrigeratorDiagramPortalStyle(
     const match = key.match(/^RF:S(\d+):(BL|BC|BR|FL|FC|FR)$/);
     if (!match) return;
     const p = project(Number(match[1]), match[2] as FridgeZoneCode);
-    const avg = formatSensorAvg(sensor.avg);
-    const label = badgeMode === "position" ? `T${idx + 1}` : refrigeratorBadgeLabel(sensor);
+    // Temperatures belong to Schema 2. Schema 1 only identifies the planned
+    // placement points and therefore shows T1, T2, ... without averages.
+    const avg = badgeMode === "position" ? "" : formatSensorAvg(sensor.avg);
+    const positionNumber = positionNumberBySensorId.get(sensor.id) ?? idx + 1;
+    const label = badgeMode === "position" ? `T${positionNumber}` : refrigeratorBadgeLabel(sensor);
     const isCriticalHot = sensorMatchesCriticalLabel(sensor, hotLabel);
     const isCriticalCold = sensorMatchesCriticalLabel(sensor, coldLabel);
     const isCritical = isCriticalHot || isCriticalCold;
@@ -1319,7 +1346,7 @@ function drawRefrigeratorDiagramPortalStyle(
     doc.undash();
     doc.restore();
     drawCircle(cab.x + cab.w + 112, y, 15, color, "#ffffff", 2);
-    text(refrigeratorBadgeLabel(sensor), cab.x + cab.w + 97, y - 4.7, 30, 8, "#ffffff", "bold", "center");
+    text(badgeMode === "position" ? "внешн." : refrigeratorBadgeLabel(sensor), cab.x + cab.w + 97, y - 4.7, 30, 8, "#ffffff", "bold", "center");
     text("внешний", cab.x + cab.w + 136, y - 5, 70, 11, "#64748b");
   });
 
