@@ -75,8 +75,9 @@ export default function ChecklistStep({
         existingQ.data
           .slice()
           .sort((a: any, b: any) => a.questionIndex - b.questionIndex)
-          .map((i: any) => ({
-            questionIndex: i.questionIndex,
+          .filter((i: any) => String(i.questionText ?? "").trim().length > 0)
+          .map((i: any, index: number) => ({
+            questionIndex: index,
             questionText: i.questionText,
             answer: (i.answer as Answer) || "unset",
             comment: i.comment,
@@ -84,12 +85,14 @@ export default function ChecklistStep({
       );
     } else {
       setItems(
-        questionSource.map((q: string, idx: number) => ({
-          questionIndex: idx,
-          questionText: q,
-          answer: "unset",
-          comment: null,
-        })),
+        questionSource
+          .filter((q: string) => q.trim().length > 0)
+          .map((q: string, idx: number) => ({
+            questionIndex: idx,
+            questionText: q,
+            answer: "unset",
+            comment: null,
+          })),
       );
     }
   }, [existingQ.data, questionSource]);
@@ -137,6 +140,21 @@ export default function ChecklistStep({
     setItems(prev => prev.filter((_, idx) => idx !== i).map((it, idx) => ({ ...it, questionIndex: idx })));
   const markAllYes = () =>
     setItems(prev => prev.map(it => ({ ...it, answer: "yes" })));
+
+  // Empty rows can be created while editing a checklist. Do not persist them:
+  // otherwise the PDF contains numbered but blank questions after a user clears
+  // or removes a question.
+  const getPersistableItems = () =>
+    items
+      .filter(item => item.questionText.trim().length > 0)
+      .map((item, index) => ({ ...item, questionIndex: index }));
+  const saveItems = () => {
+    const persistableItems = getPersistableItems();
+    if (persistableItems.length !== items.length) {
+      setItems(persistableItems);
+    }
+    save.mutate({ protocolId, stage, warehouseEquipmentId: effectiveEquipmentId, items: persistableItems });
+  };
 
   const stageLabel = stage === "iq" ? "Квалификация монтажа (IQ)" : "Квалификация функционирования (OQ)";
   const title = equipmentLabel ? `${stageLabel} — ${equipmentLabel}` : stageLabel;
@@ -282,13 +300,13 @@ export default function ChecklistStep({
             variant="outline"
             className="bg-background"
             disabled={save.isPending}
-            onClick={() => save.mutate({ protocolId, stage, warehouseEquipmentId: effectiveEquipmentId, items })}
+            onClick={saveItems}
           >
             <Save className="h-4 w-4" /> Сохранить
           </Button>
           <Button
             disabled={save.isPending || verdictPreview === "pending" || items.length === 0}
-            onClick={() => save.mutate({ protocolId, stage, warehouseEquipmentId: effectiveEquipmentId, items })}
+            onClick={saveItems}
           >
             {stage === "iq" ? "Далее к OQ" : "Далее к PV"} <ArrowRight className="h-4 w-4" />
           </Button>

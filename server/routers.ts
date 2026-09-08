@@ -1176,12 +1176,18 @@ export const appRouter = router({
       )
       .mutation(async ({ ctx, input }) => {
         await assertCanEditProtocol(ctx.user.id, input.protocolId);
-        await saveChecklist(input.protocolId, input.stage, input.items, input.warehouseEquipmentId);
+        // Ignore empty editor rows. They are useful while composing a checklist,
+        // but must not be stored because they later appear as blank numbered
+        // questions in the generated PDF.
+        const items = input.items
+          .filter(item => item.questionText.trim().length > 0)
+          .map((item, index) => ({ ...item, questionIndex: index }));
+        await saveChecklist(input.protocolId, input.stage, items, input.warehouseEquipmentId);
         // Update verdict & status (only for non-equipment-specific saves or when all equipment done)
-        const hasUnset = input.items.some(i => i.answer === "unset");
-        const hasNo = input.items.some(i => i.answer === "no");
+        const hasUnset = items.some(i => i.answer === "unset");
+        const hasNo = items.some(i => i.answer === "no");
         let verdict: "pass" | "fail" | "none" = "none";
-        if (input.items.length > 0 && !hasUnset) verdict = hasNo ? "fail" : "pass";
+        if (items.length > 0 && !hasUnset) verdict = hasNo ? "fail" : "pass";
         const patch: any = {};
         if (input.stage === "iq") {
           patch.iqVerdict = verdict;
@@ -2287,8 +2293,8 @@ export const appRouter = router({
           },
           iq: {
             ...reportStageTemplates.iq,
-            items: englishWarehouseChecklistItems(iqItems, "iq", isEnglishWarehouseReport).map(i => ({
-              questionIndex: i.questionIndex,
+            items: englishWarehouseChecklistItems(iqItems, "iq", isEnglishWarehouseReport).filter(i => i.questionText.trim().length > 0).map((i, index) => ({
+              questionIndex: index,
               questionText: i.questionText,
               answer: i.answer,
               comment: i.comment,
@@ -2298,8 +2304,8 @@ export const appRouter = router({
           },
           oq: {
             ...reportStageTemplates.oq,
-            items: englishWarehouseChecklistItems(oqItems, "oq", isEnglishWarehouseReport).map(i => ({
-              questionIndex: i.questionIndex,
+            items: englishWarehouseChecklistItems(oqItems, "oq", isEnglishWarehouseReport).filter(i => i.questionText.trim().length > 0).map((i, index) => ({
+              questionIndex: index,
               questionText: i.questionText,
               answer: i.answer,
               comment: i.comment,

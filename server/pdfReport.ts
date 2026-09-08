@@ -2099,6 +2099,7 @@ function drawStageBlocks(
 
 function drawChecklistTable(doc: PDFKit.PDFDocument, items: ChecklistItem[], input?: ReportInput) {
   const en = isEnglishWarehouse(input);
+  const visibleItems = items.filter(item => item.questionText.trim().length > 0);
   drawSubTitle(doc, en ? "Checklist" : "Опросник");
   const left = PAGE_MARGIN;
   const right = doc.page.width - PAGE_MARGIN;
@@ -2118,7 +2119,7 @@ function drawChecklistTable(doc: PDFKit.PDFDocument, items: ChecklistItem[], inp
   doc.text(en ? "Answer" : "Ответ", left + numW + qW + 6, y + 6, { width: ansW - 12 });
   doc.y = y + 22;
 
-  items.forEach((it, idx) => {
+  visibleItems.forEach((it, idx) => {
     const padding = 6;
     doc.font("body").fontSize(10);
     const qText = verificationTerminology(it.questionText) + (it.comment ? `\n${en ? "Comment" : "Комментарий"}: ${it.comment}` : "");
@@ -2299,7 +2300,7 @@ function drawPVParams(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Re
         : "Минимальная длительность (по умолчанию)",
       durationRequirement,
     ],
-    [en ? "Minimum number of loggers (default)" : "Минимальное число датчиков (по умолчанию)", String(pv.minSensorCount)],
+    [en ? "Minimum internal loggers (configured)" : "Минимум внутренних датчиков (настройка)", String(pv.minSensorCount)],
     [en ? "Loggers used" : "Использовано датчиков", String(pv.loggers.length)],
     [en ? "Internal loggers" : "Внутренних датчиков", String(pv.loggers.filter(l => l.role === "internal").length)],
     [en ? "External loggers" : "Внешних датчиков", String(pv.loggers.filter(l => l.role === "external").length)],
@@ -3309,6 +3310,7 @@ function drawSignaturesBlock(
 
 function drawChecklistPlan(doc: PDFKit.PDFDocument, items: ChecklistItem[], input?: ReportInput) {
   const en = isEnglishWarehouse(input);
+  const visibleItems = items.filter(item => item.questionText.trim().length > 0);
   drawSubTitle(doc, en ? "List of Control Questions" : "Перечень контрольных вопросов");
   const left = PAGE_MARGIN;
   const right = doc.page.width - PAGE_MARGIN;
@@ -3325,7 +3327,7 @@ function drawChecklistPlan(doc: PDFKit.PDFDocument, items: ChecklistItem[], inpu
   doc.text(en ? "Control question" : "Контрольный вопрос", left + numW + 6, y + 6, { width: qW - 12 });
   doc.y = y + 22;
 
-  items.forEach((it, idx) => {
+  visibleItems.forEach((it, idx) => {
     const padding = 6;
     doc.font("body").fontSize(10);
     const questionText = verificationTerminology(it.questionText);
@@ -3426,7 +3428,7 @@ function drawPVPlan(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     [en ? "Temperature mode" : "Температурный режим", pvTemperatureModeLabel(pv, input)],
     ...sensorAccuracyRows(pv, input),
     [en ? "Required test duration" : "Требуемая длительность испытания", durationRequirement],
-    [en ? "Minimum number of internal loggers" : "Минимальное число внутренних датчиков", String(pv.minSensorCount)],
+    [en ? "Minimum internal loggers (configured)" : "Минимум внутренних датчиков (настройка)", String(pv.minSensorCount)],
     [
       en ? "Logger placement points" : "Места установки датчиков",
       pv.sensorPlacement
