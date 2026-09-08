@@ -374,7 +374,7 @@ const EQUIPMENT_LABEL: Record<string, string> = {
 };
 
 const WAREHOUSE_STUDY_LABEL: Record<string, string> = {
-  warehouse: "Склад",
+  warehouse: "Помещение хранения",
   controlled_env: "Помещение с контролируемой средой",
   reception: "Зона приёмки",
   expedition: "Зона экспедиции",
@@ -405,7 +405,7 @@ function enRu(input: ReportInput | undefined, en: string, ru: string): string {
 }
 
 const WAREHOUSE_STUDY_LABEL_EN: Record<string, string> = {
-  warehouse: "Warehouse",
+  warehouse: "Storage room / storage area",
   controlled_env: "Controlled environment room",
   reception: "Receiving area",
   expedition: "Dispatch area",

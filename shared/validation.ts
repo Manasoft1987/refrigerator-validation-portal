@@ -287,7 +287,7 @@ export function computeWarehouseSensorCount(opts: {
 }
 
 export const WAREHOUSE_STUDY_TYPES = [
-  { id: "warehouse", label: "Склад", duration: "не менее 7 суток" },
+  { id: "warehouse", label: "Помещение хранения", duration: "не менее 7 суток" },
   { id: "controlled_env", label: "Помещение с контролируемой средой", duration: "не менее 7 суток" },
   { id: "reception", label: "Зона приёмки", duration: "не менее 7 суток" },
   { id: "expedition", label: "Зона экспедиции", duration: "не менее 7 суток" },
