@@ -304,7 +304,7 @@ function ObjectShape({
         <circle cx={cx2} cy={cy2} r={r} fill={colors.fill} stroke={colors.stroke} strokeWidth={selected ? 2.5 : 1.7} />
         {isCriticalHot && (
           <polygon
-            points={starPoints(cx2 + r + 8, cy2 - r - 6, 6.4)}
+            points={starPoints(cx2 + r + Math.max(3.2, r * 0.35), cy2 - r - Math.max(3.2, r * 0.35), 5.4)}
             fill="#ef4444"
             stroke="white"
             strokeWidth={1.1}
@@ -313,7 +313,7 @@ function ObjectShape({
         )}
         {isCriticalCold && (
           <polygon
-            points={diamondPoints(cx2 + r + 8, cy2 + r + 6, 6)}
+            points={diamondPoints(cx2 + r + Math.max(3.2, r * 0.35), cy2 + r + Math.max(3.2, r * 0.35), 5.2)}
             fill="#2563eb"
             stroke="white"
             strokeWidth={1.1}
