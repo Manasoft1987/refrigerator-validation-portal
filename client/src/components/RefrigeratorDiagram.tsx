@@ -39,12 +39,14 @@ type ZoneCode = "BL" | "BC" | "BR" | "FL" | "FC" | "FR";
 type Placement = { shelf: number; zone: ZoneCode };
 
 const ZONES: Array<{ code: ZoneCode; x: number; depth: number; label: string; short: string }> = [
-  { code: "BL", x: 14, depth: 84, label: "у задней стенки слева", short: "зад. слева" },
-  { code: "BC", x: 50, depth: 84, label: "у задней стенки по середине", short: "зад. центр" },
-  { code: "BR", x: 86, depth: 84, label: "у задней стенки справа", short: "зад. справа" },
-  { code: "FL", x: 14, depth: 20, label: "у дверцы слева", short: "дверь слева" },
-  { code: "FC", x: 50, depth: 20, label: "у дверцы по середине", short: "дверь центр" },
-  { code: "FR", x: 86, depth: 20, label: "у дверцы справа", short: "дверь справа" },
+  // In the perspective projection, the larger depth value is closer to the
+  // door/front edge (lower on the page). Keep the codes and labels aligned.
+  { code: "BL", x: 14, depth: 20, label: "у задней стенки слева", short: "зад. слева" },
+  { code: "BC", x: 50, depth: 20, label: "у задней стенки по середине", short: "зад. центр" },
+  { code: "BR", x: 86, depth: 20, label: "у задней стенки справа", short: "зад. справа" },
+  { code: "FL", x: 14, depth: 84, label: "у дверцы слева", short: "дверь слева" },
+  { code: "FC", x: 50, depth: 84, label: "у дверцы по середине", short: "дверь центр" },
+  { code: "FR", x: 86, depth: 84, label: "у дверцы справа", short: "дверь справа" },
 ];
 
 const PALETTE = [

@@ -1049,13 +1049,15 @@ function drawRefrigeratorDiagramPortalStyle(
   const bottomGap = effectiveDrawerCount > 0 ? 68 : 30;
   const shelfAreaH = cab.h - topGap - bottomGap;
   const shelfPitch = shelfCount > 1 ? shelfAreaH / (shelfCount - 1) : 0;
+  // The perspective projection increases Y toward the door/front edge.
+  // Keep rear (B) and front/door (F) codes consistent with the heatmap.
   const zoneEntries: Array<{ code: FridgeZoneCode; x: number; depth: number }> = [
-    { code: "BL", x: 14, depth: 84 },
-    { code: "BC", x: 50, depth: 84 },
-    { code: "BR", x: 86, depth: 84 },
-    { code: "FL", x: 14, depth: 20 },
-    { code: "FC", x: 50, depth: 20 },
-    { code: "FR", x: 86, depth: 20 },
+    { code: "BL", x: 14, depth: 20 },
+    { code: "BC", x: 50, depth: 20 },
+    { code: "BR", x: 86, depth: 20 },
+    { code: "FL", x: 14, depth: 84 },
+    { code: "FC", x: 50, depth: 84 },
+    { code: "FR", x: 86, depth: 84 },
   ];
   const isDrawerLevel = (shelf: number) => effectiveDrawerCount > 0 && shelf === shelfCount;
   const shelfY = (shelf: number) => cab.y + topGap + (shelf - 1) * shelfPitch;
