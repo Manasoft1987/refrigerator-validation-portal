@@ -152,7 +152,6 @@ export type ReportInput = {
     whHumidityMax?: string | number | null;
     whSeason?: string | null;
     whStudyType?: string | null;
-    whFacilityType?: string | null;
     whExternalEnv?: number | null;
     whLayoutNotes?: string | null;
     fillStatus?: "empty" | "loaded" | null;
@@ -411,20 +410,6 @@ const WAREHOUSE_STUDY_LABEL_EN: Record<string, string> = {
   reception: "Receiving area",
   expedition: "Dispatch area",
   cold_room: "Cold / freezer room within a controlled environment",
-};
-
-const WAREHOUSE_FACILITY_LABEL: Record<string, string> = {
-  pharmacy: "Помещение хранения аптеки",
-  warehouse: "Помещение хранения склада",
-  medical_org: "Помещение хранения медицинской организации",
-  other: "Другое помещение хранения",
-};
-
-const WAREHOUSE_FACILITY_LABEL_EN: Record<string, string> = {
-  pharmacy: "Pharmacy storage room",
-  warehouse: "Warehouse storage room",
-  medical_org: "Medical organization storage room",
-  other: "Other storage room",
 };
 
 const SEASON_LABEL_RU: Record<string, string> = {
@@ -1891,12 +1876,7 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
       : (en ? "Not controlled" : "Не контролируется");
     rows = [
       [en ? "Object type" : "Тип объекта", isWarehouseLike(eqType) ? getEquipmentName(input) : EQUIPMENT_LABEL[eqType || ""] || "—"],
-      [
-        en ? "Room / area type" : "Тип помещения / зоны",
-        (en ? WAREHOUSE_FACILITY_LABEL_EN[gi?.whFacilityType || ""] : WAREHOUSE_FACILITY_LABEL[gi?.whFacilityType || ""])
-          || (en ? WAREHOUSE_STUDY_LABEL_EN[gi?.whStudyType || ""] : WAREHOUSE_STUDY_LABEL[gi?.whStudyType || ""])
-          || "—",
-      ],
+      [en ? "Room / area type" : "Тип помещения / зоны", en ? (WAREHOUSE_STUDY_LABEL_EN[gi?.whStudyType || ""] || "—") : (WAREHOUSE_STUDY_LABEL[gi?.whStudyType || ""] || "—")],
       [en ? "Object address" : "Адрес объекта", gi?.location || "—"],
       [en ? "Temperature mode" : "Температурный режим", temperatureModeLabel(gi?.tempMode, gi?.customMin, gi?.customMax, input)],
       [en ? "Humidity control" : "Контроль влажности", humidityText],

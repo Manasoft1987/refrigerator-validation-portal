@@ -959,7 +959,6 @@ export const appRouter = router({
           whHumidityMax: z.union([z.number(), z.string()]).optional().nullable(),
           whSeason: z.string().optional().nullable(),
           whStudyType: z.string().optional().nullable(),
-          whFacilityType: z.string().optional().nullable(),
           whExternalEnv: z.number().int().optional().nullable(),
           whLayoutNotes: z.string().optional().nullable(),
           fillStatus: z.enum(["empty", "loaded"]).optional().nullable(),

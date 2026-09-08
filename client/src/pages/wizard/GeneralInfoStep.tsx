@@ -14,7 +14,6 @@ import { trpc } from "@/lib/trpc";
 import {
   EQUIPMENT_TYPES,
   TEMP_MODES,
-  WAREHOUSE_FACILITY_TYPES,
   WAREHOUSE_STUDY_TYPES,
   WAREHOUSE_SEASONS,
   computeWarehouseSensorCount,
@@ -108,7 +107,6 @@ export default function GeneralInfoStep({
     whHumidityMax: "",
     whSeason: "n_a",
     whStudyType: "warehouse",
-    whFacilityType: "",
     whExternalEnv: 0,
     whLayoutNotes: "",
     fillStatus: undefined, // empty | loaded
@@ -289,7 +287,6 @@ export default function GeneralInfoStep({
       whHumidityMax: form.whHumidityMax === "" || form.whHumidityMax == null ? null : String(form.whHumidityMax),
       whSeason: form.whSeason ?? null,
       whStudyType: form.whStudyType ?? null,
-      whFacilityType: form.whFacilityType ?? null,
       whExternalEnv: form.whExternalEnv ?? 0,
       whLayoutNotes: form.whLayoutNotes ?? null,
       fillStatus: form.fillStatus ?? null,
@@ -413,19 +410,6 @@ export default function GeneralInfoStep({
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {EQUIPMENT_TYPES.map(t => (
-                      <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </Field>
-              <Field label="Тип помещения / зоны хранения">
-                <Select
-                  value={form.whFacilityType || undefined}
-                  onValueChange={v => setForm({ ...form, whFacilityType: v })}
-                >
-                  <SelectTrigger><SelectValue placeholder="Выберите тип помещения..." /></SelectTrigger>
-                  <SelectContent>
-                    {WAREHOUSE_FACILITY_TYPES.map(t => (
                       <SelectItem key={t.id} value={t.id}>{t.label}</SelectItem>
                     ))}
                   </SelectContent>

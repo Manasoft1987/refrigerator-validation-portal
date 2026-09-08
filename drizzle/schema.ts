@@ -124,7 +124,6 @@ export const generalInfo = mysqlTable("generalInfo", {
 	whHumidityMax: decimal({ precision: 5, scale: 2 }),
 	whSeason: varchar({ length: 16 }),
 	whStudyType: varchar({ length: 32 }),
-	whFacilityType: varchar({ length: 64 }),
 	whExternalEnv: int().default(0),
 	whLayoutNotes: text(),
 	qualificationType: varchar({ length: 32 }),
