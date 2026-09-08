@@ -800,6 +800,22 @@ function latestDate(values: Array<string | Date | number | null | undefined>): D
     .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
 }
 
+/**
+ * The PV data-entry record describes completion of the PV study, not the
+ * date when the general-information form was filled in. Prefer an explicitly
+ * entered report date; otherwise use the end of the PV test window.
+ */
+function getPvCompletionDate(input: ReportInput): Date | null {
+  return (
+    coerceDate(input.reportDate) ??
+    coerceDate(input.pv.endAt) ??
+    latestDate([
+      input.pv.updatedAt,
+      ...input.pv.loggers.map(logger => logger.createdAt),
+    ])
+  );
+}
+
 function fmtTraceDate(value: string | Date | number | null | undefined): string {
   const date = coerceDate(value);
   return date ? fmtDateOnly(date) : "—";
@@ -853,10 +869,7 @@ function getStageTrace(input: ReportInput, stage: "IQ" | "OQ" | "PV"): DataInteg
     stage,
     label: "PQ/PV — ввод данных эксплуатационной квалификации",
     completedBy: preparedBy,
-    completedAt: latestDate([
-      input.pv.updatedAt,
-      ...input.pv.loggers.map(logger => logger.createdAt),
-    ]) ?? fallbackDate,
+    completedAt: getPvCompletionDate(input) ?? fallbackDate,
     source: "Параметры PV и загруженные файлы логгеров",
   };
 }
@@ -2058,15 +2071,14 @@ function drawStageDataEntryTable(doc: PDFKit.PDFDocument, input: ReportInput, st
   const trace = getStageTrace(input, stage);
   const en = isEnglishWarehouse(input);
   // Auto-fill: ФИО — автор из истории изменений («внёс/подготовил»),
-  // дата — как дата составления протокола.
+  // дата — дата завершения соответствующего этапа (для PV — дата отчёта
+  // либо дата окончания испытания), а не общая дата создания протокола.
   const filledBy = getTraceablePerson(input);
-  const protocolDate = fmtDateOnly(
-    input.generalInfo?.validationDate
-      ? new Date(input.generalInfo.validationDate)
-      : typeof input.protocol.createdAt === "string"
-        ? new Date(input.protocol.createdAt)
-        : input.protocol.createdAt,
-  );
+  const fallbackDate = coerceDate(input.generalInfo?.validationDate) ?? coerceDate(input.protocol.createdAt);
+  const completionDate = stage === "PV"
+    ? getPvCompletionDate(input) ?? coerceDate(trace.completedAt) ?? fallbackDate
+    : fallbackDate;
+  const protocolDate = fmtDateOnly(completionDate);
   drawSubTitle(doc, en ? `Data Entry Record ${stage === "PV" ? "PQ/PV" : stage}` : `Запись ввода данных ${stage === "PV" ? "PQ/PV" : stage}`);
   drawSimpleTable(
     doc,
@@ -2350,11 +2362,37 @@ function findPlacementLogger(input: ReportInput, logger: LoggerSummary | null | 
   }) ?? null;
 }
 
+function refrigeratorPlacementLabel(input: ReportInput, rawPosition: string): string | null {
+  const match = /^RF:S(\d+):(BL|BC|BR|FL|FC|FR)$/.exec(rawPosition);
+  if (!match) return null;
+
+  const shelf = Number(match[1]);
+  const zoneLabels: Record<string, string> = {
+    BL: "у задней стенки слева",
+    BC: "у задней стенки по центру",
+    BR: "у задней стенки справа",
+    FL: "у дверцы слева",
+    FC: "у дверцы по центру",
+    FR: "у дверцы справа",
+  };
+  const levelCount = Number(input.refrigeratorLevelCount);
+  const normalizedLevelCount = Number.isFinite(levelCount) && levelCount >= 3 ? Math.round(levelCount) : null;
+  const shelfLabel = shelf === 1
+    ? "верхняя полка"
+    : normalizedLevelCount !== null && shelf === normalizedLevelCount
+      ? "нижняя полка"
+      : `${shelf}-я полка`;
+
+  return `${shelfLabel}, ${zoneLabels[match[2]]}`;
+}
+
 function placementLabel(input: ReportInput, logger: LoggerSummary | null | undefined): string {
   const placement = findPlacementLogger(input, logger);
   const rawPosition = String(placement?.position ?? "").trim();
   if (placement?.role === "external" || rawPosition === "external") return "внешний регистратор";
-  if (rawPosition && rawPosition !== "unset") return rawPosition;
+  if (rawPosition && rawPosition !== "unset") {
+    return refrigeratorPlacementLabel(input, rawPosition) ?? rawPosition;
+  }
   return "по схеме";
 }
 

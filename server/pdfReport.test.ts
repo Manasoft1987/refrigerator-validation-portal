@@ -544,9 +544,10 @@ describe("generateProtocolPdf", () => {
   );
 
   it(
-    "autofills IQ, OQ, and PV data entry rows with author and protocol date",
+    "autofills IQ and OQ with protocol date and PV with completion date",
     async () => {
       const now = Date.UTC(2026, 5, 20, 9, 0, 0);
+      const pvEndAt = Date.UTC(2026, 5, 22, 9, 0, 0);
       const originalText = (PDFDocument.prototype as any).text;
       const captured = new Map<string, Set<string>>();
       let activeStage: string | null = null;
@@ -561,7 +562,7 @@ describe("generateProtocolPdf", () => {
           captured.set(text, new Set());
         } else if (
           activeStage &&
-          (text === "Оразалина А.А." || text === "25.06.2026")
+          (text === "Оразалина А.А." || text === "25.06.2026" || text === "22.06.2026")
         ) {
           const values = captured.get(activeStage)!;
           values.add(text);
@@ -592,7 +593,7 @@ describe("generateProtocolPdf", () => {
           pv: {
             purpose: "PV", description: "PV", criteria: "PV",
             tempMode: "2-8", rangeMin: 2, rangeMax: 8,
-            startAt: now, endAt: now,
+            startAt: now, endAt: pvEndAt,
             minDurationHours: 0, minSensorCount: 0,
             loggers: [], verdict: "none", failureReasons: [],
             hotIdx: null, coldIdx: null, extIndices: [],
@@ -615,9 +616,9 @@ describe("generateProtocolPdf", () => {
         "Запись ввода данных OQ",
         "Запись ввода данных PQ/PV",
       ]);
-      captured.forEach(values => {
-        expect(Array.from(values)).toEqual(["Оразалина А.А.", "25.06.2026"]);
-      });
+      expect(Array.from(captured.get("Запись ввода данных IQ") ?? [])).toEqual(["Оразалина А.А.", "25.06.2026"]);
+      expect(Array.from(captured.get("Запись ввода данных OQ") ?? [])).toEqual(["Оразалина А.А.", "25.06.2026"]);
+      expect(Array.from(captured.get("Запись ввода данных PQ/PV") ?? [])).toEqual(["Оразалина А.А.", "22.06.2026"]);
     },
     60_000,
   );
