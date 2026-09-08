@@ -21,6 +21,13 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
 import {
   ArrowLeft,
@@ -46,6 +53,8 @@ const STATUS_LABEL: Record<string, { label: string; cls: string }> = {
   rejected: { label: "Отклонён", cls: "bg-red-50 text-red-700 border-red-200" },
 };
 
+type CompanyAccessRole = "viewer" | "user";
+
 export default function AdminCompanyDetail() {
   const { id } = useParams<{ id: string }>();
   const companyId = Number(id);
@@ -54,6 +63,7 @@ export default function AdminCompanyDetail() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const [accessRole, setAccessRole] = useState<CompanyAccessRole>("viewer");
   const [createdCredentials, setCreatedCredentials] = useState<{ email: string; name: string | null; password: string } | null>(null);
   const [removeId, setRemoveId] = useState<number | null>(null);
   const utils = trpc.useUtils();
@@ -75,6 +85,7 @@ export default function AdminCompanyDetail() {
       setEmail('');
       setName('');
       setPassword('');
+      setAccessRole("viewer");
     },
     onError: e => toast.error(e.message),
   });
@@ -91,6 +102,15 @@ export default function AdminCompanyDetail() {
     onSuccess: () => {
       utils.companies.listMembers.invalidate({ companyId });
       toast.success("Пользователь отклонён");
+    },
+    onError: e => toast.error(e.message),
+  });
+
+  const roleMutation = trpc.companies.updateMemberRole.useMutation({
+    onSuccess: () => {
+      utils.companies.listMembers.invalidate({ companyId });
+      utils.companies.allMembers.invalidate();
+      toast.success("Роль доступа обновлена");
     },
     onError: e => toast.error(e.message),
   });
@@ -340,6 +360,7 @@ export default function AdminCompanyDetail() {
             setEmail('');
             setName('');
             setPassword('');
+            setAccessRole("viewer");
           }
         }}
       >
@@ -375,6 +396,7 @@ export default function AdminCompanyDetail() {
                       email: email.trim(),
                       name: name.trim() || undefined,
                       password: password.trim() || undefined,
+                      role: accessRole,
                     });
                   }
                 }}
@@ -390,6 +412,21 @@ export default function AdminCompanyDetail() {
                 onChange={e => setPassword(e.target.value)}
               />
               <p className='text-xs text-muted-foreground'>Минимум 8 символов, если задаёте вручную.</p>
+            </div>
+            <div className='space-y-2'>
+              <Label>Роль доступа</Label>
+              <Select value={accessRole} onValueChange={value => setAccessRole(value as CompanyAccessRole)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='viewer'>Клиент — только просмотр и PDF</SelectItem>
+                  <SelectItem value='user'>Редактор — создание и изменение</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className='text-xs text-muted-foreground'>
+                Для клиентов лучше выбирать «только просмотр»: они увидят только протоколы этой компании.
+              </p>
             </div>
             {createdCredentials && (
               <div className='rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm'>
@@ -422,6 +459,7 @@ export default function AdminCompanyDetail() {
                 email: email.trim(),
                 name: name.trim() || undefined,
                 password: password.trim() || undefined,
+                role: accessRole,
               })}
             >
               {inviteMutation.isPending && <Loader2 className='h-4 w-4 animate-spin' />}

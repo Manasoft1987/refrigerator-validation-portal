@@ -29,6 +29,8 @@ import {
 } from "@/components/ui/select";
 import { trpc } from "@/lib/trpc";
 import { openReportUrl } from "@/lib/reportDownload";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { isViewerOnlyCompanyUser } from "@/lib/access";
 import {
   ClipboardList,
   Copy,
@@ -53,6 +55,7 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
 };
 
 export default function ProtocolsIndex() {
+  const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [q, setQ] = useState("");
   const [statusF, setStatusF] = useState<string>("all");
@@ -70,6 +73,8 @@ export default function ProtocolsIndex() {
 
   const orgsQ = trpc.organizations.list.useQuery();
   const allQ = trpc.protocols.listAll.useQuery();
+  const companiesQ = trpc.companies.myCompanies.useQuery();
+  const isReadOnlyClient = isViewerOnlyCompanyUser(user, companiesQ.data);
 
   const protocols = allQ.data || [];
 
@@ -101,6 +106,10 @@ export default function ProtocolsIndex() {
     onError: e => toast.error(e.message),
   });
   const handleCreateProtocol = () => {
+    if (isReadOnlyClient) {
+      toast.error("Доступ только для просмотра");
+      return;
+    }
     if (!createOrg || !createEquipmentType) return;
     create.mutate({
       organizationId: createOrg,
@@ -109,6 +118,10 @@ export default function ProtocolsIndex() {
     });
   };
   const handleOpenCreate = () => {
+    if (isReadOnlyClient) {
+      toast.error("Доступ только для просмотра");
+      return;
+    }
     setCreateStep(1);
     setCreateEquipmentType(null);
     setCreateCustomName("");
@@ -148,6 +161,10 @@ export default function ProtocolsIndex() {
     }
   };
   const handleClone = (sourceId: number) => {
+    if (isReadOnlyClient) {
+      toast.error("Доступ только для просмотра");
+      return;
+    }
     const sourceProto = protocols.find(p => p.id === sourceId);
     if (sourceProto) {
       setCloneOpen(sourceId);
@@ -155,6 +172,10 @@ export default function ProtocolsIndex() {
     }
   };
   const handleConfirmClone = () => {
+    if (isReadOnlyClient) {
+      toast.error("Доступ только для просмотра");
+      return;
+    }
     if (!cloneOpen || !cloneOrg) return;
     clone.mutate({ sourceProtocolId: cloneOpen, organizationId: cloneOrg });
   };
@@ -168,7 +189,7 @@ export default function ProtocolsIndex() {
             Все протоколы квалификации и валидации по всем организациям.
           </p>
         </div>
-        <Button onClick={() => handleOpenCreate()}>
+        <Button onClick={() => handleOpenCreate()} className={isReadOnlyClient ? "hidden" : undefined}>
           <FilePlus2 className="h-4 w-4" /> Новый протокол
         </Button>
       </div>
@@ -282,7 +303,7 @@ export default function ProtocolsIndex() {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="bg-background"
+                            className={isReadOnlyClient ? "hidden" : "bg-background"}
                             onClick={() => setLocation(`/protocols/${p.id}`)}
                           >
                             <Play className="h-3.5 w-3.5" /> Продолжить
@@ -313,7 +334,7 @@ export default function ProtocolsIndex() {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="bg-background text-destructive hover:text-destructive"
+                            className={isReadOnlyClient ? "hidden" : "bg-background text-destructive hover:text-destructive"}
                             onClick={() => setConfirmDelete(p.id)}
                           >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -461,6 +482,10 @@ export default function ProtocolsIndex() {
             <AlertDialogCancel>Отмена</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
+                if (isReadOnlyClient) {
+                  toast.error("Доступ только для просмотра");
+                  return;
+                }
                 if (confirmDelete != null) del.mutate({ id: confirmDelete });
                 setConfirmDelete(null);
               }}

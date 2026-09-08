@@ -25,7 +25,7 @@ export const companyMembers = mysqlTable("companyMembers", {
 	id: int().autoincrement().notNull(),
 	userId: int().notNull(),
 	companyId: int().notNull(),
-	role: mysqlEnum(['admin','user']).default('user').notNull(),
+	role: mysqlEnum(['admin','user','viewer']).default('user').notNull(),
 	status: mysqlEnum(['pending','approved','rejected']).default('pending').notNull(),
 	invitedAt: timestamp({ mode: 'string' }).default('CURRENT_TIMESTAMP').notNull(),
 	approvedAt: timestamp({ mode: 'string' }),

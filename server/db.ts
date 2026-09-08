@@ -1967,6 +1967,24 @@ export async function approveCompanyMember(memberId: number, adminId: number): P
     .where(eq(companyMembers.id, memberId));
 }
 
+export async function updateCompanyMemberRole(memberId: number, role: CompanyMember["role"]): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    if (!shouldUseLocalDevDb()) throw new Error("DB unavailable");
+    await updateLocalDevDb(data => {
+      const member = data.companyMembers.find(item => item.id === memberId);
+      if (!member) return;
+      member.role = role;
+      member.updatedAt = new Date().toISOString();
+    });
+    return;
+  }
+  await db
+    .update(companyMembers)
+    .set({ role, updatedAt: new Date().toISOString() })
+    .where(eq(companyMembers.id, memberId));
+}
+
 export async function rejectCompanyMember(memberId: number, adminId: number): Promise<void> {
   const db = await getDb();
   if (!db) {
@@ -2330,6 +2348,17 @@ export async function listWarehouseEquipment(protocolId: number): Promise<Wareho
     .from(warehouseEquipment)
     .where(eq(warehouseEquipment.protocolId, protocolId))
     .orderBy(warehouseEquipment.ord, warehouseEquipment.id);
+}
+
+export async function getWarehouseEquipmentById(id: number): Promise<WarehouseEquipment | undefined> {
+  const db = await getDb();
+  if (!db) return undefined;
+  const [row] = await db
+    .select()
+    .from(warehouseEquipment)
+    .where(eq(warehouseEquipment.id, id))
+    .limit(1);
+  return row;
 }
 
 export async function createWarehouseEquipment(

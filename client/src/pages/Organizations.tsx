@@ -11,12 +11,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { isViewerOnlyCompanyUser } from "@/lib/access";
 import { Building2, Plus, Search, Phone, ArrowUpRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
 
 export default function Organizations() {
+  const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [q, setQ] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -24,6 +27,8 @@ export default function Organizations() {
   const utils = trpc.useUtils();
 
   const { data = [], isLoading } = trpc.organizations.list.useQuery();
+  const companiesQ = trpc.companies.myCompanies.useQuery();
+  const isReadOnlyClient = isViewerOnlyCompanyUser(user, companiesQ.data);
   const create = trpc.organizations.create.useMutation({
     onSuccess: (row) => {
       utils.organizations.list.invalidate();
@@ -65,7 +70,7 @@ export default function Organizations() {
               className="pl-9 w-72"
             />
           </div>
-          <Button onClick={() => setCreateOpen(true)}>
+          <Button onClick={() => setCreateOpen(true)} className={isReadOnlyClient ? "hidden" : undefined}>
             <Plus className="h-4 w-4" /> Новая организация
           </Button>
         </div>
@@ -88,7 +93,7 @@ export default function Organizations() {
               Добавьте первую организацию — её реквизиты и логотип будут использоваться в
               протоколах валидации.
             </p>
-            <Button className="mt-2" onClick={() => setCreateOpen(true)}>
+            <Button className={isReadOnlyClient ? "hidden" : "mt-2"} onClick={() => setCreateOpen(true)}>
               <Plus className="h-4 w-4" /> Создать первую организацию
             </Button>
           </CardContent>

@@ -14,6 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { openReportUrl } from "@/lib/reportDownload";
 import { trpc } from "@/lib/trpc";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { isViewerOnlyCompanyUser } from "@/lib/access";
 import {
   ArrowLeft,
   Building2,
@@ -40,6 +42,7 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
 };
 
 export default function OrganizationDetail() {
+  const { user } = useAuth();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const [, setLocation] = useLocation();
@@ -50,6 +53,8 @@ export default function OrganizationDetail() {
     { organizationId: id },
     { enabled: !isNaN(id) },
   );
+  const companiesQ = trpc.companies.myCompanies.useQuery();
+  const isReadOnlyClient = isViewerOnlyCompanyUser(user, companiesQ.data);
 
   const [form, setForm] = useState<any | null>(null);
   useEffect(() => {
@@ -103,6 +108,10 @@ export default function OrganizationDetail() {
   });
 
   const handleLogo = async (file: File) => {
+    if (isReadOnlyClient) {
+      toast.error("Доступ только для просмотра");
+      return;
+    }
     if (file.size > 3 * 1024 * 1024) {
       toast.error("Логотип не должен превышать 3 МБ");
       return;
@@ -172,7 +181,7 @@ export default function OrganizationDetail() {
               </div>
               <Button
                 variant="outline"
-                className="bg-background text-destructive hover:text-destructive"
+                className={isReadOnlyClient ? "hidden" : "bg-background text-destructive hover:text-destructive"}
                 onClick={() => setConfirmOrgDelete(true)}
               >
                 <Trash2 className="h-4 w-4" /> Удалить
@@ -184,6 +193,7 @@ export default function OrganizationDetail() {
                 <Input
                   value={form.name || ""}
                   onChange={e => setForm({ ...form, name: e.target.value })}
+                  disabled={isReadOnlyClient}
                 />
               </Field>
               <div className="grid md:grid-cols-2 gap-4">
@@ -191,12 +201,14 @@ export default function OrganizationDetail() {
                   <Input
                     value={form.bin || ""}
                     onChange={e => setForm({ ...form, bin: e.target.value })}
+                    disabled={isReadOnlyClient}
                   />
                 </Field>
                 <Field label="Ответственное лицо">
                   <Input
                     value={form.responsible || ""}
                     onChange={e => setForm({ ...form, responsible: e.target.value })}
+                    disabled={isReadOnlyClient}
                   />
                 </Field>
               </div>
@@ -204,17 +216,19 @@ export default function OrganizationDetail() {
                 <Input
                   value={form.addressFact || ""}
                   onChange={e => setForm({ ...form, addressFact: e.target.value })}
+                  disabled={isReadOnlyClient}
                 />
               </Field>
               <Field label="Телефон">
                 <Input
                   value={form.phone || ""}
                   onChange={e => setForm({ ...form, phone: e.target.value })}
+                  disabled={isReadOnlyClient}
                 />
               </Field>
             </div>
 
-            <div className="flex justify-end pt-2">
+            <div className={isReadOnlyClient ? "hidden" : "flex justify-end pt-2"}>
               <Button
                 disabled={update.isPending || !form.name?.trim()}
                 onClick={() =>
@@ -270,9 +284,9 @@ export default function OrganizationDetail() {
                   />
                   <Button
                     variant="outline"
-                    className="bg-background"
                     onClick={() => fileRef.current?.click()}
                     disabled={uploadLogo.isPending}
+                    className={isReadOnlyClient ? "hidden" : "bg-background"}
                   >
                     {uploadLogo.isPending ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -296,7 +310,7 @@ export default function OrganizationDetail() {
               <Button
                 className="w-full"
                 onClick={() => createProtocol.mutate({ organizationId: id })}
-                disabled={createProtocol.isPending}
+                disabled={createProtocol.isPending || isReadOnlyClient}
               >
                 <FilePlus2 className="h-4 w-4" /> Новый протокол
               </Button>
@@ -315,7 +329,7 @@ export default function OrganizationDetail() {
                 Все протоколы валидации для этой организации
               </p>
             </div>
-            <Button onClick={() => createProtocol.mutate({ organizationId: id })}>
+            <Button onClick={() => createProtocol.mutate({ organizationId: id })} className={isReadOnlyClient ? "hidden" : undefined}>
               <FilePlus2 className="h-4 w-4" /> Создать
             </Button>
           </div>

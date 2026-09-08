@@ -12,7 +12,10 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
-import { EQUIPMENT_TYPES, TEMP_MODES, VALIDATION_BASIS, isAutoRefrigeratorLike, isWarehouseEaeu, isWarehouseLike } from "@shared/validation";
+import { openReportUrl } from "@/lib/reportDownload";
+import { useAuth } from "@/_core/hooks/useAuth";
+import { isViewerOnlyCompanyUser } from "@/lib/access";
+import { EQUIPMENT_TYPES, TEMP_MODES, isAutoRefrigeratorLike, isWarehouseEaeu, isWarehouseLike } from "@shared/validation";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -55,6 +58,7 @@ const STANDARD_STEPS = [
 type WStep = { id: number; key: string; label: string; icon: any; equipmentId?: number | null };
 
 export default function Wizard() {
+  const { user } = useAuth();
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
   const [location, setLocation] = useLocation();
@@ -63,6 +67,9 @@ export default function Wizard() {
   const protocolQ = trpc.protocols.get.useQuery({ id }, { enabled: !isNaN(id) });
   const giQ = trpc.generalInfo.get.useQuery({ protocolId: id }, { enabled: !isNaN(id) });
   const pvQ = trpc.pv.get.useQuery({ protocolId: id }, { enabled: !isNaN(id) });
+  const companiesQ = trpc.companies.myCompanies.useQuery();
+  const reportMutation = trpc.report.generate.useMutation();
+  const isReadOnlyClient = isViewerOnlyCompanyUser(user, companiesQ.data);
   // Load warehouse equipment list (only used for warehouse protocols)
   const equipmentQ = trpc.warehouseEquipment.list.useQuery(
     { protocolId: id },
@@ -236,12 +243,80 @@ export default function Wizard() {
     if (p?.status === "completed") pct += 10;
     return Math.min(pct, 100);
   }, [p, giQ.data, isComputerizedSystem, computerizedSystemSteps]);
+  const equipmentTypeLabel = EQUIPMENT_TYPES.find(item => item.id === protocolEquipmentType)?.label ?? protocolEquipmentType ?? "—";
+
+  const handleReadOnlyPdf = async () => {
+    try {
+      const res = await reportMutation.mutateAsync({ protocolId: id });
+      await openReportUrl(res.url);
+    } catch (error: any) {
+      toast.error(error?.message || "Не удалось сформировать PDF");
+    }
+  };
 
   if (protocolQ.isLoading || !p) {
     return (
       <div className="max-w-7xl mx-auto px-8 py-10">
         <div className="h-10 w-64 bg-muted animate-pulse rounded mb-4" />
         <div className="h-96 rounded-xl bg-muted animate-pulse" />
+      </div>
+    );
+  }
+
+  if (isReadOnlyClient) {
+    return (
+      <div className="mx-auto max-w-4xl space-y-6 px-8 py-8">
+        <button
+          onClick={() => setLocation("/protocols")}
+          className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" /> К протоколам
+        </button>
+
+        <Card className="border">
+          <CardContent className="space-y-6 p-8">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Режим просмотра
+                </div>
+                <h1 className="mt-1 text-3xl font-semibold tracking-tight num">{p.number}</h1>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Вам доступен просмотр протокола и скачивание PDF. Редактирование данных выполняет команда валидации.
+                </p>
+              </div>
+              <Button onClick={handleReadOnlyPdf} disabled={reportMutation.isPending}>
+                {reportMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                Скачать PDF
+              </Button>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-lg border bg-muted/20 p-4">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Объект</div>
+                <div className="mt-1 font-medium">
+                  {equipmentTypeLabel}
+                </div>
+              </div>
+              <div className="rounded-lg border bg-muted/20 p-4">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Режим температуры</div>
+                <div className="mt-1 font-medium">{giQ.data?.tempMode || "—"}</div>
+              </div>
+              <div className="rounded-lg border bg-muted/20 p-4">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Модель</div>
+                <div className="mt-1 font-medium">{giQ.data?.model || "—"}</div>
+              </div>
+              <div className="rounded-lg border bg-muted/20 p-4">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">Серийный номер</div>
+                <div className="mt-1 font-medium num">{giQ.data?.serial || "—"}</div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -479,7 +554,6 @@ export const _unused = {
   Textarea,
   EQUIPMENT_TYPES,
   TEMP_MODES,
-  VALIDATION_BASIS,
   trpc,
   toast,
 };

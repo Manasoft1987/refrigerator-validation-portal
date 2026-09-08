@@ -29,6 +29,7 @@ import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { trpc } from "@/lib/trpc";
+import { isViewerOnlyCompanyUser } from "@/lib/access";
 import { toast } from "sonner";
 
 const menuItems = [
@@ -218,7 +219,12 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const isAdmin = user?.role === "admin";
-  const allItems = [...menuItems, ...(isAdmin ? adminMenuItems : [])];
+  const companiesQ = trpc.companies.myCompanies.useQuery(undefined, { enabled: !!user });
+  const isReadOnlyClient = isViewerOnlyCompanyUser(user, companiesQ.data);
+  const visibleMenuItems = isReadOnlyClient
+    ? menuItems.filter(item => item.path === "/organizations" || item.path === "/protocols")
+    : menuItems;
+  const allItems = [...visibleMenuItems, ...(isAdmin ? adminMenuItems : [])];
   const activeMenuItem = allItems.find(item => location === item.path || location.startsWith(item.path + "/"));
   const isMobile = useIsMobile();
 
@@ -284,7 +290,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
 
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-2 gap-0.5">
-              {menuItems.map(item => {
+              {visibleMenuItems.map(item => {
                 const isActive =
                   location === item.path ||
                   (item.path !== "/" && location.startsWith(item.path));

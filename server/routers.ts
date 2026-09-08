@@ -89,6 +89,7 @@ import {
   saveChecklist,
   updateLogger,
   updateOrganization,
+  updateCompanyMemberRole,
   updatePVSession,
   updateProtocolStatus,
   upsertGeneralInfo,
@@ -109,6 +110,7 @@ import {
   getWarehouseSections,
   saveWarehouseSections,
   listWarehouseEquipment,
+  getWarehouseEquipmentById,
   createWarehouseEquipment,
   updateWarehouseEquipment,
   deleteWarehouseEquipment,
@@ -135,6 +137,7 @@ import {
 } from "./loggerParser";
 import { generateProtocolPdf, type ReportInput } from "./pdfReport";
 import { generateComputerizedSystemPdf } from "./computerizedSystemPdf";
+import type { Protocol } from "../drizzle/schema";
 import { getComputerizedSystemReleaseReadiness } from "@shared/computerizedSystem";
 import { storagePut, storageReadBuffer } from "./storage";
 import { buildWarehouseQuestions } from "./warehouseQuestions";
@@ -539,24 +542,90 @@ function pickReportActorFromGeneralInfo(gi: any): string | null {
   return null;
 }
 
-async function ownProtocol(userId: number, protocolId: number) {
-  // Try by userId first; if not found, try by companyId (shared company access)
+async function ownProtocol(userId: number, protocolId: number): Promise<Protocol> {
+  return (await getProtocolAccess(userId, protocolId)).protocol;
+}
+async function getProtocolAccess(userId: number, protocolId: number): Promise<{ protocol: Protocol; canEdit: boolean; role: string }> {
   let p = await getProtocol(userId, protocolId);
-  if (!p) {
-    const userCompanies = await getUserCompanies(userId);
-    if (userCompanies.length > 0) {
-      p = await getProtocolByCompany(userCompanies[0].id, protocolId);
-    }
-    // Also try admin's company
-    if (!p) {
-      const adminCompanies = await listCompanies(userId);
-      if (adminCompanies.length > 0) {
-        p = await getProtocolByCompany(adminCompanies[0].id, protocolId);
-      }
+  if (p) return { protocol: p, canEdit: true, role: "owner" as const };
+
+  const userCompanies = await getUserCompanies(userId);
+  for (const company of userCompanies) {
+    p = await getProtocolByCompany(company.id, protocolId);
+    if (p) {
+      return {
+        protocol: p,
+        canEdit: company.membership.role !== "viewer",
+        role: company.membership.role,
+      };
     }
   }
-  if (!p) throw new TRPCError({ code: "NOT_FOUND", message: "Протокол не найден" });
-  return p;
+
+  const adminCompanies = await listCompanies(userId);
+  for (const company of adminCompanies) {
+    p = await getProtocolByCompany(company.id, protocolId);
+    if (p) return { protocol: p, canEdit: true, role: "admin" as const };
+  }
+
+  throw new TRPCError({ code: "NOT_FOUND", message: "ÐŸÑ€Ð¾Ñ‚Ð¾ÐºÐ¾Ð» Ð½Ðµ Ð½Ð°Ð¹Ð´ÐµÐ½" });
+}
+
+async function assertCanEditProtocol(userId: number, protocolId: number) {
+  const access = await getProtocolAccess(userId, protocolId);
+  if (!access.canEdit) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "У вас доступ только для просмотра. Изменение протокола недоступно.",
+    });
+  }
+  return access.protocol;
+}
+
+async function userHasOnlyViewerCompanyAccess(userId: number) {
+  const userCompanies = await getUserCompanies(userId);
+  return userCompanies.length > 0 && userCompanies.every(company => company.membership.role === "viewer");
+}
+
+async function assertCanEditCompanyData(userId: number) {
+  if (await userHasOnlyViewerCompanyAccess(userId)) {
+    throw new TRPCError({
+      code: "FORBIDDEN",
+      message: "У вас доступ только для просмотра. Изменение данных компании недоступно.",
+    });
+  }
+}
+
+async function listAccessibleOrganizations(userId: number, isAdmin: boolean) {
+  const companies = isAdmin ? await listCompanies(userId) : await getUserCompanies(userId);
+  if (companies.length === 0) return listOrganizations(userId);
+  const rows = (await Promise.all(companies.map(company => listOrganizationsByCompany(company.id)))).flat();
+  return rows.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+}
+
+async function getAccessibleOrganization(userId: number, organizationId: number) {
+  let org = await getOrganization(userId, organizationId);
+  if (org) return org;
+
+  const userCompanies = await getUserCompanies(userId);
+  for (const company of userCompanies) {
+    org = await getOrganizationByCompany(company.id, organizationId);
+    if (org) return org;
+  }
+
+  const adminCompanies = await listCompanies(userId);
+  for (const company of adminCompanies) {
+    org = await getOrganizationByCompany(company.id, organizationId);
+    if (org) return org;
+  }
+
+  return undefined;
+}
+
+async function assertCanEditWarehouseEquipment(userId: number, equipmentId: number) {
+  const equipment = await getWarehouseEquipmentById(equipmentId);
+  if (!equipment) throw new TRPCError({ code: "NOT_FOUND", message: "Warehouse equipment not found" });
+  await assertCanEditProtocol(userId, equipment.protocolId);
+  return equipment;
 }
 
 export const appRouter = router({
@@ -645,34 +714,10 @@ export const appRouter = router({
   /* -------------------------------------------------------------- */
   organizations: router({
     list: protectedProcedure.query(async ({ ctx }) => {
-      // Both admins and regular users see shared company client base
-      // Admin: find companies they created and show all orgs in those companies
-      if (ctx.user.role === "admin") {
-        const adminCompanies = await listCompanies(ctx.user.id);
-        if (adminCompanies.length > 0) {
-          return listOrganizationsByCompany(adminCompanies[0].id);
-        }
-        // Fallback: admin has no company yet, show their own orgs
-        return listOrganizations(ctx.user.id);
-      }
-      // Regular user: show all orgs in their approved company
-      const userCompanies = await getUserCompanies(ctx.user.id);
-      if (userCompanies.length > 0) {
-        return listOrganizationsByCompany(userCompanies[0].id);
-      }
-      return listOrganizations(ctx.user.id);
+      return listAccessibleOrganizations(ctx.user.id, ctx.user.role === "admin");
     }),
     get: protectedProcedure.input(z.object({ id: z.number() })).query(async ({ ctx, input }) => {
-      let org = await getOrganization(ctx.user.id, input.id);
-      if (!org) {
-        const userCompanies = await getUserCompanies(ctx.user.id);
-        if (userCompanies.length > 0) org = await getOrganizationByCompany(userCompanies[0].id, input.id);
-        if (!org) {
-          const adminCompanies = await listCompanies(ctx.user.id);
-          if (adminCompanies.length > 0) org = await getOrganizationByCompany(adminCompanies[0].id, input.id);
-        }
-      }
-      return org;
+      return getAccessibleOrganization(ctx.user.id, input.id);
     }),
     create: protectedProcedure
       .input(
@@ -687,6 +732,7 @@ export const appRouter = router({
         }),
       )
       .mutation(async ({ ctx, input }) => {
+        await assertCanEditCompanyData(ctx.user.id);
         // Admins can always create; regular users must belong to an approved company
         if (ctx.user.role !== "admin") {
           const userCompanies = await getUserCompanies(ctx.user.id);
@@ -717,10 +763,14 @@ export const appRouter = router({
           email: z.string().optional().nullable(),
         }),
       )
-      .mutation(({ ctx, input }) => updateOrganization(ctx.user.id, input.id, input)),
+      .mutation(async ({ ctx, input }) => {
+        await assertCanEditCompanyData(ctx.user.id);
+        return updateOrganization(ctx.user.id, input.id, input);
+      }),
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
+        await assertCanEditCompanyData(ctx.user.id);
         await deleteOrganization(ctx.user.id, input.id);
         return { success: true };
       }),
@@ -734,15 +784,8 @@ export const appRouter = router({
         }),
       )
       .mutation(async ({ ctx, input }) => {
-        let org = await getOrganization(ctx.user.id, input.id);
-        if (!org) {
-          const userCompanies = await getUserCompanies(ctx.user.id);
-          if (userCompanies.length > 0) org = await getOrganizationByCompany(userCompanies[0].id, input.id);
-          if (!org) {
-            const adminCompanies = await listCompanies(ctx.user.id);
-            if (adminCompanies.length > 0) org = await getOrganizationByCompany(adminCompanies[0].id, input.id);
-          }
-        }
+        await assertCanEditCompanyData(ctx.user.id);
+        const org = await getAccessibleOrganization(ctx.user.id, input.id);
         if (!org) throw new TRPCError({ code: "NOT_FOUND" });
         const buf = Buffer.from(input.base64, "base64");
         const safeName = input.fileName.replace(/[^a-zA-Z0-9._-]+/g, "_");
@@ -761,17 +804,23 @@ export const appRouter = router({
   protocols: router({
     listForOrg: protectedProcedure
       .input(z.object({ organizationId: z.number() }))
-      .query(({ ctx, input }) => listProtocolsForOrg(ctx.user.id, input.organizationId)),
+      .query(async ({ ctx, input }) => {
+        const org = await getAccessibleOrganization(ctx.user.id, input.organizationId);
+        if (!org) throw new TRPCError({ code: "NOT_FOUND" });
+        if (org.companyId) {
+          const companyProtocols = await listProtocolsByCompany(org.companyId);
+          return companyProtocols.filter(protocol => protocol.organizationId === input.organizationId);
+        }
+        return listProtocolsForOrg(ctx.user.id, input.organizationId);
+      }),
     listAll: protectedProcedure.query(async ({ ctx }) => {
-      // Admin: show all protocols in their company
-      if (ctx.user.role === "admin") {
-        const adminCompanies = await listCompanies(ctx.user.id);
-        if (adminCompanies.length > 0) return listAllProtocolsByCompany(adminCompanies[0].id);
-        return listAllProtocols(ctx.user.id);
+      const companies = ctx.user.role === "admin"
+        ? await listCompanies(ctx.user.id)
+        : await getUserCompanies(ctx.user.id);
+      if (companies.length > 0) {
+        const rows = (await Promise.all(companies.map(company => listAllProtocolsByCompany(company.id)))).flat();
+        return rows.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
       }
-      // Regular user: show all protocols in their approved company
-      const userCompanies = await getUserCompanies(ctx.user.id);
-      if (userCompanies.length > 0) return listAllProtocolsByCompany(userCompanies[0].id);
       return listAllProtocols(ctx.user.id);
     }),
     get: protectedProcedure
@@ -780,6 +829,7 @@ export const appRouter = router({
     create: protectedProcedure
       .input(z.object({ organizationId: z.number(), companyId: z.number().optional(), equipmentType: z.enum(["refrigerator", "freezer", "auto-refrigerator", "auto-refrigerator-kg", "chamber", "thermal-container", "computerized-system", "warehouse", "warehouse-kg", "warehouse-expert", "other"]).optional(), customEquipmentName: z.string().optional() }))
       .mutation(async ({ ctx, input }) => {
+        await assertCanEditCompanyData(ctx.user.id);
         // Admins can always create; regular users must belong to an approved company
         if (ctx.user.role !== "admin") {
           const userCompanies = await getUserCompanies(ctx.user.id);
@@ -790,21 +840,7 @@ export const appRouter = router({
             });
           }
         }
-        // Look up org by userId first, then by companyId (shared company access)
-        let org = await getOrganization(ctx.user.id, input.organizationId);
-        if (!org) {
-          // Try company-based access
-          const userCompanies = await getUserCompanies(ctx.user.id);
-          if (userCompanies.length > 0) {
-            org = await getOrganizationByCompany(userCompanies[0].id, input.organizationId);
-          }
-          if (!org) {
-            const adminCompanies = await listCompanies(ctx.user.id);
-            if (adminCompanies.length > 0) {
-              org = await getOrganizationByCompany(adminCompanies[0].id, input.organizationId);
-            }
-          }
-        }
+        const org = await getAccessibleOrganization(ctx.user.id, input.organizationId);
         if (!org) throw new TRPCError({ code: "NOT_FOUND" });
         // Use org.companyId if not provided (org already linked to company)
         const companyId = input.companyId ?? org.companyId ?? 0;
@@ -832,7 +868,7 @@ export const appRouter = router({
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
         // Verify access (company-aware) before deleting
-        const p = await ownProtocol(ctx.user.id, input.id);
+        const p = await assertCanEditProtocol(ctx.user.id, input.id);
         await deleteProtocolCascade(p.userId, input.id);
         return { success: true };
       }),
@@ -840,7 +876,7 @@ export const appRouter = router({
       .input(z.object({ sourceProtocolId: z.number(), organizationId: z.number() }))
       .mutation(async ({ ctx, input }) => {
         // Verify user owns the source protocol
-        await ownProtocol(ctx.user.id, input.sourceProtocolId);
+        await assertCanEditProtocol(ctx.user.id, input.sourceProtocolId);
         // Clone the protocol (equipment, org, commission preserved; sensors/results reset)
         const newProto = await cloneProtocol(ctx.user.id, input.sourceProtocolId, input.organizationId);
         return newProto;
@@ -930,7 +966,7 @@ export const appRouter = router({
         }),
       )
        .mutation(async ({ ctx, input }) => {
-        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
+        const protocol = await assertCanEditProtocol(ctx.user.id, input.protocolId);
         const { protocolId, ...patch } = input;
         // Drizzle decimal columns expect strings (or null). Coerce numeric inputs.
         const decimalKeys = [
@@ -1119,7 +1155,7 @@ export const appRouter = router({
         }),
       )
       .mutation(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        await assertCanEditProtocol(ctx.user.id, input.protocolId);
         await saveChecklist(input.protocolId, input.stage, input.items, input.warehouseEquipmentId);
         // Update verdict & status (only for non-equipment-specific saves or when all equipment done)
         const hasUnset = input.items.some(i => i.answer === "unset");
@@ -1229,7 +1265,7 @@ export const appRouter = router({
         }),
       )
       .mutation(async ({ ctx, input }) => {
-        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
+        const protocol = await assertCanEditProtocol(ctx.user.id, input.protocolId);
         const { protocolId, customMin, customMax, samplingStepMinutes, coolingUnitPos, coolingUnitPositions, doorPos, refrigeratorDrawerCount, refrigeratorLevelCount, floorPlanObjects, roomLengthM, roomWidthM, roomHeightM, planImageKey, planImageUrl, planBackgroundImageKey, planBackgroundImageUrl, ...rest } = input;
         const trialKey = input.trialKey ?? "default";
         const patch: any = { ...rest };
@@ -1328,7 +1364,7 @@ export const appRouter = router({
         }),
       )
       .mutation(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        await assertCanEditProtocol(ctx.user.id, input.protocolId);
         const trialKey = input.trialKey ?? "default";
         const session = await getPVSession(input.protocolId, trialKey);
         if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "PV session missing" });
@@ -1351,7 +1387,7 @@ export const appRouter = router({
         }),
       )
       .mutation(async ({ ctx, input }) => {
-        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
+        const protocol = await assertCanEditProtocol(ctx.user.id, input.protocolId);
         if (!isWarehouseLike(protocol.equipmentType)) {
           throw new TRPCError({
             code: "BAD_REQUEST",
@@ -1400,7 +1436,7 @@ export const appRouter = router({
         }),
       )
       .mutation(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        await assertCanEditProtocol(ctx.user.id, input.protocolId);
         const trialKey = input.trialKey ?? "default";
         const session = await getPVSession(input.protocolId, trialKey);
         if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "PV session missing" });
@@ -1481,7 +1517,7 @@ export const appRouter = router({
         }),
       )
       .mutation(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        await assertCanEditProtocol(ctx.user.id, input.protocolId);
         const patch: any = {};
         if (input.customName !== undefined) patch.customName = input.customName;
         if (input.role !== undefined) patch.role = input.role;
@@ -1493,7 +1529,7 @@ export const appRouter = router({
     deleteLogger: protectedProcedure
       .input(z.object({ protocolId: z.number(), loggerId: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        await assertCanEditProtocol(ctx.user.id, input.protocolId);
         const existingLoggers = await listLoggers(input.protocolId);
         const deletedLogger = existingLoggers.find(logger => logger.id === input.loggerId);
         await deleteLogger(input.loggerId);
@@ -1503,7 +1539,7 @@ export const appRouter = router({
     deleteAllLoggers: protectedProcedure
       .input(z.object({ protocolId: z.number(), trialKey: z.string().max(32).optional() }))
       .mutation(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        await assertCanEditProtocol(ctx.user.id, input.protocolId);
         const trialKey = input.trialKey ?? "default";
         const loggers = await listLoggers(input.protocolId, trialKey);
         for (const logger of loggers) {
@@ -1517,7 +1553,7 @@ export const appRouter = router({
     autoDetectExternal: protectedProcedure
       .input(z.object({ protocolId: z.number(), trialKey: z.string().max(32).optional() }))
       .mutation(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        await assertCanEditProtocol(ctx.user.id, input.protocolId);
         const trialKey = input.trialKey ?? "default";
         const session = await getPVSession(input.protocolId, trialKey);
         if (!session) throw new TRPCError({ code: "NOT_FOUND" });
@@ -1545,7 +1581,7 @@ export const appRouter = router({
     analyze: protectedProcedure
       .input(z.object({ protocolId: z.number(), trialKey: z.string().max(32).optional() }))
       .mutation(async ({ ctx, input }) => {
-        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
+        const protocol = await assertCanEditProtocol(ctx.user.id, input.protocolId);
         const trialKey = input.trialKey ?? "default";
         const session = await getPVSession(input.protocolId, trialKey);
         if (!session) throw new TRPCError({ code: "NOT_FOUND" });
@@ -1668,7 +1704,7 @@ export const appRouter = router({
         }),
       )
       .mutation(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        await assertCanEditProtocol(ctx.user.id, input.protocolId);
         const trialKey = input.trialKey ?? "default";
         const loggers = await listLoggers(input.protocolId, trialKey);
         const internals = loggers.filter(l => l.role === "internal");
@@ -1812,7 +1848,7 @@ export const appRouter = router({
         includeInPdf: z.boolean().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
+        const protocol = await assertCanEditProtocol(ctx.user.id, input.protocolId);
         if (!isAutoRefrigeratorLike(protocol.equipmentType)) {
           throw new TRPCError({
             code: "BAD_REQUEST",
@@ -1860,7 +1896,7 @@ export const appRouter = router({
         includeInPdf: z.boolean().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
-        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
+        const protocol = await assertCanEditProtocol(ctx.user.id, input.protocolId);
         if (!isAutoRefrigeratorLike(protocol.equipmentType)) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Приложения доступны только для авторефрижераторов" });
         }
@@ -1880,7 +1916,7 @@ export const appRouter = router({
     delete: protectedProcedure
       .input(z.object({ protocolId: z.number(), id: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
+        const protocol = await assertCanEditProtocol(ctx.user.id, input.protocolId);
         if (!isAutoRefrigeratorLike(protocol.equipmentType)) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Приложения доступны только для авторефрижераторов" });
         }
@@ -1897,15 +1933,7 @@ export const appRouter = router({
       .input(z.object({ protocolId: z.number() }))
       .mutation(async ({ ctx, input }) => {
         const protocol = await ownProtocol(ctx.user.id, input.protocolId);
-        let org = await getOrganization(ctx.user.id, protocol.organizationId);
-        if (!org) {
-          const userCompanies = await getUserCompanies(ctx.user.id);
-          if (userCompanies.length > 0) org = await getOrganizationByCompany(userCompanies[0].id, protocol.organizationId);
-          if (!org) {
-            const adminCompanies = await listCompanies(ctx.user.id);
-            if (adminCompanies.length > 0) org = await getOrganizationByCompany(adminCompanies[0].id, protocol.organizationId);
-          }
-        }
+        const org = await getAccessibleOrganization(ctx.user.id, protocol.organizationId);
         if (!org) throw new TRPCError({ code: "NOT_FOUND" });
         const gi = await getGeneralInfo(input.protocolId);
         if (protocol.equipmentType === "computerized-system") {
@@ -2416,7 +2444,8 @@ export const appRouter = router({
           equipmentKind: z.enum(["conditioner", "ventilation", "heat_curtain", "chiller", "fan_coil", "other"]).nullable().optional(),
         }),
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        await assertCanEditCompanyData(ctx.user.id);
         const eqType = input.equipmentType || "refrigerator";
         if (eqType === "chamber") await ensureChamberQuestionsReady();
         if (eqType === KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE) await ensureThermalContainerStorage();
@@ -2436,14 +2465,18 @@ export const appRouter = router({
           ord: z.number().optional(),
         }),
       )
-      .mutation(({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        await assertCanEditCompanyData(ctx.user.id);
         const { id, ...data } = input;
         return updateQuestionTemplate(id, data);
       }),
 
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
-      .mutation(({ input }) => deleteQuestionTemplate(input.id)),
+      .mutation(async ({ ctx, input }) => {
+        await assertCanEditCompanyData(ctx.user.id);
+        return deleteQuestionTemplate(input.id);
+      }),
 
     reorder: protectedProcedure
       .input(
@@ -2452,7 +2485,8 @@ export const appRouter = router({
           items: z.array(z.object({ id: z.number(), ord: z.number() })),
         }),
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        await assertCanEditCompanyData(ctx.user.id);
         await Promise.all(
           input.items.map(item => updateQuestionTemplate(item.id, { ord: item.ord })),
         );
@@ -2463,7 +2497,8 @@ export const appRouter = router({
         equipmentType: z.enum(["refrigerator", "freezer", "auto-refrigerator", "auto-refrigerator-kg", "chamber", "thermal-container", "warehouse", "warehouse-kg", "warehouse-expert", "other"]),
         overwrite: z.boolean().optional(),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ ctx, input }) => {
+        await assertCanEditCompanyData(ctx.user.id);
         if (input.equipmentType === "chamber" || input.equipmentType === "thermal-container") await ensureChamberQuestionsReady();
         if (
           input.equipmentType === KYRGYZSTAN_WAREHOUSE_EQUIPMENT_TYPE ||
@@ -2522,7 +2557,7 @@ export const appRouter = router({
         }),
       )
       .mutation(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        await assertCanEditProtocol(ctx.user.id, input.protocolId);
         const { protocolId, ...rest } = input;
         const boolToInt = (v?: boolean) => (v === undefined ? undefined : v ? 1 : 0);
         return upsertExcursionSession(protocolId, {
@@ -2551,7 +2586,7 @@ export const appRouter = router({
         }),
       )
       .mutation(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        await assertCanEditProtocol(ctx.user.id, input.protocolId);
         let session = await getExcursionSession(input.protocolId);
         if (!session) {
           session = await upsertExcursionSession(input.protocolId, { enabled: 1 });
@@ -2612,14 +2647,14 @@ export const appRouter = router({
         }),
       )
       .mutation(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        await assertCanEditProtocol(ctx.user.id, input.protocolId);
         return updateExcursionLogger(input.id, { customName: input.customName, role: input.role });
       }),
 
     deleteLogger: protectedProcedure
       .input(z.object({ id: z.number(), protocolId: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        await assertCanEditProtocol(ctx.user.id, input.protocolId);
         const existingLoggers = await listExcursionLoggers(input.protocolId);
         const deletedLogger = existingLoggers.find(logger => logger.id === input.id);
         await deleteExcursionLogger(input.id);
@@ -2630,7 +2665,7 @@ export const appRouter = router({
     runCalculations: protectedProcedure
       .input(z.object({ protocolId: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
+        const protocol = await assertCanEditProtocol(ctx.user.id, input.protocolId);
         const session = await getExcursionSession(input.protocolId);
         if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "Excursion session missing" });
         const loggers = await listExcursionLoggers(input.protocolId);
@@ -2784,6 +2819,7 @@ export const appRouter = router({
         email: z.string().email(),
         name: z.string().min(1).max(255).optional().nullable(),
         password: z.string().min(8).max(128).optional().nullable(),
+        role: z.enum(["viewer", "user"]).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
         if (ctx.user.role !== 'admin') throw new TRPCError({ code: 'FORBIDDEN' });
@@ -2791,6 +2827,7 @@ export const appRouter = router({
         const email = normalizeUserEmail(input.email);
         const name = input.name?.trim() || email;
         const password = input.password?.trim() || generateTemporaryPassword();
+        const memberRole = input.role ?? "viewer";
         const passwordHash = hashPassword(password);
         const now = new Date().toISOString();
 
@@ -2817,6 +2854,7 @@ export const appRouter = router({
 
         existingMember = await getCompanyMember(targetUser.id, input.companyId);
         if (existingMember) {
+          await updateCompanyMemberRole(existingMember.id, memberRole);
           await approveCompanyMember(existingMember.id, ctx.user.id);
           return {
             success: true,
@@ -2832,7 +2870,7 @@ export const appRouter = router({
         const member = await inviteUserToCompany({
           userId: targetUser.id,
           companyId: input.companyId,
-          role: 'user',
+          role: memberRole,
           status: 'approved',
           approvedAt: now,
           approvedByAdminId: ctx.user.id,
@@ -2864,6 +2902,15 @@ export const appRouter = router({
       .mutation(async ({ ctx, input }) => {
         if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
         await rejectCompanyMember(input.memberId, ctx.user.id);
+        return { success: true };
+      }),
+
+    // Admin: change a member access role
+    updateMemberRole: protectedProcedure
+      .input(z.object({ memberId: z.number(), role: z.enum(["viewer", "user"]) }))
+      .mutation(async ({ ctx, input }) => {
+        if (ctx.user.role !== "admin") throw new TRPCError({ code: "FORBIDDEN" });
+        await updateCompanyMemberRole(input.memberId, input.role);
         return { success: true };
       }),
 
@@ -2927,7 +2974,7 @@ export const appRouter = router({
         }),
       )
       .mutation(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        await assertCanEditProtocol(ctx.user.id, input.protocolId);
         await saveWarehouseSections(input.protocolId, input.sections);
         return { success: true };
       }),
@@ -2959,7 +3006,7 @@ export const appRouter = router({
         }),
       )
       .mutation(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        await assertCanEditProtocol(ctx.user.id, input.protocolId);
         return createWarehouseEquipment({
           protocolId: input.protocolId,
           kind: input.kind,
@@ -2989,6 +3036,7 @@ export const appRouter = router({
       )
       .mutation(async ({ ctx, input }) => {
         const { id, ...data } = input;
+        await assertCanEditWarehouseEquipment(ctx.user.id, id);
         await updateWarehouseEquipment(id, data);
         return { success: true };
       }),
@@ -3058,6 +3106,7 @@ export const appRouter = router({
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
+        await assertCanEditWarehouseEquipment(ctx.user.id, input.id);
         await deleteWarehouseEquipment(input.id);
         return { success: true };
       }),
@@ -3081,6 +3130,7 @@ export const appRouter = router({
         accuracyC: z.union([z.string(), z.number()]).nullable().optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        await assertCanEditCompanyData(ctx.user.id);
         return createSensor({
           number: input.number,
           calibrationDate: input.calibrationDate,
@@ -3100,6 +3150,7 @@ export const appRouter = router({
         status: z.enum(["active", "expiring_soon", "expired"]).optional(),
       }))
       .mutation(async ({ ctx, input }) => {
+        await assertCanEditCompanyData(ctx.user.id);
         const sensor = await getSensor(input.id);
         if (!sensor) throw new TRPCError({ code: "NOT_FOUND" });
         return updateSensor(input.id, {
@@ -3116,6 +3167,7 @@ export const appRouter = router({
     delete: protectedProcedure
       .input(z.object({ id: z.number() }))
       .mutation(async ({ ctx, input }) => {
+        await assertCanEditCompanyData(ctx.user.id);
         const sensor = await getSensor(input.id);
         if (!sensor) throw new TRPCError({ code: "NOT_FOUND" });
         await deleteSensor(input.id);
@@ -3135,6 +3187,7 @@ export const appRouter = router({
         accuracyC: z.union([z.string(), z.number()]).nullable().optional(),
       })))
       .mutation(async ({ ctx, input }) => {
+        await assertCanEditCompanyData(ctx.user.id);
         return bulkCreateSensors(input);
       }),
   }),
@@ -3153,7 +3206,7 @@ export const appRouter = router({
         sensorId: z.number(),
       }))
       .mutation(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        await assertCanEditProtocol(ctx.user.id, input.protocolId);
         return addSensorToProtocol(input.protocolId, input.sensorId);
       }),
 
@@ -3163,7 +3216,7 @@ export const appRouter = router({
         sensorId: z.number(),
       }))
       .mutation(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        await assertCanEditProtocol(ctx.user.id, input.protocolId);
         await removeProtocolSensor(input.protocolId, input.sensorId);
         return { success: true };
       }),
@@ -3171,7 +3224,7 @@ export const appRouter = router({
     clear: protectedProcedure
       .input(z.object({ protocolId: z.number() }))
       .mutation(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
+        await assertCanEditProtocol(ctx.user.id, input.protocolId);
         await clearProtocolSensors(input.protocolId);
         return { success: true };
       }),
