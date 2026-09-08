@@ -12,6 +12,7 @@ import {
   DEFAULT_OQ_QUESTIONS_AUTO_REFRIGERATOR,
   DEFAULT_OQ_QUESTIONS_CHAMBER,
   DEFAULT_OQ_QUESTIONS_WAREHOUSE,
+  findWarehouseChecklistQuestionMatch,
 } from "../shared/validation";
 import { buildWarehouseQuestions } from "./warehouseQuestions";
 
@@ -117,50 +118,66 @@ describe("refrigerator question defaults", () => {
 
 describe("warehouse question defaults", () => {
   it("provides the requested IQ checklist", () => {
-    expect(DEFAULT_IQ_QUESTIONS_WAREHOUSE).toHaveLength(8);
+    expect(DEFAULT_IQ_QUESTIONS_WAREHOUSE).toHaveLength(10);
     expect(DEFAULT_IQ_QUESTIONS_WAREHOUSE[0]).toBe(
       "Идентифицируется ли помещение табличкой или вывеской?",
     );
-    expect(DEFAULT_IQ_QUESTIONS_WAREHOUSE[7]).toBe(
-      "Соответствуют ли внутренняя отделка и санитарное состояние помещения требованиям СанПиН?",
+    expect(DEFAULT_IQ_QUESTIONS_WAREHOUSE[9]).toBe(
+      "Отсутствуют ли видимые признаки повреждений или дефектов монтажа?",
     );
   });
 
   it("provides the requested OQ checklist", () => {
-    expect(DEFAULT_OQ_QUESTIONS_WAREHOUSE).toHaveLength(10);
+    expect(DEFAULT_OQ_QUESTIONS_WAREHOUSE).toHaveLength(8);
     expect(DEFAULT_OQ_QUESTIONS_WAREHOUSE[0]).toBe(
-      "Запускается ли всё оборудование зоны (холодильные установки, кондиционеры, обогреватели) в штатном режиме?",
+      "Запускается ли оборудование в штатном режиме?",
     );
-    expect(DEFAULT_OQ_QUESTIONS_WAREHOUSE[9]).toBe(
-      "Отсутствуют ли посторонние шумы/вибрации, свидетельствующие о неисправностях оборудования зоны?",
+    expect(DEFAULT_OQ_QUESTIONS_WAREHOUSE[7]).toBe(
+      "Оборудование включается и издает характерный звук работы вентилятора, компрессора?",
     );
   });
 });
 
 describe("warehouse conditioner question defaults", () => {
-  it("adds the requested conditioner IQ block", () => {
+  it("uses the fixed warehouse IQ block without extra equipment-kind questions", () => {
     const questions = buildWarehouseQuestions([{ kind: "conditioner" }], "iq");
     const conditionerQuestions = questions.filter((question) => question.startsWith("[Кондиционер]"));
 
-    expect(conditionerQuestions).toHaveLength(5);
-    expect(conditionerQuestions[0]).toBe(
-      "[Кондиционер] Идентифицируется ли оборудование биркой (инвентарный/серийный номер)?",
-    );
-    expect(conditionerQuestions[4]).toBe(
-      "[Кондиционер] Отсутствуют ли видимые признаки повреждений или дефектов монтажа?",
-    );
+    expect(questions).toEqual(DEFAULT_IQ_QUESTIONS_WAREHOUSE);
+    expect(conditionerQuestions).toHaveLength(0);
   });
 
-  it("adds the requested conditioner OQ block", () => {
+  it("uses the fixed warehouse OQ block without extra equipment-kind questions", () => {
     const questions = buildWarehouseQuestions([{ kind: "conditioner" }], "oq");
     const conditionerQuestions = questions.filter((question) => question.startsWith("[Кондиционер]"));
 
-    expect(conditionerQuestions).toHaveLength(5);
-    expect(conditionerQuestions[1]).toBe(
-      "[Кондиционер] Оборудование включается и издает характерный звук работы вентилятора, компрессора?",
-    );
-    expect(conditionerQuestions[4]).toBe(
-      "[Кондиционер] Отсутствуют ли посторонние шумы / вибрации, указывающие на неисправность?",
-    );
+    expect(questions).toEqual(DEFAULT_OQ_QUESTIONS_WAREHOUSE);
+    expect(conditionerQuestions).toHaveLength(0);
+  });
+
+  it("matches legacy warehouse questions by meaning when updating existing protocols", () => {
+    const savedItems = [
+      {
+        questionText: "Имеется ли на помещение технический паспорт?",
+        answer: "yes",
+      },
+      {
+        questionText: "[Кондиционер] Оборудование включается и издает характерный звук работы вентилятора, компрессора?",
+        answer: "no",
+      },
+    ];
+
+    expect(
+      findWarehouseChecklistQuestionMatch(
+        savedItems,
+        "Имеется ли на объект технический паспорт?",
+      )?.item.answer,
+    ).toBe("yes");
+    expect(
+      findWarehouseChecklistQuestionMatch(
+        savedItems,
+        "Оборудование включается и издает характерный звук работы вентилятора, компрессора?",
+      )?.item.answer,
+    ).toBe("no");
   });
 });

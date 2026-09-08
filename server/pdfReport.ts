@@ -26,6 +26,9 @@ import { calculateAllOperationalMetrics } from "./operationalMetrics";
 import { calculateCriticalLoggerIndices, criticalLoggerScore } from "./pvCriticalPoints";
 import {
   computeWarehouseSensorCount,
+  DEFAULT_IQ_QUESTIONS_WAREHOUSE,
+  DEFAULT_OQ_QUESTIONS_WAREHOUSE,
+  findWarehouseChecklistQuestionMatch,
   isAutoRefrigeratorLike,
   isKyrgyzstanAutoRefrigerator,
   isKyrgyzstanWarehouse,
@@ -49,6 +52,35 @@ type ChecklistItem = {
   comment: string | null;
   updatedAt?: string | Date | null;
 };
+
+function checklistItemsForReport(input: ReportInput, stage: "iq" | "oq"): ChecklistItem[] {
+  const sourceItems = stage === "iq" ? input.iq.items : input.oq.items;
+  if (!isWarehouseLike(getReportEquipmentType(input)) || isEnglishWarehouse(input)) {
+    return sourceItems.filter(item => String(item.questionText ?? "").trim().length > 0);
+  }
+
+  const defaults = stage === "iq" ? DEFAULT_IQ_QUESTIONS_WAREHOUSE : DEFAULT_OQ_QUESTIONS_WAREHOUSE;
+  const savedItems = sourceItems
+    .slice()
+    .sort((a, b) => a.questionIndex - b.questionIndex)
+    .filter(item => String(item.questionText ?? "").trim().length > 0);
+
+  const usedIndexes = new Set<number>();
+  return defaults.map((questionText, index) => {
+    const matched = findWarehouseChecklistQuestionMatch(savedItems, questionText, usedIndexes);
+    const saved = matched?.item;
+    if (matched) {
+      usedIndexes.add(matched.index);
+    }
+    return {
+      questionIndex: index,
+      questionText,
+      answer: saved?.answer ?? "unset",
+      comment: saved?.comment ?? null,
+      updatedAt: saved?.updatedAt ?? null,
+    };
+  });
+}
 
 type LoggerSummary = {
   id: number;
@@ -1365,15 +1397,17 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
 
   doc.addPage();
   drawSectionTitle(doc, isEnglishWarehouse(input) ? "7. IQ Results - Installation Qualification" : "7. Результаты IQ — Квалификация монтажа");
+  const iqItems = checklistItemsForReport(input, "iq");
   drawStageDataEntryTable(doc, input, "IQ");
-  drawChecklistTable(doc, input.iq.items, input);
-  drawStageVerdict(doc, "IQ", input.iq.verdict, input.iq.items, input);
+  drawChecklistTable(doc, iqItems, input);
+  drawStageVerdict(doc, "IQ", input.iq.verdict, iqItems, input);
 
   doc.addPage();
   drawSectionTitle(doc, isEnglishWarehouse(input) ? "8. OQ Results - Operational Qualification" : "8. Результаты OQ — Квалификация функционирования");
+  const oqItems = checklistItemsForReport(input, "oq");
   drawStageDataEntryTable(doc, input, "OQ");
-  drawChecklistTable(doc, input.oq.items, input);
-  drawStageVerdict(doc, "OQ", input.oq.verdict, input.oq.items, input);
+  drawChecklistTable(doc, oqItems, input);
+  drawStageVerdict(doc, "OQ", input.oq.verdict, oqItems, input);
 
   doc.addPage();
     drawSectionTitle(doc, isEnglishWarehouse(input) ? "9. PV Results - Performance Qualification" : "9. Результаты PV — Эксплуатационная квалификация");
@@ -2357,7 +2391,7 @@ function drawPVParams(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Re
 
 function supportsExpertPvSummary(input?: ReportInput): boolean {
   const eqType = getReportEquipmentType(input) || "";
-  return isAutoRefrigeratorLike(eqType) || eqType === "refrigerator" || eqType === "freezer";
+  return isWarehouseLike(eqType) || isAutoRefrigeratorLike(eqType) || eqType === "refrigerator" || eqType === "freezer";
 }
 
 function finiteNumberOrNull(value: unknown): number | null {
@@ -2567,9 +2601,12 @@ function criticalSelectionEvidence(input: ReportInput, logger: LoggerSummary, ki
   const metricSummary = kind === "hot"
     ? `Max ${fmtTempMetric(logger.max)}, MKT ${fmtTempMetric(logger.mkt)}, Avg ${fmtTempMetric(logger.avg)}`
     : `Min ${fmtTempMetric(logger.min)}, Avg ${fmtTempMetric(logger.avg)}`;
+  const factorSummary = CRITICAL_SCORE_LABELS[kind]
+    .map((label, index) => `${label}: ${criticalScoreFactorValue(logger, kind, index)}`)
+    .join("; ");
   const rankText = rankIndex >= 0 ? `Ранг ${rankIndex + 1} из ${ranked.length}` : "Выбран";
   if (!next) {
-    return `${rankText} по комплексному скору: ${criticalDeviationEvidence(logger, kind)}; ${metricSummary}.`;
+    return `${rankText} по комплексному скору: ${criticalDeviationEvidence(logger, kind)}; ${metricSummary}. Факторы выбранной точки: ${factorSummary}.`;
   }
 
   const firstDiffIndex = logger
@@ -2579,7 +2616,7 @@ function criticalSelectionEvidence(input: ReportInput, logger: LoggerSummary, ki
     ? `Первый отличающийся фактор с ближайшей альтернативой ${shortLoggerDisplay(next.item)}: ${CRITICAL_SCORE_LABELS[kind][firstDiffIndex]} (${criticalScoreFactorValue(logger, kind, firstDiffIndex)} против ${criticalScoreFactorValue(next.item, kind, firstDiffIndex)}).`
     : `Ближайшая альтернатива: ${shortLoggerDisplay(next.item)}; различия по расчетному скору минимальны.`;
 
-  return `${rankText} по комплексному скору: ${criticalDeviationEvidence(logger, kind)}; ${metricSummary}. ${firstDiffText}`;
+  return `${rankText} по комплексному скору: ${criticalDeviationEvidence(logger, kind)}; ${metricSummary}. Факторы выбранной точки: ${factorSummary}. ${firstDiffText}`;
 }
 
 function drawPVCriticalPointsSummary(doc: PDFKit.PDFDocument, input: ReportInput) {
@@ -3556,6 +3593,10 @@ function drawPVPlacementPlan(doc: PDFKit.PDFDocument, input: ReportInput) {
       {
         showCriticalMarkers: false,
         showAverageLabels: false,
+        showSensorLabels: false,
+        showHeightLabels: true,
+        showPlacementTable: false,
+        showCaption: false,
       },
     );
   } else if (isReeferLike(eqType)) {
@@ -4875,6 +4916,10 @@ export function addHeadersAndFooters(doc: PDFKit.PDFDocument, input: ReportInput
 type WarehousePlanDiagramOptions = {
   showCriticalMarkers?: boolean;
   showAverageLabels?: boolean;
+  showSensorLabels?: boolean;
+  showHeightLabels?: boolean;
+  showPlacementTable?: boolean;
+  showCaption?: boolean;
 };
 
 /** Draw a top-view plan with EEC recommended logger grid for warehouse */
@@ -4887,6 +4932,10 @@ function drawWarehousePlanDiagram(
 ) {
   const showCriticalMarkers = options.showCriticalMarkers ?? !template;
   const showAverageLabels = options.showAverageLabels ?? false;
+  const showSensorLabels = options.showSensorLabels ?? true;
+  const showHeightLabels = options.showHeightLabels ?? false;
+  const showPlacementTable = options.showPlacementTable ?? true;
+  const showCaption = options.showCaption ?? true;
   const gi = input.generalInfo;
   const isEaeuWarehouse = isWarehouseEaeu(getReportEquipmentType(input));
   // Prefer pvSession room dims (saved by FloorPlanEditor), fall back to generalInfo
@@ -4929,7 +4978,7 @@ function drawWarehousePlanDiagram(
       doc.moveDown(0.3);
     }
     // Draw sensor-placement table below the image
-    {
+    if (showPlacementTable) {
       const floorObjs2 = (input.floorPlanObjects ?? []);
       // Collect all sensor rows from objects
       const sensorRows2: Array<{ objLabel: string; sensorId: string; heightFromFloor: string }> = [];
@@ -5312,8 +5361,10 @@ function drawWarehousePlanDiagram(
       }
     }
     doc.fillColor("#7dd3fc").strokeColor("#0369a1").lineWidth(1.5).circle(spX, spY, r).fillAndStroke();
-    doc.fillColor("#0c4a6e")
-      .text(label, spX - r * 1.2, spY - labelFont / 2 + 0.6, { width: r * 2.4, align: "center", lineBreak: false });
+    if (showSensorLabels) {
+      doc.fillColor("#0c4a6e")
+        .text(label, spX - r * 1.2, spY - labelFont / 2 + 0.6, { width: r * 2.4, align: "center", lineBreak: false });
+    }
     if (avgLabel) {
       const avgText = `(${avgLabel})`;
       const avgFont = Math.max(4.4, Math.min(6.2, r * 0.46));
@@ -5330,6 +5381,21 @@ function drawWarehousePlanDiagram(
       doc.restore();
       doc.fillColor("#0c4a6e").font("bold").fontSize(avgFont)
         .text(avgText, avgX + 2, avgY + 1.6, { width: avgW - 4, align: "center", lineBreak: false });
+    }
+    const heightLabel = showHeightLabels && (sp.heightM ?? 0) > 0
+      ? `${(sp.heightM as number).toFixed(1)} м`
+      : null;
+    if (heightLabel) {
+      const heightFont = Math.max(5.5, Math.min(7.2, r * 0.55));
+      doc.font("bold").fontSize(heightFont);
+      const heightW = Math.max(r * 2.5, doc.widthOfString(heightLabel) + 4);
+      const preferredHeightY = spY + r + 2;
+      const heightY = preferredHeightY + heightFont + 3 <= markerPlanBox.y + markerPlanBox.h - 1
+        ? preferredHeightY
+        : Math.max(markerPlanBox.y + 1, spY - r - heightFont - 3);
+      const heightX = Math.max(markerPlanBox.x + 1, Math.min(markerPlanBox.x + markerPlanBox.w - heightW - 1, spX - heightW / 2));
+      doc.fillColor("#0c4a6e").font("bold").fontSize(heightFont)
+        .text(heightLabel, heightX + 2, heightY + 1, { width: heightW - 4, align: "center", lineBreak: false });
     }
     const criticalOffset = r + Math.max(3.2, r * 0.35);
     const criticalMarkerRadius = 5.6;
@@ -5463,7 +5529,7 @@ function drawWarehousePlanDiagram(
   }
 
   // Caption
-  if (isEaeuWarehouse) {
+  if (showCaption && isEaeuWarehouse) {
     doc.fillColor(MUTED).font("body").fontSize(9)
       .text(
         `Размещено ${calc.nL} × ${calc.nW} точек на ${calc.nV} ярус(а), всего ${calc.base} внутренних регистраторов` +
@@ -5482,7 +5548,7 @@ function drawWarehousePlanDiagram(
         { width: usableW, align: "justify" },
       );
     doc.moveDown(0.3);
-  } else {
+  } else if (showCaption) {
     const manualSensorCount = sensorPointObjs.length + floorObjs.reduce((count, obj) => (
       count + (obj.sensors ?? []).filter((s: { sensorId: string }) => s.sensorId && s.sensorId.trim()).length
     ), 0);
@@ -5500,7 +5566,7 @@ function drawWarehousePlanDiagram(
 
   // ── Sensor placement table (height + comments) ──────────────────────────────
   // Only render when pvLoggers are available (second diagram call with template=false)
-  if (!template) {
+  if (!template && showPlacementTable) {
     const pvLoggers = input.pvLoggers ?? [];
     const internals = pvLoggers.filter(l => l.role === "internal");
     const externals = pvLoggers.filter(l => l.role === "external");
@@ -6380,13 +6446,13 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
   ensureSpace(doc, 260);
   drawSubTitle(doc, en ? "6.11. IQ Plan — Installation Qualification" : "6.11. План IQ — Квалификация монтажа");
   drawStageBlocks(doc, input.iq, input);
-  drawChecklistPlan(doc, input.iq.items, input);
+  drawChecklistPlan(doc, checklistItemsForReport(input, "iq"), input);
 
   // 6.12 OQ plan
   ensureSpace(doc, 260);
   drawSubTitle(doc, en ? "6.12. OQ Plan — Operational Qualification" : "6.12. План OQ — Квалификация функционирования");
   drawStageBlocks(doc, input.oq, input);
-  drawChecklistPlan(doc, input.oq.items, input);
+  drawChecklistPlan(doc, checklistItemsForReport(input, "oq"), input);
 
   // 6.13 PV plan
   ensureSpace(doc, 260);

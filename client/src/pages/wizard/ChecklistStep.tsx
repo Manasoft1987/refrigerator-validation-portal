@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { trpc } from "@/lib/trpc";
+import { findWarehouseChecklistQuestionMatch } from "@shared/validation";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -71,18 +72,39 @@ export default function ChecklistStep({
   useEffect(() => {
     if (!existingQ.data || !questionSource) return;
     if (existingQ.data.length > 0) {
-      setItems(
-        existingQ.data
-          .slice()
-          .sort((a: any, b: any) => a.questionIndex - b.questionIndex)
-          .filter((i: any) => String(i.questionText ?? "").trim().length > 0)
-          .map((i: any, index: number) => ({
+      const savedItems = existingQ.data
+        .slice()
+        .sort((a: any, b: any) => a.questionIndex - b.questionIndex)
+        .filter((i: any) => String(i.questionText ?? "").trim().length > 0);
+      if (isWarehouseUnified) {
+        const usedIndexes = new Set<number>();
+        setItems(
+          questionSource
+            .filter((q: string) => q.trim().length > 0)
+            .map((q: string, index: number) => {
+              const matched = findWarehouseChecklistQuestionMatch(savedItems, q, usedIndexes);
+              const saved = matched?.item;
+              if (matched) {
+                usedIndexes.add(matched.index);
+              }
+              return {
+                questionIndex: index,
+                questionText: q,
+                answer: (saved?.answer as Answer) || "unset",
+                comment: saved?.comment ?? null,
+              };
+            }),
+        );
+      } else {
+        setItems(
+          savedItems.map((i: any, index: number) => ({
             questionIndex: index,
             questionText: i.questionText,
             answer: (i.answer as Answer) || "unset",
             comment: i.comment,
           })),
-      );
+        );
+      }
     } else {
       setItems(
         questionSource

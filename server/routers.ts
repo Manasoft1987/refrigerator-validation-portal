@@ -411,26 +411,26 @@ function effectiveCustomRange(session?: { customMin?: unknown; customMax?: unkno
 
 const DEFAULT_IQ_QUESTIONS_WAREHOUSE_EN: string[] = [
   "Is the room identified by a sign, label or room number?",
-  "Is technical documentation for the room / storage area available?",
+  "Is a technical passport / technical documentation available for the object?",
   "Does the actual location address correspond to the licensed / approved site address?",
   "Is the room supplied by the main electrical power system?",
   "Is backup power provided for equipment maintaining the temperature regime, where required?",
-  "Is a temperature monitoring system installed in the room (and humidity monitoring where applicable)?",
-  "Is access control implemented for the area to prevent unauthorized access?",
-  "Do the internal finishes and sanitary condition of the room meet applicable hygiene requirements?",
+  "Is the equipment identified by a tag (inventory / serial number)?",
+  "Is the instruction / operating manual for the equipment available at the site?",
+  "Does the installed equipment model match the accompanying documents?",
+  "Is the equipment connected to the electrical power supply according to the manufacturer's requirements?",
+  "Are there no visible signs of damage or installation defects?",
 ];
 
 const DEFAULT_OQ_QUESTIONS_WAREHOUSE_EN: string[] = [
-  "Does all area equipment (HVAC units, refrigeration units, heaters) start in normal operating mode?",
+  "Does the equipment start in normal operating mode?",
   "Do the control panels and equipment interfaces operate correctly?",
   "Does the equipment respond to temperature setpoint changes within the defined limits?",
-  "Are temperature (and humidity where applicable) values displayed correctly on equipment indicators and monitoring systems?",
-  "Does the alarm system (audible/visual/notification) activate when temperature deviates outside the defined limits?",
-  "Is air distribution uniform across the area volume (fans and air ducts operate normally)?",
-  "Is the specified temperature regime maintained in the empty area during the test period?",
+  "Is temperature displayed correctly on the equipment indicators?",
   "Is backup equipment ready for activation if the primary equipment fails, where applicable?",
-  "Are monitoring data for temperature (and humidity where applicable) logged and archived correctly?",
   "Are there no abnormal noises or vibrations indicating malfunction of area equipment?",
+  "Does the display indication work correctly (temperature, modes)?",
+  "Does the equipment switch on and emit the characteristic operating sound of the fan or compressor?",
 ];
 
 const WAREHOUSE_STAGE_TEMPLATES_EN = {
@@ -3069,66 +3069,12 @@ export const appRouter = router({
         return { success: true };
       }),
 
-    /** Returns auto-generated IQ/OQ questions based on equipment kinds in the object.
-     * Uses DB templates when available, falls back to static defaults. */
+    /** Returns the fixed IQ/OQ question set for warehouse/storage-room protocols. */
     autoQuestions: protectedProcedure
       .input(z.object({ protocolId: z.number(), stage: z.enum(["iq", "oq"]) }))
       .query(async ({ ctx, input }) => {
-        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
-        const templateEquipmentType = protocol.equipmentType === KYRGYZSTAN_WAREHOUSE_EQUIPMENT_TYPE
-          ? KYRGYZSTAN_WAREHOUSE_EQUIPMENT_TYPE
-          : "warehouse";
-        const equipment = await listWarehouseEquipment(input.protocolId);
-        // Build question list using DB templates where available
-        // Common questions (equipmentKind=null) first, then kind-specific
-        let commonDbTemplates = await listAllQuestionTemplates(templateEquipmentType, null);
-        if (commonDbTemplates.length === 0 && templateEquipmentType !== "warehouse") {
-          commonDbTemplates = await listAllQuestionTemplates("warehouse", null);
-        }
-        const commonQuestions = commonDbTemplates
-          .filter(t => t.stage === input.stage)
-          .sort((a, b) => a.ord - b.ord)
-          .map(t => t.text);
-        // Collect unique kinds
-        const seenKinds: string[] = [];
-        const seen = new Set<string>();
-        for (const eq of equipment) {
-          const k = eq.kind ?? "other";
-          if (!seen.has(k)) { seen.add(k); seenKinds.push(k); }
-        }
-        // For each kind, check if DB templates exist; fall back to static
-        const kindQuestions: string[] = [];
-        for (const kind of seenKinds) {
-          let kindDbTemplates = await listAllQuestionTemplates(templateEquipmentType, kind);
-          if (kindDbTemplates.length === 0 && templateEquipmentType !== "warehouse") {
-            kindDbTemplates = await listAllQuestionTemplates("warehouse", kind);
-          }
-          const kindStageTemplates = kindDbTemplates
-            .filter(t => t.stage === input.stage)
-            .sort((a, b) => a.ord - b.ord)
-            .map(t => t.text);
-          if (kindStageTemplates.length > 0) {
-            // Use DB templates — they already have the kind label if user wants it
-            kindQuestions.push(...kindStageTemplates);
-          } else {
-            // Fall back to static defaults with kind label prefix
-            const staticQuestions = buildWarehouseQuestions([{ kind }], input.stage);
-            // staticQuestions includes common questions too — extract only kind-specific
-            // by taking questions after the common block
-            const staticCommon = buildWarehouseQuestions([], input.stage);
-            const kindOnly = staticQuestions.slice(staticCommon.length);
-            kindQuestions.push(...kindOnly);
-          }
-        }
-        // Combine: if no DB common templates, fall back to static common
-        if (commonQuestions.length === 0 && kindQuestions.length === 0) {
-          // Full fallback to static
-          return buildWarehouseQuestions(equipment, input.stage);
-        }
-        const finalCommon = commonQuestions.length > 0
-          ? commonQuestions
-          : buildWarehouseQuestions([], input.stage); // static common
-        return [...finalCommon, ...kindQuestions];
+        await ownProtocol(ctx.user.id, input.protocolId);
+        return buildWarehouseQuestions([], input.stage);
       }),
 
     delete: protectedProcedure
