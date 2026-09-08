@@ -322,7 +322,17 @@ function ObjectShape({
         )}
         <circle cx={cx2 - r + 4.2} cy={cy2 - r + 4.2} r={Math.max(2.8, Math.min(4.2, r * 0.3))} fill={colors.badge} opacity={0.95} />
         {selected && <circle cx={cx2} cy={cy2} r={r + 4} fill="none" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4 2" />}
-        <text x={cx2} y={cy2 + r * 0.23} textAnchor="middle" fontSize={clamp(r * 0.58, 5.2, 8.5)} fontWeight={800} fill={colors.text} style={{ pointerEvents: "none", userSelect: "none" }}>
+        <text
+          x={cx2}
+          y={cy2 + r * 0.18}
+          textAnchor="middle"
+          fontSize={clamp(r * 0.42, 3.8, 7.4)}
+          fontWeight={800}
+          fill={colors.text}
+          textLength={shortId.length >= 4 ? Math.max(1, r * 1.58) : undefined}
+          lengthAdjust="spacingAndGlyphs"
+          style={{ pointerEvents: "none", userSelect: "none" }}
+        >
           {shortId}
         </text>
         {htLabel && (

@@ -5095,19 +5095,23 @@ function drawWarehousePlanDiagram(
     const baseY = planY + (sp.yPct / 100) * drawH;
     const spR = Math.min((sp.widthPct / 100) * drawW, (sp.heightPct / 100) * drawH) / 2;
     const r = Math.max(5, Math.min(20, spR));
-    const [x, y] = chooseWarehouseBubblePosition(baseX, baseY, r, markerPlanBox, occupiedSensorBubbles);
-    occupiedSensorBubbles.push(warehouseMarkerBox(x, y, r + 4));
-    return { sp, baseX, baseY, x, y, r };
+    occupiedSensorBubbles.push(warehouseMarkerBox(baseX, baseY, r + 4));
+    return { sp, baseX, baseY, x: baseX, y: baseY, r };
   });
   const sensorLabelBoxes: WarehouseMarkerBox[] = [...occupiedSensorBubbles];
   for (const display of sensorDisplays) {
     const { sp, baseX, baseY, x: spX, y: spY, r } = display;
     const label = shortSensorId(sp.label) || "D";
-    const labelFont = Math.max(4.8, Math.min(8.4, r * 0.65));
     const isCriticalHot = floorSensorPointMatchesTokens(sp, criticalSensorTokens.hot);
     const isCriticalCold = floorSensorPointMatchesTokens(sp, criticalSensorTokens.cold);
     doc.save();
+    let labelFont = Math.max(3.8, Math.min(7.2, r * 0.42));
     doc.font("bold").fontSize(labelFont);
+    const maxLabelW = r * 1.68;
+    while (labelFont > 3.2 && doc.widthOfString(label) > maxLabelW) {
+      labelFont -= 0.2;
+      doc.font("bold").fontSize(labelFont);
+    }
     const occupiedMarkerBoxes: WarehouseMarkerBox[] = [...sensorLabelBoxes];
     if (isCriticalHot) {
       doc.circle(spX, spY, r + 2.5).lineWidth(2.0).strokeColor("#ef4444").stroke();
@@ -5127,7 +5131,7 @@ function drawWarehousePlanDiagram(
     }
     doc.fillColor("#7dd3fc").strokeColor("#0369a1").lineWidth(1.5).circle(spX, spY, r).fillAndStroke();
     doc.fillColor("#0c4a6e")
-      .text(label, spX - r, spY - labelFont / 2 + 1, { width: r * 2, align: "center", lineBreak: false });
+      .text(label, spX - r * 1.2, spY - labelFont / 2 + 0.6, { width: r * 2.4, align: "center", lineBreak: false });
     if (isCriticalHot) {
       const [markerX, markerY] = chooseWarehouseCriticalMarkerPosition([
         [spX + r + 9, spY + r + 10],
