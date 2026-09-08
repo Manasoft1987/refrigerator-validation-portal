@@ -553,6 +553,10 @@ function isReeferLike(type: string | null | undefined): boolean {
   return isAutoRefrigeratorLike(type) || type === "chamber" || type === "thermal-container";
 }
 
+function isRefrigeratorCabinetLike(type: string | null | undefined): boolean {
+  return type === "refrigerator" || type === "freezer";
+}
+
 function reeferSubject(type: string | null | undefined): string {
   if (type === "thermal-container") return "Термоконтейнер";
   if (type === "chamber") return "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430";
@@ -1487,26 +1491,30 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   );
   drawMappingPeriodicitySection(doc, input);
 
-  const validitySectionNumber = mappingPeriodicitySectionNumber + 1;
-  doc.addPage();
-  drawSectionTitle(
-    doc,
-    isEnglishWarehouse(input)
-      ? `${validitySectionNumber}. Document Validity Period`
-      : `${validitySectionNumber}. Срок действия документа`,
-  );
-  drawValiditySection(doc, input);
+  const skipValiditySection = isRefrigeratorCabinetLike(getReportEquipmentType(input));
+  let nextSectionNumber = mappingPeriodicitySectionNumber + 1;
+  if (!skipValiditySection) {
+    doc.addPage();
+    drawSectionTitle(
+      doc,
+      isEnglishWarehouse(input)
+        ? `${nextSectionNumber}. Document Validity Period`
+        : `${nextSectionNumber}. Срок действия документа`,
+    );
+    drawValiditySection(doc, input);
+    nextSectionNumber += 1;
+  }
 
   if (input.attachments?.some(item => item.includeInPdf !== false && item.includeInPdf !== 0)) {
     doc.addPage();
-    const annexSectionNumber = validitySectionNumber + 1;
+    const annexSectionNumber = nextSectionNumber;
     drawSectionTitle(doc, isEnglishWarehouse(input) ? `${annexSectionNumber}. Annexes` : `${annexSectionNumber}. Приложения`);
     drawAttachmentsSection(doc, input);
+    nextSectionNumber += 1;
   }
 
   doc.addPage();
-  const hasAnnexes = input.attachments?.some(item => item.includeInPdf !== false && item.includeInPdf !== 0);
-  const metrologySectionNumber = hasAnnexes ? validitySectionNumber + 2 : validitySectionNumber + 1;
+  const metrologySectionNumber = nextSectionNumber;
   drawCalibrationPage(doc, isEnglishWarehouse(input) ? `${metrologySectionNumber}. Metrological Verification of Measuring Instruments` : `${metrologySectionNumber}. Поверка средств измерений`);
 
   /* ---------------- Footer / pagination ---------------- */
@@ -3529,13 +3537,20 @@ function drawRecommendationsSection(doc: PDFKit.PDFDocument, input: ReportInput)
 }
 
 function drawMappingPeriodicitySection(doc: PDFKit.PDFDocument, input: ReportInput) {
-  const text = isEnglishWarehouse(input)
+  const equipmentType = getReportEquipmentType(input);
+  const criticalPointRecommendation = isRefrigeratorCabinetLike(equipmentType)
+    ? (isEnglishWarehouse(input)
+      ? "\n\nIt is also recommended to install measuring instruments or temperature monitoring system sensors at the critical points identified based on the validation results."
+      : "\n\nТакже рекомендуется установить средства измерения или датчики системы мониторинга температуры в критических точках, выявленных по результатам валидации.")
+    : "";
+  const text = (isEnglishWarehouse(input)
     ? "Initial temperature mapping shall be performed with consideration of both the cold and warm periods of the year.\n\n" +
       "Repeat mapping shall be performed at an interval established by the object owner based on a documented risk assessment. The recommended interval is once every three years, taking into account WHO recommendations.\n\n" +
       "Mapping shall be performed earlier than planned when changes capable of affecting the temperature profile occur, for example after repair, replacement or relocation of equipment, changes in operating conditions, or identification of temperature excursions."
     : "Первичное картирование проводится с учетом холодного и теплого периодов года.\n\n" +
       "Повторное картирование проводится с периодичностью, установленной владельцем объекта на основании оценки рисков. Рекомендуемый интервал — один раз в 3 года с учетом рекомендаций ВОЗ.\n\n" +
-      "Картирование проводится ранее планируемого срока при изменениях, способных повлиять на температурный режим, например после ремонта, замены или перемещения оборудования, изменения условий эксплуатации либо выявления температурных отклонений.";
+      "Картирование проводится ранее планируемого срока при изменениях, способных повлиять на температурный режим, например после ремонта, замены или перемещения оборудования, изменения условий эксплуатации либо выявления температурных отклонений.") +
+    criticalPointRecommendation;
 
   renderTextBlock(doc, text);
 }
