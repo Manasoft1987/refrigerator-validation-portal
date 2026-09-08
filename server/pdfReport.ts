@@ -1371,7 +1371,9 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     const useRiskOrientedReeferPlacement = isAutoRefrigeratorLike(eqType) && internalPvLoggerCount > 0 && internalPvLoggerCount < 15;
     if (isWarehouseLike(eqType)) {
       // Warehouse: single floor plan diagram only (no ISPE grid schema)
-      drawWarehousePlanDiagram(doc, input, false, isEnglishWarehouse(input) ? "Diagram. Sensor placement on the storage area plan (ID and average temperature)" : "Схема. Расстановка датчиков на плане помещения (ID и средняя температура)");
+      drawWarehousePlanDiagram(doc, input, false, isEnglishWarehouse(input) ? "Diagram. Sensor placement on the storage area plan (ID and average temperature)" : "Схема. Расстановка датчиков на плане помещения (ID и средняя температура)", {
+        showAverageLabels: true,
+      });
     } else {
       // Non-warehouse: Schema 1/2 describe planned/actual placement only.
       // Hot/cold critical markers are PV result interpretation and are shown
@@ -3427,10 +3429,14 @@ function drawPVPlacementPlan(doc: PDFKit.PDFDocument, input: ReportInput) {
     drawWarehousePlanDiagram(
       doc,
       input,
-      true,
+      false,
       en
         ? "Diagram 1. Planned logger positions on the storage area plan"
         : "Схема 1. Планируемые позиции регистраторов на плане помещения",
+      {
+        showCriticalMarkers: false,
+        showAverageLabels: false,
+      },
     );
   } else if (isReeferLike(eqType)) {
     drawReeferTruckDiagram3D(
@@ -4739,13 +4745,21 @@ export function addHeadersAndFooters(doc: PDFKit.PDFDocument, input: ReportInput
 /* Warehouse / storage zone (EEC Rec. №8) — plan diagram + annexes            */
 /* -------------------------------------------------------------------------- */
 
+type WarehousePlanDiagramOptions = {
+  showCriticalMarkers?: boolean;
+  showAverageLabels?: boolean;
+};
+
 /** Draw a top-view plan with EEC recommended logger grid for warehouse */
 function drawWarehousePlanDiagram(
   doc: PDFKit.PDFDocument,
   input: ReportInput,
   template: boolean,
   title: string,
+  options: WarehousePlanDiagramOptions = {},
 ) {
+  const showCriticalMarkers = options.showCriticalMarkers ?? !template;
+  const showAverageLabels = options.showAverageLabels ?? false;
   const gi = input.generalInfo;
   const isEaeuWarehouse = isWarehouseEaeu(getReportEquipmentType(input));
   // Prefer pvSession room dims (saved by FloorPlanEditor), fall back to generalInfo
@@ -4941,7 +4955,10 @@ function drawWarehousePlanDiagram(
   const allFloorObjs = (input.floorPlanObjects ?? []);
   const floorObjs = allFloorObjs.filter((o: { type: string }) => o.type !== "sensor_point");
   const sensorPointObjs = allFloorObjs.filter((o: { type: string }) => o.type === "sensor_point");
-  const criticalSensorTokens = buildWarehouseCriticalSensorTokens(input);
+  const criticalSensorTokens = showCriticalMarkers
+    ? buildWarehouseCriticalSensorTokens(input)
+    : { hot: new Set<string>(), cold: new Set<string>() };
+  const averageBySensor = showAverageLabels ? buildSensorAverageMap(input) : new Map<string, string>();
   if (floorObjs.length > 0) {
     // Object type visual properties
     const OBJ_STYLES: Record<string, { fill: string; stroke: string; text: string }> = {
@@ -5112,6 +5129,10 @@ function drawWarehousePlanDiagram(
   for (const display of sensorDisplays) {
     const { sp, baseX, baseY, x: spX, y: spY, r, markerBox } = display;
     const label = shortSensorId(sp.label) || "D";
+    const directSensorKey = normalizeSensorNumber(sp.label);
+    const avgLabel = showAverageLabels
+      ? averageBySensor.get(directSensorKey) ?? averageBySensor.get(normalizeSensorNumber(label)) ?? null
+      : null;
     const isCriticalHot = floorSensorPointMatchesTokens(sp, criticalSensorTokens.hot);
     const isCriticalCold = floorSensorPointMatchesTokens(sp, criticalSensorTokens.cold);
     doc.save();
@@ -5141,6 +5162,23 @@ function drawWarehousePlanDiagram(
     doc.fillColor("#7dd3fc").strokeColor("#0369a1").lineWidth(1.5).circle(spX, spY, r).fillAndStroke();
     doc.fillColor("#0c4a6e")
       .text(label, spX - r * 1.2, spY - labelFont / 2 + 0.6, { width: r * 2.4, align: "center", lineBreak: false });
+    if (avgLabel) {
+      const avgText = `(${avgLabel})`;
+      const avgFont = Math.max(4.4, Math.min(6.2, r * 0.46));
+      doc.font("bold").fontSize(avgFont);
+      const avgW = Math.max(r * 2.35, doc.widthOfString(avgText) + 4);
+      const avgH = avgFont + 3.2;
+      const avgX = Math.max(markerPlanBox.x + 1, Math.min(markerPlanBox.x + markerPlanBox.w - avgW - 1, spX - avgW / 2));
+      const preferredAvgY = spY + r + 1.2;
+      const avgY = preferredAvgY + avgH <= markerPlanBox.y + markerPlanBox.h - 1
+        ? preferredAvgY
+        : Math.max(markerPlanBox.y + 1, spY - r - avgH - 1.2);
+      doc.save();
+      doc.opacity(0.82).fillColor("#ffffff").roundedRect(avgX, avgY, avgW, avgH, 2).fill();
+      doc.restore();
+      doc.fillColor("#0c4a6e").font("bold").fontSize(avgFont)
+        .text(avgText, avgX + 2, avgY + 1.6, { width: avgW - 4, align: "center", lineBreak: false });
+    }
     const criticalOffset = r + Math.max(3.2, r * 0.35);
     const criticalMarkerRadius = 5.6;
     const occupiedCriticalBoxes = sensorLabelBoxes.filter(item => item !== markerBox);
