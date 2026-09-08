@@ -1464,19 +1464,37 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   drawSectionTitle(doc, isEnglishWarehouse(input) ? (input.excursion?.enabled ? "14. Report Signatures" : "13. Report Signatures") : (input.excursion?.enabled ? "14. Подписи к Отчёту" : "13. Подписи к Отчёту"));
   drawSignaturesBlock(doc, getSignatoriesPart2(input), isEnglishWarehouse(input) ? "This qualification report has been reviewed and approved by:" : "Настоящий отчёт о квалификации рассмотрен и утверждён:", input);
 
-  drawSectionTitle(doc, isEnglishWarehouse(input) ? (input.excursion?.enabled ? "15. Document Validity Period" : "14. Document Validity Period") : (input.excursion?.enabled ? "15. Срок действия документа" : "14. Срок действия документа"));
+  const mappingPeriodicitySectionNumber = input.excursion?.enabled ? 15 : 14;
+  doc.addPage();
+  drawSectionTitle(
+    doc,
+    isEnglishWarehouse(input)
+      ? `${mappingPeriodicitySectionNumber}. Mapping Frequency and Conditions`
+      : `${mappingPeriodicitySectionNumber}. Периодичность и условия картирования`,
+  );
+  drawMappingPeriodicitySection(doc, input);
+
+  const validitySectionNumber = mappingPeriodicitySectionNumber + 1;
+  doc.addPage();
+  drawSectionTitle(
+    doc,
+    isEnglishWarehouse(input)
+      ? `${validitySectionNumber}. Document Validity Period`
+      : `${validitySectionNumber}. Срок действия документа`,
+  );
   drawValiditySection(doc, input);
 
   if (input.attachments?.some(item => item.includeInPdf !== false && item.includeInPdf !== 0)) {
     doc.addPage();
-    drawSectionTitle(doc, isEnglishWarehouse(input) ? (input.excursion?.enabled ? "16. Annexes" : "15. Annexes") : (input.excursion?.enabled ? "16. Приложения" : "15. Приложения"));
+    const annexSectionNumber = validitySectionNumber + 1;
+    drawSectionTitle(doc, isEnglishWarehouse(input) ? `${annexSectionNumber}. Annexes` : `${annexSectionNumber}. Приложения`);
     drawAttachmentsSection(doc, input);
   }
 
   doc.addPage();
-  drawCalibrationPage(doc, input.attachments?.some(item => item.includeInPdf !== false && item.includeInPdf !== 0)
-    ? (isEnglishWarehouse(input) ? (input.excursion?.enabled ? "17. Metrological Verification of Measuring Instruments" : "16. Metrological Verification of Measuring Instruments") : (input.excursion?.enabled ? "17. Поверка средств измерений" : "16. Поверка средств измерений"))
-    : (isEnglishWarehouse(input) ? "16. Metrological Verification of Measuring Instruments" : undefined));
+  const hasAnnexes = input.attachments?.some(item => item.includeInPdf !== false && item.includeInPdf !== 0);
+  const metrologySectionNumber = hasAnnexes ? validitySectionNumber + 2 : validitySectionNumber + 1;
+  drawCalibrationPage(doc, isEnglishWarehouse(input) ? `${metrologySectionNumber}. Metrological Verification of Measuring Instruments` : `${metrologySectionNumber}. Поверка средств измерений`);
 
   /* ---------------- Footer / pagination ---------------- */
   addHeadersAndFooters(doc, input);
@@ -3468,6 +3486,18 @@ function drawRecommendationsSection(doc: PDFKit.PDFDocument, input: ReportInput)
   }
   doc.fillColor("#1f2937").font("body").fontSize(10).text(text, { align: "justify" });
   doc.moveDown(0.6);
+}
+
+function drawMappingPeriodicitySection(doc: PDFKit.PDFDocument, input: ReportInput) {
+  const text = isEnglishWarehouse(input)
+    ? "Initial temperature mapping shall be performed with consideration of both the cold and warm periods of the year.\n\n" +
+      "Repeat mapping shall be performed at an interval established by the object owner based on a documented risk assessment. The recommended interval is once every three years, taking into account WHO recommendations.\n\n" +
+      "Mapping shall be performed earlier than planned when changes capable of affecting the temperature profile occur, for example after repair, replacement or relocation of equipment, changes in operating conditions, or identification of temperature excursions."
+    : "Первичное картирование проводится с учетом холодного и теплого периодов года.\n\n" +
+      "Повторное картирование проводится с периодичностью, установленной владельцем объекта на основании оценки рисков. Рекомендуемый интервал — один раз в 3 года с учетом рекомендаций ВОЗ.\n\n" +
+      "Картирование проводится ранее планируемого срока при изменениях, способных повлиять на температурный режим, например после ремонта, замены или перемещения оборудования, изменения условий эксплуатации либо выявления температурных отклонений.";
+
+  renderTextBlock(doc, text);
 }
 
 function declenseYears(num: number): string {
