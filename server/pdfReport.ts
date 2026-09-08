@@ -1754,9 +1754,9 @@ function formatLoadPercent(value: string | number | null | undefined): string {
   if (value === null || value === undefined || value === "") return "—";
   const raw = String(value).trim();
   if (!raw) return "—";
-  const normalized = raw.replace("%", "").replace(",", ".");
+  const normalized = raw.replace("%", "").replace(",", ".").trim();
   const numeric = Number(normalized);
-  if (!Number.isFinite(numeric)) return raw.endsWith("%") ? raw : `${raw}%`;
+  if (!Number.isFinite(numeric)) return raw;
   const rounded = Math.round(numeric * 10) / 10;
   return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)}%`;
 }

@@ -962,7 +962,7 @@ export const appRouter = router({
           whExternalEnv: z.number().int().optional().nullable(),
           whLayoutNotes: z.string().optional().nullable(),
           fillStatus: z.enum(["empty", "loaded"]).optional().nullable(),
-          loadPercent: z.union([z.number(), z.string()]).optional().nullable(),
+          loadPercent: z.union([z.number(), z.string().max(64)]).optional().nullable(),
         }),
       )
        .mutation(async ({ ctx, input }) => {
@@ -975,7 +975,6 @@ export const appRouter = router({
           "whHeightM",
           "whHumidityMin",
           "whHumidityMax",
-          "loadPercent",
           "customMin",
           "customMax",
         ] as const;
@@ -990,11 +989,32 @@ export const appRouter = router({
           }
         }
         if ("loadPercent" in coerced && coerced.loadPercent !== null) {
-          const loadPercent = Number(coerced.loadPercent);
-          if (!Number.isFinite(loadPercent) || loadPercent < 0 || loadPercent > 100) {
+          const rawLoadPercent = String(coerced.loadPercent).trim();
+          coerced.loadPercent = rawLoadPercent || null;
+        }
+        if ("loadPercent" in coerced && coerced.loadPercent !== null) {
+          const rawLoadPercent = String(coerced.loadPercent);
+          if (rawLoadPercent.length > 64) {
             throw new TRPCError({
               code: "BAD_REQUEST",
-              message: "Процент загруженности объекта должен быть от 0 до 100.",
+              message: "Процент загруженности объекта должен быть не длиннее 64 символов.",
+            });
+          }
+          const numericCandidate = rawLoadPercent.replace("%", "").replace(",", ".").trim();
+          if (/^\d+(\.\d+)?$/.test(numericCandidate)) {
+            const loadPercent = Number(numericCandidate);
+            if (!Number.isFinite(loadPercent) || loadPercent < 0 || loadPercent > 100) {
+              throw new TRPCError({
+                code: "BAD_REQUEST",
+                message: "Процент загруженности объекта должен быть от 0 до 100.",
+              });
+            }
+          }
+          const hasDigit = /\d/.test(rawLoadPercent);
+          if (!hasDigit) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Укажите процент загруженности объекта, например ≤75%.",
             });
           }
         }

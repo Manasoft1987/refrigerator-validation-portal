@@ -129,7 +129,7 @@ export const generalInfo = mysqlTable("generalInfo", {
 	qualificationType: varchar({ length: 32 }),
 	season: varchar({ length: 32 }),
 	fillStatus: mysqlEnum(['empty','loaded']),
-	loadPercent: decimal({ precision: 5, scale: 2 }),
+	loadPercent: varchar({ length: 64 }),
 },
 (table) => [
 	index("generalInfo_protocolId_unique").on(table.protocolId),

@@ -578,13 +578,9 @@ export default function GeneralInfoStep({
                 </Field>
                 <Field label="Процент загруженности объекта">
                   <Input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="1"
                     value={form.loadPercent || ""}
                     onChange={e => setForm({ ...form, loadPercent: e.target.value })}
-                    placeholder="75"
+                    placeholder="например: ≤75%"
                   />
                 </Field>
                 {form.whHumidityControl ? (
@@ -755,13 +751,9 @@ export default function GeneralInfoStep({
             )}
             <Field label="Процент загруженности объекта">
               <Input
-                type="number"
-                min="0"
-                max="100"
-                step="1"
                 value={form.loadPercent || ""}
                 onChange={e => setForm({ ...form, loadPercent: e.target.value })}
-                placeholder="75"
+                placeholder="например: ≤75%"
               />
             </Field>
             <Field label="Дата валидации">
