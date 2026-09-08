@@ -5090,11 +5090,18 @@ function drawWarehousePlanDiagram(
   // ── Render sensor_point objects as circles on the plan ─────────────────────
   const markerPlanBox = { x: planX, y: planY, w: drawW, h: drawH };
   const occupiedSensorBubbles: WarehouseMarkerBox[] = [];
+  const sensorMarkerRadii = sensorPointObjs
+    .map(sp => Math.min((sp.widthPct / 100) * drawW, (sp.heightPct / 100) * drawH) / 2)
+    .filter(radius => Number.isFinite(radius) && radius > 0)
+    .sort((a, b) => a - b);
+  const medianSensorMarkerRadius = sensorMarkerRadii.length > 0
+    ? sensorMarkerRadii[Math.floor(sensorMarkerRadii.length / 2)]
+    : 8;
+  const uniformSensorMarkerRadius = Math.max(5, Math.min(20, medianSensorMarkerRadius));
   const sensorDisplays = sensorPointObjs.map(sp => {
     const baseX = planX + (sp.xPct / 100) * drawW;
     const baseY = planY + (sp.yPct / 100) * drawH;
-    const spR = Math.min((sp.widthPct / 100) * drawW, (sp.heightPct / 100) * drawH) / 2;
-    const r = Math.max(5, Math.min(20, spR));
+    const r = uniformSensorMarkerRadius;
     occupiedSensorBubbles.push(warehouseMarkerBox(baseX, baseY, r + 4));
     return { sp, baseX, baseY, x: baseX, y: baseY, r };
   });

@@ -26,6 +26,7 @@ import {
   viewportToCanvasPoint,
   type FloorPlanResizeHandle,
 } from "../lib/floorPlanGeometry";
+import { calculateCriticalLoggerIndices, type CriticalDeviation } from "@shared/pvCriticalPoints";
 
 export interface ObjectSensor {
   sensorId: string;     // user-entered ID/serial of the sensor
@@ -127,6 +128,7 @@ export interface SensorLogger {
   avgVal?: string | number | null;
   maxVal?: string | number | null;
   mktVal?: string | number | null;
+  deviations?: CriticalDeviation[] | null;
 }
 
 function numericValue(value: string | number | null | undefined): number | null {
@@ -188,20 +190,18 @@ function sensorPointLogger(obj: FloorPlanObject, sensorLoggers: SensorLogger[]):
 }
 
 function criticalSensorIds(sensorLoggers: SensorLogger[]): { hotId: number | null; coldId: number | null } {
-  const internal = sensorLoggers.filter(logger => logger.role !== "external");
-  let hot: SensorLogger | null = null;
-  let cold: SensorLogger | null = null;
-  for (const logger of internal) {
-    const avg = numericValue(logger.avgVal);
-    if (avg != null && (!hot || avg > (numericValue(hot.avgVal) ?? Number.NEGATIVE_INFINITY))) {
-      hot = logger;
-    }
-    const min = numericValue(logger.minVal) ?? avg;
-    if (min != null && (!cold || min < (numericValue(cold.minVal) ?? numericValue(cold.avgVal) ?? Number.POSITIVE_INFINITY))) {
-      cold = logger;
-    }
-  }
-  return { hotId: hot?.id ?? null, coldId: cold?.id ?? null };
+  const critical = calculateCriticalLoggerIndices(sensorLoggers.map(logger => ({
+    role: logger.role,
+    min: numericValue(logger.minVal),
+    max: numericValue(logger.maxVal),
+    avg: numericValue(logger.avgVal),
+    mkt: numericValue(logger.mktVal),
+    deviations: logger.deviations,
+  })));
+  return {
+    hotId: critical.hotIdx !== null ? sensorLoggers[critical.hotIdx]?.id ?? null : null,
+    coldId: critical.coldIdx !== null ? sensorLoggers[critical.coldIdx]?.id ?? null : null,
+  };
 }
 
 function starPoints(cx: number, cy: number, outer: number, inner = outer * 0.42): string {
