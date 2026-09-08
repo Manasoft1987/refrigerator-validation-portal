@@ -78,7 +78,7 @@ const OBJECT_DEFS: ObjectDef[] = [
   { type: "door_obj",     ruLabel: "Дверь",       defaultW: 4,  defaultH: 1,  fill: "#fde68a", stroke: "#b45309", textColor: "#78350f", icon: "🚪" },
   { type: "cooling_unit", ruLabel: "Кондиционер", defaultW: 6,  defaultH: 4,  fill: "#a5f3fc", stroke: "#0891b2", textColor: "#164e63", icon: "❄" },
   { type: "partition",    ruLabel: "Стена / перегородка", defaultW: 18, defaultH: 1.5, fill: "#64748b", stroke: "#334155", textColor: "#0f172a", icon: "▰" },
-  { type: "sensor_point",  ruLabel: "Датчик",      defaultW: 3,  defaultH: 3,  fill: "#e0f2fe", stroke: "#0369a1", textColor: "#1e3a8a", icon: "●" },
+  { type: "sensor_point",  ruLabel: "Датчик",      defaultW: 2,  defaultH: 2,  fill: "#e0f2fe", stroke: "#0369a1", textColor: "#1e3a8a", icon: "●" },
 ];
 
 function getDef(type: FloorObjectType): ObjectDef {
@@ -280,9 +280,9 @@ function ObjectShape({
   const HR = 7;  // visible handle radius (larger = easier to grab)
   const HIT = 15; // invisible hit-area radius around each handle
 
-  // Sensor point: keep warehouse markers compact; full sensor IDs stay in tables.
+  // Sensor point: keep warehouse markers compact and scalable; full sensor IDs stay in tables.
   if (obj.type === "sensor_point") {
-    const r = 13;
+    const r = clamp(Math.min(w, h) / 2, 6, 24);
     const cx2 = x + w / 2;
     const cy2 = y + h / 2;
     const logger = sensorPointLogger(obj, sensorLoggers);
@@ -299,8 +299,8 @@ function ObjectShape({
         onPointerDown={e => { e.stopPropagation(); onPointerDown(obj.id, e); }}
         onDoubleClick={e => { e.stopPropagation(); onDoubleClick(obj.id); }}
       >
-        {isCriticalHot && <circle cx={cx2} cy={cy2} r={r + 3.2} fill="none" stroke="#ef4444" strokeWidth={2.2} />}
-        {isCriticalCold && <circle cx={cx2} cy={cy2} r={r + (isCriticalHot ? 6.1 : 3.2)} fill="none" stroke="#2563eb" strokeWidth={2} />}
+        {isCriticalHot && <circle cx={cx2} cy={cy2} r={r + 2.6} fill="none" stroke="#ef4444" strokeWidth={2.2} />}
+        {isCriticalCold && <circle cx={cx2} cy={cy2} r={r + (isCriticalHot ? 5.2 : 2.6)} fill="none" stroke="#2563eb" strokeWidth={2} />}
         <circle cx={cx2} cy={cy2} r={r} fill={colors.fill} stroke={colors.stroke} strokeWidth={selected ? 2.5 : 1.7} />
         {isCriticalHot && (
           <polygon
@@ -320,9 +320,9 @@ function ObjectShape({
             style={{ pointerEvents: "none" }}
           />
         )}
-        <circle cx={cx2 - r + 5} cy={cy2 - r + 5} r={4.2} fill={colors.badge} opacity={0.95} />
+        <circle cx={cx2 - r + 4.2} cy={cy2 - r + 4.2} r={Math.max(2.8, Math.min(4.2, r * 0.3))} fill={colors.badge} opacity={0.95} />
         {selected && <circle cx={cx2} cy={cy2} r={r + 4} fill="none" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="4 2" />}
-        <text x={cx2} y={cy2 + 3} textAnchor="middle" fontSize={7.5} fontWeight={800} fill={colors.text} style={{ pointerEvents: "none", userSelect: "none" }}>
+        <text x={cx2} y={cy2 + r * 0.23} textAnchor="middle" fontSize={clamp(r * 0.58, 5.2, 8.5)} fontWeight={800} fill={colors.text} style={{ pointerEvents: "none", userSelect: "none" }}>
           {shortId}
         </text>
         {htLabel && (
@@ -333,7 +333,7 @@ function ObjectShape({
         {selected && (
           <>
             {([[-1,-1],[1,-1],[1,1],[-1,1]] as [number,number][]).map(([dx, dy], i) => (
-              <circle key={i} cx={cx2 + dx * r * 0.8} cy={cy2 + dy * r * 0.8} r={HR} fill="white" stroke="#f59e0b" strokeWidth={1.5}
+              <circle key={i} cx={cx2 + dx * r * 0.92} cy={cy2 + dy * r * 0.92} r={HR} fill="white" stroke="#f59e0b" strokeWidth={1.5}
                 style={{ cursor: "nwse-resize", pointerEvents: "all" }}
                 onPointerDown={ev => { ev.stopPropagation(); onResizePointerDown(obj.id, (["nw","ne","se","sw"][i] as "nw"|"ne"|"se"|"sw"), ev); }}
               />
@@ -509,6 +509,19 @@ function SidePanel({
   // ── Sensor point: simplified panel ──────────────────────────────────────
   if (obj.type === "sensor_point") {
     const htFromFloor = (obj.heightM ?? 0).toFixed(2);
+    const markerDiameterM = Math.min(
+      roomLengthM > 0 ? (obj.widthPct / 100) * roomLengthM : 0,
+      roomWidthM > 0 ? (obj.heightPct / 100) * roomWidthM : 0,
+    );
+    const markerDiameterLabel = markerDiameterM > 0 ? markerDiameterM.toFixed(2) : "";
+    const handleMarkerDiameter = (raw: string) => {
+      const v = parseFloat(raw.replace(",", "."));
+      if (!Number.isFinite(v) || v <= 0) return;
+      onUpdate({
+        widthPct: clamp((v / (roomLengthM || 1)) * 100, MIN_SIZE_PCT, 100),
+        heightPct: clamp((v / (roomWidthM || 1)) * 100, MIN_SIZE_PCT, 100),
+      });
+    };
     return (
       <div className="absolute top-0 right-0 w-52 bg-white border rounded-lg shadow-lg p-3 space-y-2.5 z-10 text-xs">
         <div className="flex items-center justify-between">
@@ -540,6 +553,17 @@ function SidePanel({
             key={`sp-ht-${obj.id}-${htFromFloor}`}
             onBlur={e => { const v = parseFloat(e.target.value.replace(",",".")); if (!isNaN(v)) onUpdate({ heightM: Math.max(0, v) }); }}
             onKeyDown={e => { if (e.key === "Enter") { const v = parseFloat((e.target as HTMLInputElement).value.replace(",",".")); if (!isNaN(v)) onUpdate({ heightM: Math.max(0, v) }); } }}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[11px] text-muted-foreground">Диаметр маркера (м)</Label>
+          <Input
+            className="h-7 text-xs"
+            type="number" step="0.1" min="0.1"
+            defaultValue={markerDiameterLabel}
+            key={`sp-size-${obj.id}-${markerDiameterLabel}`}
+            onBlur={e => handleMarkerDiameter(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") handleMarkerDiameter((e.target as HTMLInputElement).value); }}
           />
         </div>
         <Button

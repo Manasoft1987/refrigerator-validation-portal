@@ -5076,7 +5076,7 @@ function drawWarehousePlanDiagram(
     const baseX = planX + (sp.xPct / 100) * drawW;
     const baseY = planY + (sp.yPct / 100) * drawH;
     const spR = Math.min((sp.widthPct / 100) * drawW, (sp.heightPct / 100) * drawH) / 2;
-    const r = Math.max(7, Math.min(11, spR));
+    const r = Math.max(5, Math.min(20, spR));
     const [x, y] = chooseWarehouseBubblePosition(baseX, baseY, r, markerPlanBox, occupiedSensorBubbles);
     occupiedSensorBubbles.push(warehouseMarkerBox(x, y, r + 4));
     return { sp, baseX, baseY, x, y, r };
@@ -5085,7 +5085,7 @@ function drawWarehousePlanDiagram(
   for (const display of sensorDisplays) {
     const { sp, baseX, baseY, x: spX, y: spY, r } = display;
     const label = shortSensorId(sp.label) || "D";
-    const labelFont = Math.max(5.5, Math.min(7, r * 0.65));
+    const labelFont = Math.max(4.8, Math.min(8.4, r * 0.65));
     const isCriticalHot = floorSensorPointMatchesTokens(sp, criticalSensorTokens.hot);
     const isCriticalCold = floorSensorPointMatchesTokens(sp, criticalSensorTokens.cold);
     doc.save();
