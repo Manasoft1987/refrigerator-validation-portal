@@ -3518,6 +3518,13 @@ function drawPlanDeviationsSection(doc: PDFKit.PDFDocument, input: ReportInput) 
 function drawRecommendationsSection(doc: PDFKit.PDFDocument, input: ReportInput) {
   const all = [input.iq.verdict, input.oq.verdict, input.pv.verdict];
   const anyFail = all.some(v => v === "fail");
+  const criticalPointRecommendation = isRefrigeratorCabinetLike(getReportEquipmentType(input))
+    ? enRu(
+        input,
+        "It is also recommended to install measuring instruments or temperature monitoring system sensors at the critical points identified based on the validation results.",
+        "Также рекомендуется установить средства измерения или датчики системы мониторинга температуры в критических точках, выявленных по результатам валидации.",
+      )
+    : "";
   let text = (input.recommendations && input.recommendations.trim()) || "";
   if (!text) {
     text = anyFail
@@ -3532,25 +3539,21 @@ function drawRecommendationsSection(doc: PDFKit.PDFDocument, input: ReportInput)
           "Рекомендуется проводить периодическую повторную квалификацию в соответствии с внутренними процедурами организации, а также при изменении условий эксплуатации, ремонте или перемещении оборудования.",
         );
   }
+  if (criticalPointRecommendation && !text.includes(criticalPointRecommendation)) {
+    text += `\n\n${criticalPointRecommendation}`;
+  }
   doc.fillColor("#1f2937").font("body").fontSize(10).text(text, { align: "justify" });
   doc.moveDown(0.6);
 }
 
 function drawMappingPeriodicitySection(doc: PDFKit.PDFDocument, input: ReportInput) {
-  const equipmentType = getReportEquipmentType(input);
-  const criticalPointRecommendation = isRefrigeratorCabinetLike(equipmentType)
-    ? (isEnglishWarehouse(input)
-      ? "\n\nIt is also recommended to install measuring instruments or temperature monitoring system sensors at the critical points identified based on the validation results."
-      : "\n\nТакже рекомендуется установить средства измерения или датчики системы мониторинга температуры в критических точках, выявленных по результатам валидации.")
-    : "";
   const text = (isEnglishWarehouse(input)
     ? "Initial temperature mapping shall be performed with consideration of both the cold and warm periods of the year.\n\n" +
       "Repeat mapping shall be performed at an interval established by the object owner based on a documented risk assessment. The recommended interval is once every three years, taking into account WHO recommendations.\n\n" +
       "Mapping shall be performed earlier than planned when changes capable of affecting the temperature profile occur, for example after repair, replacement or relocation of equipment, changes in operating conditions, or identification of temperature excursions."
     : "Первичное картирование проводится с учетом холодного и теплого периодов года.\n\n" +
       "Повторное картирование проводится с периодичностью, установленной владельцем объекта на основании оценки рисков. Рекомендуемый интервал — один раз в 3 года с учетом рекомендаций ВОЗ.\n\n" +
-      "Картирование проводится ранее планируемого срока при изменениях, способных повлиять на температурный режим, например после ремонта, замены или перемещения оборудования, изменения условий эксплуатации либо выявления температурных отклонений.") +
-    criticalPointRecommendation;
+      "Картирование проводится ранее планируемого срока при изменениях, способных повлиять на температурный режим, например после ремонта, замены или перемещения оборудования, изменения условий эксплуатации либо выявления температурных отклонений.");
 
   renderTextBlock(doc, text);
 }
