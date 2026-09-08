@@ -151,7 +151,7 @@ const schemaSql = [
     qualificationType varchar(32),
     season varchar(32),
     fillStatus enum('empty','loaded'),
-    loadPercent decimal(5,2),
+    loadPercent varchar(64),
     PRIMARY KEY (id),
     UNIQUE KEY generalInfo_protocolId_unique (protocolId)
   )`,

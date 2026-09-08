@@ -960,6 +960,16 @@ export async function ensureThermalContainerStorage() {
         await db.execute(sql.raw(`ALTER TABLE generalInfo ADD COLUMN ${column} ${definition}`));
       }
     }
+    const loadPercentResult = await db.execute(sql.raw(
+      "SHOW COLUMNS FROM generalInfo LIKE 'loadPercent'",
+    ));
+    const loadPercentRows = (loadPercentResult as unknown as [Array<Record<string, unknown>>, unknown])[0] ?? [];
+    const loadPercentType = String(loadPercentRows?.[0]?.Type ?? loadPercentRows?.[0]?.type ?? "").toLowerCase();
+    if (loadPercentRows.length > 0 && !loadPercentType.includes("char") && !loadPercentType.includes("text")) {
+      await db.execute(sql.raw(
+        "ALTER TABLE generalInfo MODIFY COLUMN loadPercent varchar(64) NULL",
+      ));
+    }
     const csResult = await db.execute(sql.raw(
       "SHOW COLUMNS FROM generalInfo LIKE 'computerizedSystemConfig'",
     ));
