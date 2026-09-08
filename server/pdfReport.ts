@@ -5039,7 +5039,7 @@ function drawWarehousePlanDiagram(
   const pageRight = doc.page.width - PAGE_MARGIN;
   const usableW = pageRight - pageLeft;
   const externalWarehouseLoggers = (input.pvLoggers ?? []).filter(l => l.role === "external");
-  const externalBadgeRows = !template && externalWarehouseLoggers.length > 0
+  const externalBadgeRows = !template && showSensorLabels && externalWarehouseLoggers.length > 0
     ? Math.ceil(Math.min(externalWarehouseLoggers.length, 4) / 2)
     : 0;
   const externalLaneH = externalBadgeRows > 0 ? 22 + externalBadgeRows * 22 : 0;
@@ -5430,7 +5430,7 @@ function drawWarehousePlanDiagram(
   }
 
   let planBottomY = planY + drawH;
-  if (!template && externalWarehouseLoggers.length > 0) {
+  if (!template && showSensorLabels && externalWarehouseLoggers.length > 0) {
     const badgeW = 92;
     const badgeH = 18;
     const gap = 10;
@@ -5468,7 +5468,7 @@ function drawWarehousePlanDiagram(
   doc.x = pageLeft;
   doc.y = planBottomY + 12;
   // ── Sensor placement table for floor plan objects ────────────────────────
-  {
+  if (showPlacementTable) {
     const sensorRows: Array<{ objLabel: string; sensorId: string; heightFromFloor: string }> = [];
     // From sensor_point objects on the plan
     for (const sp of sensorPointObjs) {
