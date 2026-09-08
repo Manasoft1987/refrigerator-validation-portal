@@ -119,6 +119,7 @@ const tablePlan = [
       "whHumidityMax",
       "whSeason",
       "whStudyType",
+      "whFacilityType",
       "whExternalEnv",
       "whLayoutNotes",
       "qualificationType",

@@ -146,6 +146,7 @@ const schemaSql = [
     whHumidityMax decimal(5,2),
     whSeason varchar(16),
     whStudyType varchar(32),
+    whFacilityType varchar(64),
     whExternalEnv int DEFAULT 0,
     whLayoutNotes text,
     qualificationType varchar(32),
