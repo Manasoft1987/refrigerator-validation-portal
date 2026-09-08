@@ -1518,7 +1518,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   );
   drawMappingPeriodicitySection(doc, input);
 
-  const skipValiditySection = isRefrigeratorCabinetLike(getReportEquipmentType(input));
+  const skipValiditySection = isRefrigeratorCabinetLike(getReportEquipmentType(input)) || isWarehouseLike(getReportEquipmentType(input));
   let nextSectionNumber = mappingPeriodicitySectionNumber + 1;
   if (!skipValiditySection) {
     doc.addPage();
@@ -3644,13 +3644,20 @@ function drawPlanDeviationsSection(doc: PDFKit.PDFDocument, input: ReportInput) 
 function drawRecommendationsSection(doc: PDFKit.PDFDocument, input: ReportInput) {
   const all = [input.iq.verdict, input.oq.verdict, input.pv.verdict];
   const anyFail = all.some(v => v === "fail");
-  const criticalPointRecommendation = isRefrigeratorCabinetLike(getReportEquipmentType(input))
+  const equipmentType = getReportEquipmentType(input);
+  const criticalPointRecommendation = isRefrigeratorCabinetLike(equipmentType)
     ? enRu(
         input,
         "It is also recommended to install measuring instruments or temperature monitoring system sensors at the critical points identified based on the validation results.",
         "Также рекомендуется установить средства измерения или датчики системы мониторинга температуры в критических точках, выявленных по результатам валидации.",
       )
-    : "";
+    : isWarehouseLike(equipmentType)
+      ? enRu(
+          input,
+          "It is also recommended to install temperature and air-humidity monitoring instruments or system sensors at the critical points identified based on the validation results.",
+          "Также рекомендуется установить средства измерения или датчики системы мониторинга температуры и влажности воздуха в критических точках, выявленных по результатам валидации.",
+        )
+      : "";
   let text = (input.recommendations && input.recommendations.trim()) || "";
   if (!text) {
     text = anyFail
