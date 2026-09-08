@@ -988,11 +988,13 @@ function spreadTemperaturePoints<T extends { x: number; y: number }>(
   return spread;
 }
 
-function refrigeratorBadgeText(sensor: DiagramSensor, idx: number, badgeMode: "serial" | "position"): string {
+type RefrigeratorBadgeMode = "serial" | "position" | "serial-position";
+
+function refrigeratorBadgeText(sensor: DiagramSensor, idx: number, badgeMode: RefrigeratorBadgeMode): string {
   if (badgeMode === "position") return refrigeratorPositionLabel(sensor, idx);
   const base = refrigeratorBadgeLabel(sensor);
   const avg = formatSensorAvg(sensor.avg);
-  return avg ? `${base} (${avg} °C)` : base;
+  return badgeMode === "serial" && avg ? `${base} (${avg} °C)` : base;
 }
 
 function refrigeratorPositionLabel(sensor: DiagramSensor, idx: number): string {
@@ -1034,7 +1036,7 @@ function drawRefrigeratorDiagramPortalStyle(
   sensors: DiagramSensor[],
   pageMargin: number,
   title: string | undefined,
-  badgeMode: "serial" | "position",
+  badgeMode: RefrigeratorBadgeMode,
   effectiveDrawerCount: number,
   shelfCount: number,
   hotLabel?: string | null,
@@ -1101,7 +1103,7 @@ function drawRefrigeratorDiagramPortalStyle(
   // visual order of positions rather than the import order of the loggers.
   // Keep the order stable: shelf top-to-bottom, then position left-to-right.
   const positionNumberBySensorId = new Map<number, number>();
-  if (badgeMode === "position") {
+  if (badgeMode === "position" || badgeMode === "serial-position") {
     const zoneOrder = new Map(zoneEntries.map((zone, index) => [zone.code, index]));
     const orderedPlacements = Array.from(placements.entries()).sort(([keyA], [keyB]) => {
       const parsedA = keyA.match(/^RF:S(\d+):(BL|BC|BR|FL|FC|FR)$/);
@@ -1271,16 +1273,18 @@ function drawRefrigeratorDiagramPortalStyle(
     const match = key.match(/^RF:S(\d+):(BL|BC|BR|FL|FC|FR)$/);
     if (!match) return;
     const p = project(Number(match[1]), match[2] as FridgeZoneCode);
-    // Temperatures belong to Schema 2. Schema 1 only identifies the planned
-    // placement points and therefore shows T1, T2, ... without averages.
-    const avg = badgeMode === "position" ? "" : formatSensorAvg(sensor.avg);
+    // Schema 1 shows planned T-points. Schema 2 can pair the sensor serial
+    // with the same T-number; averages stay in tables and heat maps.
     const positionNumber = positionNumberBySensorId.get(sensor.id) ?? idx + 1;
+    const secondLine = badgeMode === "serial-position"
+      ? `T${positionNumber}`
+      : (badgeMode === "position" ? "" : formatSensorAvg(sensor.avg));
     const label = badgeMode === "position" ? `T${positionNumber}` : refrigeratorBadgeLabel(sensor);
     const isCriticalHot = sensorMatchesCriticalLabel(sensor, hotLabel);
     const isCriticalCold = sensorMatchesCriticalLabel(sensor, coldLabel);
     const isCritical = isCriticalHot || isCriticalCold;
     const color = semanticSensorBadgeColor(isCriticalHot, isCriticalCold);
-    const r = avg ? 16 : 14;
+    const r = secondLine ? 16 : 14;
     if (isCritical) {
       doc.save();
       doc.strokeColor("#ffffff").lineWidth(sv(1.4));
@@ -1309,8 +1313,8 @@ function drawRefrigeratorDiagramPortalStyle(
         .stroke();
       doc.restore();
     }
-    text(label, p.x - r, p.y - (avg ? 6.3 : 4.4), r * 2, avg ? 8 : 8.6, "#ffffff", "bold", "center");
-    if (avg) text(`${avg}°C`, p.x - r, p.y + 3.4, r * 2, 6.5, "#ffffff", "bold", "center");
+    text(label, p.x - r, p.y - (secondLine ? 6.3 : 4.4), r * 2, secondLine ? 8 : 8.6, "#ffffff", "bold", "center");
+    if (secondLine) text(secondLine, p.x - r, p.y + 3.4, r * 2, 6.5, "#ffffff", "bold", "center");
   });
 
   const legendX = cab.x + cab.w + 86;
@@ -1363,7 +1367,7 @@ export function drawRefrigeratorDiagram(
   coolingUnitPos?: { x: number; y: number } | null,
   doorPos?: { x: number; y: number } | null,
   title?: string,
-  badgeMode: "serial" | "position" = "serial",
+  badgeMode: RefrigeratorBadgeMode = "serial",
   drawerCount: number | null = 2,
   levelCount: number | null = null,
   hotLabel?: string | null,

@@ -240,6 +240,21 @@ export default function RefrigeratorDiagram({
       }
     });
   };
+  const positionNumberByLoggerId = (() => {
+    const orderedPlacements = Array.from(placements.entries()).sort(([keyA], [keyB]) => {
+      const parsedA = keyA.match(/^RF:S(\d+):(BL|BC|BR|FL|FC|FR)$/);
+      const parsedB = keyB.match(/^RF:S(\d+):(BL|BC|BR|FL|FC|FR)$/);
+      if (!parsedA || !parsedB) return 0;
+      const shelfDelta = Number(parsedA[1]) - Number(parsedB[1]);
+      if (shelfDelta !== 0) return shelfDelta;
+      const pointA = project(Number(parsedA[1]), parsedA[2] as ZoneCode);
+      const pointB = project(Number(parsedB[1]), parsedB[2] as ZoneCode);
+      return pointA.x - pointB.x;
+    });
+    const map = new Map<number, number>();
+    orderedPlacements.forEach(([, logger], index) => map.set(logger.id, index + 1));
+    return map;
+  })();
 
   return (
     <div className="w-full select-none space-y-3">
@@ -360,7 +375,7 @@ export default function RefrigeratorDiagram({
               const loggerIdx = logger ? internals.findIndex(item => item.id === logger.id) : -1;
               const color = logger ? colorFor(loggerIdx) : "#94a3b8";
               const label = logger ? badgeLabel(logger) : "";
-              const avg = logger ? avgLabel(logger) : null;
+              const positionLabel = logger ? `T${positionNumberByLoggerId.get(logger.id) ?? loggerIdx + 1}` : null;
               const isCriticalHot = logger?.id === hotLoggerId;
               const isCriticalCold = logger?.id === coldLoggerId;
               const isCritical = isCriticalHot || isCriticalCold;
@@ -421,14 +436,12 @@ export default function RefrigeratorDiagram({
                         </>
                       )}
                       <circle cx={p.x} cy={p.y} r={16} fill={color} stroke="white" strokeWidth={2.2} />
-                      <text x={p.x} y={p.y - (avg ? 1 : -4)} textAnchor="middle" fontSize={8} fontWeight={800} fill="white" pointerEvents="none">
+                      <text x={p.x} y={p.y - 1} textAnchor="middle" fontSize={8} fontWeight={800} fill="white" pointerEvents="none">
                         {label}
                       </text>
-                      {avg && (
-                        <text x={p.x} y={p.y + 9} textAnchor="middle" fontSize={6.5} fontWeight={700} fill="white" pointerEvents="none">
-                          {avg}
-                        </text>
-                      )}
+                      <text x={p.x} y={p.y + 9} textAnchor="middle" fontSize={6.5} fontWeight={700} fill="white" pointerEvents="none">
+                        {positionLabel}
+                      </text>
                     </>
                   )}
                 </g>
