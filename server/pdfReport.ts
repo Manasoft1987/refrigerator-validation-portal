@@ -2395,7 +2395,7 @@ function drawSimpleTable(
   headers: string[],
   rows: string[][],
   colFractions: number[],
-  opts: { fontSize?: number; headerFontSize?: number; padding?: number } = {},
+  opts: { fontSize?: number; headerFontSize?: number; padding?: number; headerHeight?: number; headerLineBreak?: boolean } = {},
 ) {
   const left = PAGE_MARGIN;
   const right = doc.page.width - PAGE_MARGIN;
@@ -2407,7 +2407,7 @@ function drawSimpleTable(
 
   ensureSpace(doc, 28);
   let y = doc.y;
-  const headerH = 24;
+  const headerH = opts.headerHeight ?? 24;
   doc.save();
   doc.rect(left, y, totalW, headerH).fill(ACCENT);
   doc.restore();
@@ -2415,7 +2415,7 @@ function drawSimpleTable(
   let cx = left;
   doc.fillColor("white").font("bold").fontSize(headerFontSize);
   headers.forEach((header, index) => {
-    doc.text(header, cx + padding, y + 7, { width: colW[index] - padding * 2, lineBreak: false });
+    doc.text(header, cx + padding, y + 7, { width: colW[index] - padding * 2, lineBreak: opts.headerLineBreak ?? false });
     cx += colW[index];
   });
   doc.y = y + headerH;
@@ -6184,151 +6184,38 @@ function drawWarehouseAnnex1(doc: PDFKit.PDFDocument, input: ReportInput) {
     .text("о расположении регистраторов данных", { width: totalW, align: "center" });
   doc.moveDown(1.0);
 
-  // Build logger list — match by position id and get data from pv.loggers (Annex 2)
-  const internals = (input.pvLoggers ?? []).filter(l => l.role === "internal");
-  const externals = (input.pvLoggers ?? []).filter(l => l.role === "external");
-  const placedById = new Map<string, typeof internals[number]>();
-  internals.forEach(l => {
-    if (l.position && l.position.startsWith("L")) placedById.set(l.position, l);
-  });
-  
-  // Build a map of sensor heights from floorPlanObjects.
-  // sensor_point objects store their height in heightM and their label (last-4 of serial).
-  // We index by both the exact label and the last-4 digits to match against full serial numbers.
-  const sensorHeightMap = new Map<string, number>();
-  (input.floorPlanObjects ?? []).forEach(obj => {
-    // Primary: sensor_point objects — label is the sensor ID, heightM is height from floor
-    if (obj.type === "sensor_point" && obj.label && obj.heightM != null && obj.heightM > 0) {
-      const lbl = obj.label.trim();
-      sensorHeightMap.set(lbl, obj.heightM);
-      // Also index by last-4 for fuzzy matching against full serial numbers
-      const shortLbl = shortSensorId(lbl);
-      if (shortLbl) sensorHeightMap.set(shortLbl, obj.heightM);
-    }
-    // Secondary: sensors array on objects (future-proof)
-    (obj.sensors ?? []).forEach(s => {
-      if (s.sensorId && s.heightFromFloor != null) {
-        const sid = s.sensorId.trim();
-        sensorHeightMap.set(sid, s.heightFromFloor);
-        const shortSid = shortSensorId(sid);
-        if (shortSid) sensorHeightMap.set(shortSid, s.heightFromFloor);
-      }
+  const annexLoggers = buildWarehouseLoggerSelectionEntries(input)
+    .sort((a, b) => {
+      const aExt = a.role === "external" ? 1 : 0;
+      const bExt = b.role === "external" ? 1 : 0;
+      if (aExt !== bExt) return aExt - bExt;
+      return warehouseLoggerSchemeNumber(input, a).localeCompare(warehouseLoggerSchemeNumber(input, b), "ru");
     });
-  });
-  // Helper: look up height by full label OR last-4 digits of label
-  const getHeight = (label: string): number | undefined => {
-    if (!label) return undefined;
-    const direct = sensorHeightMap.get(label);
-    if (direct != null) return direct;
-    const last4 = shortSensorId(label) || label;
-    return sensorHeightMap.get(last4);
-  };
 
-  // Official table columns (matching Annex 1 form):
-  // ID регистратора | Серийный номер* | Номер на схеме | Высота установки, м | Примечание
-  const colW = [110, 110, 100, 100, totalW - (110 + 110 + 100 + 100)];
-  const headers = [
-    "Идентификационный номер (ID)\nрегистратора данных",
-    "Серийный номер\nрегистратора данных*",
-    "Номер на схеме\nразмещения",
-    "Высота установки\nрегистратора данных, м",
-    "Примечание",
-  ];
+  const annexRows = annexLoggers.map((logger, index) => [
+    String(index + 1),
+    warehouseLoggerSchemeNumber(input, logger),
+    warehouseLoggerFullId(logger),
+    logger.role === "external" ? "Внешняя" : "Внутренняя",
+    warehouseLoggerHeight(input, logger),
+    warehouseLoggerPlacementNote(input, logger),
+  ]);
 
-  let y = doc.y;
-  const headerH = 48; // taller header for multi-line text
-  ensureSpace(doc, headerH + 4);
+  drawSimpleTable(
+    doc,
+    ["№", "Номер на схеме", "ID / серийный номер регистратора данных", "Тип точки", "Высота, м", "Место установки / примечание"],
+    annexRows.length > 0 ? annexRows : [["1", "—", "—", "—", "—", "Место установки указывается на схеме расстановки."]],
+    [0.06, 0.14, 0.26, 0.14, 0.11, 0.29],
+    { fontSize: 8, headerFontSize: 8, padding: 5, headerHeight: 40, headerLineBreak: true },
+  );
 
-  // Draw header row with border
-  doc.save();
-  doc.fillColor(SOFT_BG).rect(left, y, totalW, headerH).fill();
-  doc.lineWidth(0.5).strokeColor(BORDER).rect(left, y, totalW, headerH).stroke();
-  doc.restore();
-
-  let cx = left;
-  doc.fillColor(ACCENT).font("bold").fontSize(8);
-  headers.forEach((h, i) => {
-    // Draw vertical dividers
-    if (i > 0) {
-      doc.save().lineWidth(0.5).strokeColor(BORDER)
-        .moveTo(cx, y).lineTo(cx, y + headerH).stroke().restore();
-    }
-    doc.text(h, cx + 4, y + 5, { width: colW[i] - 8, align: "center" });
-    cx += colW[i];
-  });
-  y += headerH;
-
-  // Data rows
-  let idx = 1;
-  doc.font("body").fontSize(9);
-  const rowH = 22;
-
-  const drawRow = (cells: string[], bgColor?: string, isExt?: boolean) => {
-    ensureSpace(doc, rowH);
-    if (bgColor) {
-      doc.save().fillColor(bgColor).rect(left, y, totalW, rowH).fill().restore();
-    }
-    doc.save().lineWidth(0.5).strokeColor(BORDER).rect(left, y, totalW, rowH).stroke().restore();
-    cx = left;
-    cells.forEach((v, i) => {
-      if (i > 0) {
-        doc.save().lineWidth(0.5).strokeColor(BORDER)
-          .moveTo(cx, y).lineTo(cx, y + rowH).stroke().restore();
-      }
-      doc.fillColor(isExt ? "#92400e" : ACCENT).font("body").fontSize(9)
-        .text(v, cx + 4, y + 6, { width: colW[i] - 8, align: "center" });
-      cx += colW[i];
-    });
-    y += rowH;
-    idx++;
-  };
-
-  // Always show all internal loggers from pv.loggers (most reliable source).
-  // If a logger has a grid position assigned, use that as context; otherwise use the label.
-  const internalPvLoggers = (input.pv?.loggers ?? []).filter((pvLogger) => {
-    const pvL = (input.pvLoggers ?? []).find(p => p.label === pvLogger.label);
-    return !pvL || pvL.role !== "external";
-  });
-  internalPvLoggers.forEach((pvLogger, i) => {
-    const pvL = (input.pvLoggers ?? []).find(p => p.label === pvLogger.label);
-    const rawLabel = pvLogger.label || "";
-    const last4 = shortSensorId(rawLabel) || rawLabel;
-    const idDisplay = last4 || "—";
-    const serialNum = pvLogger.label || "—";
-    const schemeNum = last4 || "—";
-    const sensorHeight = getHeight(pvLogger.label);
-    const heightDisplay = sensorHeight != null ? sensorHeight.toFixed(2) : "—";
-    const bg = i % 2 === 0 ? "#f1f5f9" : undefined;
-    drawRow([idDisplay, serialNum, schemeNum, heightDisplay, ""], bg);
-  });
-
-  // External sensors
-  externals.forEach((ext, ei) => {
-    const rawLabel = ext.label || "";
-    const last4 = shortSensorId(rawLabel) || rawLabel;
-    const extId = last4 || "—";
-    const serialNum = ext.label || "—";
-    const schemeNum = last4 || "—";
-    // Height: use actual sensor height from floorPlanObjects if available
-    const sensorHeight = ext.label ? getHeight(ext.label) : undefined;
-    const heightDisplay = sensorHeight != null ? sensorHeight.toFixed(2) : "—";
-    drawRow([extId, serialNum, schemeNum, heightDisplay, "Внешний"], "#fef3c7", true);
-  });
-
-  // Empty rows if no loggers placed yet
-  if (idx === 1) {
-    drawRow(["", "", "", "", ""]);
-    drawRow(["", "", "", "", ""]);
-  }
-
-  doc.y = y + 8;
-
-  // Footnote separator line — full width
-  doc.save().lineWidth(0.5).strokeColor(BORDER)
-    .moveTo(left, doc.y).lineTo(right, doc.y).stroke().restore();
-  doc.moveDown(0.3);
   doc.fillColor(MUTED).font("body").fontSize(8)
-    .text("* Заполняется в случае отличия серийного номера от идентификационного номера (ID)", left, doc.y, { width: totalW });
+    .text(
+      "Приложение 1 формируется автоматически из тех же данных интерактивного плана, которые используются для схемы расстановки регистраторов в протоколе.",
+      left,
+      doc.y,
+      { width: totalW },
+    );
 }
 
 /**
@@ -6907,6 +6794,7 @@ type WarehouseLoggerSelectionEntry = {
   label?: string | null;
   customName?: string | null;
   role?: string | null;
+  position?: string | null;
 };
 
 function buildWarehouseLoggerSelectionEntries(input: ReportInput): WarehouseLoggerSelectionEntry[] {
@@ -6929,6 +6817,7 @@ function buildWarehouseLoggerSelectionEntries(input: ReportInput): WarehouseLogg
     if (nextLabel.length > currentLabel.length) existing.logger.label = nextLabel;
     if (!existing.logger.customName && logger.customName) existing.logger.customName = logger.customName;
     if (!existing.logger.role && logger.role) existing.logger.role = logger.role;
+    if (!existing.logger.position && logger.position) existing.logger.position = logger.position;
     loggerTokenVariants(logger).forEach(token => existing.tokens.add(token));
   };
 
@@ -7129,6 +7018,267 @@ function drawWarehousePersonnelTable(doc: PDFKit.PDFDocument, input: ReportInput
   doc.moveDown(0.8);
 }
 
+function warehouseValue(raw: unknown, fallback = "—"): string {
+  const text = String(raw ?? "").trim();
+  return text || fallback;
+}
+
+function warehouseNumber(raw: unknown): number | null {
+  if (raw === null || raw === undefined || raw === "") return null;
+  const parsed = Number(String(raw).replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function warehouseMetricValue(value: number | null): string {
+  return value === null ? "—" : value.toFixed(2);
+}
+
+function warehouseRoomMetrics(input: ReportInput): {
+  lengthM: number | null;
+  widthM: number | null;
+  heightM: number | null;
+  volumeM3: number | null;
+} {
+  const gi = input.generalInfo;
+  const lengthM = input.pvRoomLengthM ?? warehouseNumber(gi?.whLengthM);
+  const widthM = input.pvRoomWidthM ?? warehouseNumber(gi?.whWidthM);
+  const heightM = input.pvRoomHeightM ?? warehouseNumber(gi?.whHeightM);
+  const volumeM3 =
+    lengthM !== null && widthM !== null && heightM !== null
+      ? Math.round(lengthM * widthM * heightM * 100) / 100
+      : null;
+  return { lengthM, widthM, heightM, volumeM3 };
+}
+
+function warehouseDimensionsLabel(input: ReportInput): string {
+  const { lengthM, widthM, heightM, volumeM3 } = warehouseRoomMetrics(input);
+  const dims = `${warehouseMetricValue(lengthM)} x ${warehouseMetricValue(widthM)} x ${warehouseMetricValue(heightM)} м`;
+  return volumeM3 === null ? dims : `${dims}; расчетный объем ${volumeM3.toFixed(2)} м3`;
+}
+
+function warehouseHumidityLabel(input: ReportInput): string {
+  const gi = input.generalInfo;
+  if (!gi?.whHumidityControl) return "не контролируется";
+  const min = warehouseValue(gi.whHumidityMin, "");
+  const max = warehouseValue(gi.whHumidityMax, "");
+  if (min && max) return `${min}...${max}%`;
+  if (max) return `не выше ${max}%`;
+  if (min) return `не ниже ${min}%`;
+  return "контролируется";
+}
+
+function warehouseStudyLabel(input: ReportInput): string {
+  const key = input.generalInfo?.whStudyType || "warehouse";
+  return WAREHOUSE_STUDY_LABEL[key] || "Помещение (зона) хранения аптеки";
+}
+
+function warehouseSeasonLabel(input: ReportInput): string {
+  const key = input.generalInfo?.whSeason || input.generalInfo?.season || "";
+  return WAREHOUSE_SEASON_LABEL[key] || SEASON_LABEL_RU[key] || "—";
+}
+
+function warehouseBasisLabel(input: ReportInput): string {
+  const basis = String(input.generalInfo?.qualificationType || input.generalInfo?.basis || "").trim().toLowerCase();
+  if (basis.includes("repeat") || basis.includes("повтор")) return "Повторное картирование";
+  if (basis.includes("primary") || basis.includes("перв")) return "Первичное картирование";
+  return warehouseValue(input.generalInfo?.basis, "Первичное картирование");
+}
+
+function warehouseLoggerCounts(input: ReportInput): { internal: number; external: number; total: number } {
+  const entries = buildWarehouseLoggerSelectionEntries(input);
+  const internal = entries.filter(logger => logger.role !== "external").length;
+  const external = entries.filter(logger => logger.role === "external").length;
+  return { internal, external, total: entries.length };
+}
+
+function warehouseSamplingLabel(input: ReportInput): string {
+  const step = input.pv.samplingStepMinutes;
+  return step && Number.isFinite(step) ? `${step} мин` : "—";
+}
+
+function warehouseActualDurationLabel(input: ReportInput): string {
+  return input.pv.startAt && input.pv.endAt ? fmtDuration(input.pv.endAt - input.pv.startAt) : "—";
+}
+
+function warehousePointCountLabel(input: ReportInput): string {
+  const total = (input.pv.loggers ?? []).reduce((sum, logger) => sum + (logger.pointCount || logger.series?.temp?.length || 0), 0);
+  return total > 0 ? String(total) : "—";
+}
+
+function warehouseCalibrationSummary(input: ReportInput): string {
+  const sensors = filterProtocolSensorsForReport(input) ?? [];
+  if (sensors.length === 0) return "сведения о поверке в реестре средств измерений не указаны";
+  const protocolDate = resolveProtocolReferenceDate(input.generalInfo?.validationDate, input.protocol.createdAt);
+  const valid = sensors.filter(sensor => getSensorCalibrationStatusAtProtocolDate(sensor.nextCalibrationDate, protocolDate) === "valid").length;
+  const expired = sensors.filter(sensor => getSensorCalibrationStatusAtProtocolDate(sensor.nextCalibrationDate, protocolDate) === "expired").length;
+  const unknown = sensors.length - valid - expired;
+  const parts = [`проверено ${sensors.length}`];
+  if (valid > 0) parts.push(`годных ${valid}`);
+  if (expired > 0) parts.push(`с истекшим сроком ${expired}`);
+  if (unknown > 0) parts.push(`без даты следующей поверки ${unknown}`);
+  return parts.join(", ");
+}
+
+function warehouseMethodologySectionText(key: string, input: ReportInput): string | null {
+  if (!isPharmacyStorageReport(input) || isEnglishWarehouse(input)) return null;
+  const gi = input.generalInfo;
+  const metrics = warehouseRoomMetrics(input);
+  const counts = warehouseLoggerCounts(input);
+  const calc = computeWarehouseSensorCount({
+    lengthM: metrics.lengthM,
+    widthM: metrics.widthM,
+    heightM: metrics.heightM,
+    externalEnv: !!gi?.whExternalEnv,
+  });
+  const tempMode = pvTemperatureModeLabel(input.pv, input);
+  const accuracyText =
+    input.pv.sensorAccuracy === undefined || input.pv.sensorAccuracy === null
+      ? "погрешность средств измерения учитывается согласно сведениям о примененных регистраторах"
+      : `погрешность средств измерения учитывается в расчетах: ±${input.pv.sensorAccuracy.toFixed(1)} °C`;
+  const humidityCriterion = gi?.whHumidityControl
+    ? `; относительная влажность воздуха: ${warehouseHumidityLabel(input)}`
+    : "";
+
+  if (key === "6.3") {
+    return [
+      `Объект исследования: помещение (зона) хранения аптеки.`,
+      `Адрес: ${warehouseValue(gi?.location)}.`,
+      `Назначение: ${warehouseValue(gi?.purpose, "хранение лекарственных средств")}.`,
+      `Тип помещения / зоны: ${warehouseStudyLabel(input)}.`,
+      `Температурный режим: ${tempMode}.`,
+      `Геометрические размеры: ${warehouseDimensionsLabel(input)}.`,
+      `Заполненность объекта: ${gi?.fillStatus ? FILL_STATUS_LABEL_RU[gi.fillStatus] : "—"}; загрузка: ${formatLoadPercent(gi?.loadPercent)}.`,
+      `Контроль влажности: ${warehouseHumidityLabel(input)}.`,
+      `Контакт с внешней средой: ${gi?.whExternalEnv ? "имеется" : "не указан / отсутствует"}; сезон исследования: ${warehouseSeasonLabel(input)}.`,
+      gi?.whLayoutNotes ? `Описание планировки: ${gi.whLayoutNotes}.` : "",
+    ].filter(Boolean).join("\n");
+  }
+
+  if (key === "6.4") {
+    return [
+      `Критерии приемлемости сформированы на основании данных, введенных в электронный протокол, и применяются ко всем внутренним регистраторам данных.`,
+      `Температура во внутренних точках должна находиться в установленном режиме ${tempMode}; ${accuracyText}.`,
+      `MKT каждого внутреннего регистратора должна соответствовать верхней границе температурного режима; выходы Min/Max за расчетные границы не допускаются${humidityCriterion}.`,
+      `Продолжительность непрерывного наблюдения: ${pvDurationRequirementLabel(input.pv, input, true)}; фактическая продолжительность: ${warehouseActualDurationLabel(input)}.`,
+      `Минимальное количество внутренних регистраторов по настройке PV: ${input.pv.minSensorCount}; фактически задействовано внутренних регистраторов: ${counts.internal}.`,
+    ].join("\n");
+  }
+
+  if (key === "6.5") {
+    const calculatedText = calc.total > 0
+      ? `Расчет по геометрии помещения: длина ${warehouseMetricValue(metrics.lengthM)} м - ${calc.nL} точки; ширина ${warehouseMetricValue(metrics.widthM)} м - ${calc.nW} точки; высота ${warehouseMetricValue(metrics.heightM)} м - ${calc.nV} уровня; расчетная база ${calc.nL} x ${calc.nW} x ${calc.nV} = ${calc.base}. ${calc.external ? "Дополнительно предусмотрен 1 внешний регистратор для контроля температуры окружающей среды." : ""}`.trim()
+      : "Количество точек размещения задано специалистом на плане помещения, так как расчетная геометрия помещения заполнена не полностью.";
+    return [
+      calculatedText,
+      `Фактически на схеме размещено: внутренних регистраторов ${counts.internal}, внешних регистраторов ${counts.external}, всего ${counts.total}.`,
+      `При выборе точек учтены длина, ширина и высота помещения, расположение дверей, окон, стеллажей, кондиционера/отопления и участков возможного контакта с внешней средой.`,
+      `Такой подход позволяет выявить температурные градиенты по объему помещения, зоны локального нагрева/охлаждения и места, пригодные для последующего размещения приборов мониторинга температуры.`,
+    ].join("\n");
+  }
+
+  if (key === "6.6") {
+    return [
+      `Точки размещения зарегистрированы на интерактивном плане помещения и переносятся в PDF без пересчета координат, чтобы схема на портале и схема в протоколе совпадали.`,
+      `Если кружок регистратора вынесен в сторону для читаемости, фактическое место установки задается окончанием стрелки от кружка; именно эта точка используется при построении температурной карты и интерпретации результата.`,
+      `Для каждой точки фиксируются номер регистратора на схеме, серийный номер/ID и высота размещения от пола. Эти сведения автоматически выводятся в таблице после схемы расстановки и в Приложении 1.`,
+    ].join("\n");
+  }
+
+  if (key === "6.7") {
+    return [
+      `Перед началом испытания регистраторы данных идентифицируются по серийным номерам/ID и сверяются со сведениями о поверке: ${warehouseCalibrationSummary(input)}.`,
+      `Регистраторы программируются на единый интервал регистрации ${warehouseSamplingLabel(input)} и единый период наблюдения: ${input.pv.startAt ? fmtDate(input.pv.startAt) : "—"} - ${input.pv.endAt ? fmtDate(input.pv.endAt) : "—"}.`,
+      `Маркировка на схеме используется только для однозначной привязки регистратора к месту установки; изменение места установки после начала испытания не допускается без регистрации отклонения.`,
+    ].join("\n");
+  }
+
+  if (key === "6.8") {
+    return [
+      `На начало PQ/PV внутренние регистраторы устанавливаются в помещении (зоне) хранения аптеки согласно утвержденной схеме расстановки.`,
+      `Внешний регистратор, если предусмотрен планом, устанавливается на улице для мониторинга температуры окружающей среды.`,
+      `Высоты размещения указаны на схеме и в Приложении 1. Персонал, работающий в помещении, информируется о проведении температурного картирования, чтобы исключить случайное перемещение, отключение или утрату регистратора данных.`,
+    ].join("\n");
+  }
+
+  if (key === "6.9") {
+    return [
+      `После завершения периода наблюдения регистраторы извлекаются без изменения исходной привязки к точкам размещения.`,
+      `При извлечении выполняется повторная сверка серийных номеров/ID, номеров на схеме и высот установки с утвержденной схемой и Приложением 1.`,
+      `Если выявлено смещение регистратора, повреждение, остановка записи или иное отклонение, информация фиксируется в разделе отклонений и учитывается при интерпретации результата PQ/PV.`,
+    ].join("\n");
+  }
+
+  if (key === "6.10") {
+    return [
+      `После извлечения данные регистраторов загружаются в электронный протокол и объединяются в единый набор PQ/PV.`,
+      `Период данных: ${input.pv.startAt ? fmtDate(input.pv.startAt) : "—"} - ${input.pv.endAt ? fmtDate(input.pv.endAt) : "—"}; интервал регистрации: ${warehouseSamplingLabel(input)}; общее количество записей: ${warehousePointCountLabel(input)}.`,
+      `Для каждого внутреннего регистратора рассчитываются Min, Avg, Max, MKT, длительность и характер возможных отклонений. По совокупности этих показателей определяется горячая и холодная критические точки, после чего формируются температурная карта и заключение испытания.`,
+    ].join("\n");
+  }
+
+  return null;
+}
+
+type WarehouseFloorPlanObject = NonNullable<ReportInput["floorPlanObjects"]>[number];
+
+function warehouseLoggerTokens(logger: WarehouseLoggerSelectionEntry): Set<string> {
+  return new Set([
+    ...sensorTokenVariants(logger.label),
+    ...sensorTokenVariants(logger.customName),
+    ...sensorTokenVariants(logger.position),
+    ...sensorTokenVariants(logger.id),
+  ]);
+}
+
+function findWarehouseSensorPointForLogger(input: ReportInput, logger: WarehouseLoggerSelectionEntry): WarehouseFloorPlanObject | null {
+  const tokens = warehouseLoggerTokens(logger);
+  if (tokens.size === 0) return null;
+  return (input.floorPlanObjects ?? [])
+    .filter(obj => obj.type === "sensor_point")
+    .find(obj => {
+      if (floorSensorPointMatchesTokens(obj, tokens)) return true;
+      const nested = obj.sensors ?? [];
+      return nested.some(sensor => tokenSetsIntersect(sensorTokenVariants(sensor.sensorId), tokens));
+    }) ?? null;
+}
+
+function warehouseLoggerFullId(logger: WarehouseLoggerSelectionEntry): string {
+  return warehouseValue(logger.label || logger.customName || logger.id);
+}
+
+function warehouseLoggerSchemeNumber(input: ReportInput, logger: WarehouseLoggerSelectionEntry): string {
+  const sensorPoint = findWarehouseSensorPointForLogger(input, logger);
+  return shortSensorId(sensorPoint?.label || logger.label || logger.customName || (logger.id !== undefined ? String(logger.id) : "")) || "—";
+}
+
+function warehouseLoggerHeight(input: ReportInput, logger: WarehouseLoggerSelectionEntry): string {
+  const sensorPoint = findWarehouseSensorPointForLogger(input, logger);
+  const fromPoint = sensorPoint?.heightM;
+  if (fromPoint !== undefined && fromPoint !== null && Number.isFinite(fromPoint) && fromPoint > 0) {
+    return fromPoint.toFixed(2);
+  }
+  const nested = sensorPoint?.sensors?.find(sensor => tokenSetsIntersect(sensorTokenVariants(sensor.sensorId), warehouseLoggerTokens(logger)));
+  if (nested?.heightFromFloor !== undefined && nested.heightFromFloor !== null && Number.isFinite(nested.heightFromFloor)) {
+    return nested.heightFromFloor.toFixed(2);
+  }
+  return "—";
+}
+
+function warehouseLoggerPlacementNote(input: ReportInput, logger: WarehouseLoggerSelectionEntry): string {
+  const sensorPoint = findWarehouseSensorPointForLogger(input, logger);
+  const hasLeader =
+    sensorPoint &&
+    typeof sensorPoint.leaderEndXPct === "number" &&
+    typeof sensorPoint.leaderEndYPct === "number" &&
+    Number.isFinite(sensorPoint.leaderEndXPct) &&
+    Number.isFinite(sensorPoint.leaderEndYPct);
+  const base = hasLeader ? "Место установки - окончание стрелки на схеме." : "Место установки - точка на схеме.";
+  if (logger.role === "external") {
+    return `${base} Внешний регистратор установлен на улице для мониторинга температуры окружающей среды.`;
+  }
+  return base;
+}
+
 function normalizeWarehouseSectionText(key: string, text: string, en: boolean): string {
   let out = text;
   if (!en) {
@@ -7198,7 +7348,7 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
       const autoText = pharmacyAutoSectionText(key, input, en);
       if (autoText) return autoText;
     }
-    if (isPharmacyStorageReport(input) && ["2.2.1", "3", "4"].includes(key)) {
+    if (isPharmacyStorageReport(input) && ["1.1", "1.2", "2.2.1", "3", "4"].includes(key)) {
       return normalizePharmacySectionText(warehouseDefaultSectionText(key, input, en), en);
     }
     if (isPharmacyStorageReport(input) && custom !== undefined && isDefaultPharmacySection(key, custom)) {
@@ -7295,7 +7445,7 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
     } else if (key === "6.2") {
       drawWarehousePersonnelTable(doc, input);
     } else {
-      renderTextBlock(doc, sec(key));
+      renderTextBlock(doc, warehouseMethodologySectionText(key, input) ?? sec(key));
     }
   });
 

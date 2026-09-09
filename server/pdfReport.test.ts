@@ -365,6 +365,236 @@ describe("warehouse methodology logger table", () => {
     expect(capturedText).toContain("Бабаева А.Б.");
     expect(capturedText).toContain("ИП \"РИСЛИНГ Н.А.\"");
   });
+
+  it("auto-fills pharmacy storage methodology sections from portal data", async () => {
+    const capturedText: string[] = [];
+    const originalText = PDFDocument.prototype.text;
+    const textSpy = vi.spyOn(PDFDocument.prototype, "text").mockImplementation(function (
+      this: PDFKit.PDFDocument,
+      ...args: Parameters<PDFKit.PDFDocument["text"]>
+    ) {
+      if (typeof args[0] === "string") capturedText.push(args[0]);
+      return originalText.apply(this, args);
+    });
+
+    try {
+      const now = Date.UTC(2024, 6, 15, 9, 0, 0);
+      const series = mkSeries(now, 168, 20);
+      await generateProtocolPdf({
+        org: BASE_ORG,
+        protocol: { number: "VAL-STR-TEST", createdAt: new Date(now), equipmentType: "warehouse" },
+        generalInfo: {
+          ...BASE_GI,
+          equipmentType: "warehouse",
+          tempMode: "15-25",
+          location: "г. Алматы, помещение хранения аптеки",
+          purpose: "Хранение лекарственных средств",
+          validationDate: "2024-07-15",
+          basis: "primary",
+          whLengthM: 4.2,
+          whWidthM: 3.1,
+          whHeightM: 2.5,
+          whHumidityControl: 1,
+          whHumidityMax: 65,
+          whExternalEnv: 1,
+          fillStatus: "loaded",
+          loadPercent: 70,
+        },
+        iq: { purpose: "", description: "", criteria: "", items: [], verdict: "pass" },
+        oq: { purpose: "", description: "", criteria: "", items: [], verdict: "pass" },
+        pv: {
+          purpose: "",
+          description: "",
+          criteria: "",
+          tempMode: "15-25",
+          rangeMin: 15,
+          rangeMax: 25,
+          rawRangeMin: 15,
+          rawRangeMax: 25,
+          sensorAccuracy: 0.2,
+          startAt: now,
+          endAt: now + 168 * 3600_000,
+          minDurationHours: 168,
+          minSensorCount: 2,
+          samplingStepMinutes: 10,
+          loggers: [
+            {
+              id: 1,
+              label: "230804STS0019282",
+              customName: null,
+              role: "internal",
+              pointCount: series.temp.length,
+              min: 19.2,
+              max: 20.4,
+              avg: 19.8,
+              std: 0.1,
+              mkt: 19.9,
+              series,
+              deviations: [],
+            },
+            {
+              id: 2,
+              label: "240903STS0042037",
+              customName: null,
+              role: "external",
+              pointCount: series.temp.length,
+              min: 17.5,
+              max: 18.8,
+              avg: 18.0,
+              std: 0.1,
+              mkt: 18.1,
+              series,
+              deviations: [],
+            },
+          ],
+          verdict: "pass",
+          failureReasons: [],
+          hotIdx: 0,
+          coldIdx: 0,
+          extIndices: [1],
+        },
+      } as any);
+    } finally {
+      textSpy.mockRestore();
+    }
+
+    const text = capturedText.join("\n");
+    expect(text).toContain("6.3. Сведения об объекте исследования");
+    expect(text).toContain("Геометрические размеры: 4.20 x 3.10 x 2.50 м");
+    expect(text).toContain("6.5. Сведения об определении точек размещения");
+    expect(text).toContain("Фактически на схеме размещено: внутренних регистраторов 1, внешних регистраторов 1");
+    expect(text).toContain("6.10. Сведения о загрузке и объединении данных");
+    expect(text).toContain("интервал регистрации: 10 мин");
+    expect(text).not.toContain("GDP");
+    expect(text).not.toContain("GPP");
+    expect(text).not.toContain("GMP");
+    expect(text).not.toContain("склад");
+  });
+
+  it("renders Annex 1 from the same floor-plan placement data", async () => {
+    const capturedText: string[] = [];
+    const originalText = PDFDocument.prototype.text;
+    const textSpy = vi.spyOn(PDFDocument.prototype, "text").mockImplementation(function (
+      this: PDFKit.PDFDocument,
+      ...args: Parameters<PDFKit.PDFDocument["text"]>
+    ) {
+      if (typeof args[0] === "string") capturedText.push(args[0]);
+      return originalText.apply(this, args);
+    });
+
+    try {
+      const now = Date.UTC(2024, 6, 15, 9, 0, 0);
+      const series = mkSeries(now, 168, 20);
+      await generateProtocolPdf({
+        org: BASE_ORG,
+        protocol: { number: "VAL-STR-TEST", createdAt: new Date(now), equipmentType: "warehouse" },
+        generalInfo: {
+          ...BASE_GI,
+          equipmentType: "warehouse",
+          tempMode: "15-25",
+          location: "г. Алматы, помещение хранения аптеки",
+          purpose: "Хранение лекарственных средств",
+          validationDate: "2024-07-15",
+          basis: "primary",
+          whLengthM: 4.2,
+          whWidthM: 3.1,
+          whHeightM: 2.5,
+          whExternalEnv: 1,
+        },
+        iq: { purpose: "", description: "", criteria: "", items: [], verdict: "pass" },
+        oq: { purpose: "", description: "", criteria: "", items: [], verdict: "pass" },
+        pv: {
+          purpose: "",
+          description: "",
+          criteria: "",
+          tempMode: "15-25",
+          rangeMin: 15,
+          rangeMax: 25,
+          startAt: now,
+          endAt: now + 168 * 3600_000,
+          minDurationHours: 168,
+          minSensorCount: 2,
+          loggers: [
+            {
+              id: 1,
+              label: "230804STS0019282",
+              customName: null,
+              role: "internal",
+              pointCount: series.temp.length,
+              min: 19.2,
+              max: 20.4,
+              avg: 19.8,
+              std: 0.1,
+              mkt: 19.9,
+              series,
+              deviations: [],
+            },
+            {
+              id: 2,
+              label: "240903STS0042037",
+              customName: null,
+              role: "external",
+              pointCount: series.temp.length,
+              min: 17.5,
+              max: 18.8,
+              avg: 18.0,
+              std: 0.1,
+              mkt: 18.1,
+              series,
+              deviations: [],
+            },
+          ],
+          verdict: "pass",
+          failureReasons: [],
+          hotIdx: 0,
+          coldIdx: 0,
+          extIndices: [1],
+        },
+        pvLoggers: [
+          { id: 1, label: "230804STS0019282", customName: null, role: "internal", position: "sensor-9282" },
+          { id: 2, label: "240903STS0042037", customName: null, role: "external", position: "sensor-2037" },
+        ],
+        floorPlanObjects: [
+          {
+            id: "sensor-9282",
+            type: "sensor_point",
+            xPct: 20,
+            yPct: 40,
+            widthPct: 5,
+            heightPct: 5,
+            heightM: 0.3,
+            rotation: 0,
+            label: "9282",
+            leaderEndXPct: 18,
+            leaderEndYPct: 38,
+          },
+          {
+            id: "sensor-2037",
+            type: "sensor_point",
+            xPct: 8,
+            yPct: 18,
+            widthPct: 5,
+            heightPct: 5,
+            heightM: 2.2,
+            rotation: 0,
+            label: "2037",
+            leaderEndXPct: 6,
+            leaderEndYPct: 16,
+          },
+        ],
+      } as any);
+    } finally {
+      textSpy.mockRestore();
+    }
+
+    const text = capturedText.join("\n");
+    expect(text).toContain("Приложение N 1");
+    expect(text).toContain("ID / серийный номер регистратора данных");
+    expect(text).toContain("9282");
+    expect(text).toContain("0.30");
+    expect(text).toContain("Место установки - окончание стрелки на схеме.");
+    expect(text).toContain("Внешний регистратор установлен на улице для мониторинга температуры окружающей среды.");
+  });
 });
 
 describe("generateProtocolPdf", () => {
