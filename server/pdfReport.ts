@@ -1416,8 +1416,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     }
   drawStageDataEntryTable(doc, input, "PV");
   drawPVParams(doc, input.pv, input);
-  drawPVExpertSummary(doc, input);
-  drawWarehouseOperationalEventsSection(doc, input);
+  drawPVPassportSummary(doc, input);
 
   if (input.pvLoggers && input.pvLoggers.length > 0) {
     const eqType = getReportEquipmentType(input) || "";
@@ -1504,16 +1503,19 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
         coldLabel,
       });
     }
-    if (isWarehouseEaeu(eqType)) {
-      drawWarehouseAnnex1(doc, input);
-      drawWarehouseAnnex2(doc, input);
-    }
   }
 
   ensureSpace(doc, 50 + 24 + input.pv.loggers.length * 26);
   drawSubTitle(doc, isEnglishWarehouse(input) ? "Sensor Summary Statistics" : "Сводная статистика по датчикам");
   const statsCritical = calculateCriticalLoggerIndices(input.pv.loggers);
   drawStatsTable(doc, input.pv.loggers, statsCritical.hotIdx, statsCritical.coldIdx, input.pv.extIndices, input);
+  drawPVCriticalInterpretationSummary(doc, input);
+  drawWarehouseOperationalEventsSection(doc, input);
+
+  if (isWarehouseEaeu(getReportEquipmentType(input))) {
+    drawWarehouseAnnex1(doc, input);
+    drawWarehouseAnnex2(doc, input);
+  }
 
   doc.addPage();
   drawSubTitle(doc, isEnglishWarehouse(input) ? "Measurement Results Table" : "Таблица результатов измерений");
@@ -2495,7 +2497,7 @@ function drawPVInfoBox(
   doc.moveDown(0.6);
 }
 
-function drawPVExpertSummary(doc: PDFKit.PDFDocument, input: ReportInput) {
+function drawPVPassportSummary(doc: PDFKit.PDFDocument, input: ReportInput) {
   if (!supportsExpertPvSummary(input)) return;
   const pv = input.pv;
   const internal = pv.loggers.filter(logger => logger.role === "internal");
@@ -2515,7 +2517,10 @@ function drawPVExpertSummary(doc: PDFKit.PDFDocument, input: ReportInput) {
     ["Шаг регистрации / погрешность", `${samplingStep}; ${accuracy}`],
     ["Итог PV", verdictLabelLocal(pv.verdict, input)],
   ], 190);
+}
 
+function drawPVCriticalInterpretationSummary(doc: PDFKit.PDFDocument, input: ReportInput) {
+  if (!supportsExpertPvSummary(input)) return;
   drawPVCriticalPointsSummary(doc, input);
   drawPVResultInterpretation(doc, input);
 }
