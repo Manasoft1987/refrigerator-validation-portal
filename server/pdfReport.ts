@@ -45,6 +45,10 @@ const ACCENT = "#0f172a";
 const MUTED = "#64748b";
 const BORDER = "#e2e8f0";
 const SOFT_BG = "#f8fafc";
+const WAREHOUSE_MAPPING_DOCUMENT_TITLE_RU =
+  "Протокол и отчёт температурного картирования зоны хранения лекарственных средств";
+const WAREHOUSE_MAPPING_DOCUMENT_TITLE_EN =
+  "Storage Area Temperature Mapping Protocol and Report";
 
 type ChecklistItem = {
   questionIndex: number;
@@ -549,6 +553,28 @@ function refrigeratorIqTerminology(text: string | null | undefined, input?: Repo
     );
 }
 
+function warehouseMappingTerminology(text: string | null | undefined, input?: ReportInput): string {
+  const value = String(text ?? "");
+  if (!isWarehouseLike(getReportEquipmentType(input))) return value;
+  return value
+    .replace(
+      "В ходе квалификации монтажа (IQ)",
+      "В ходе подготовительной проверки IQ (квалификация монтажа)",
+    )
+    .replace(
+      "В ходе квалификации функционирования (OQ)",
+      "В ходе подготовительной проверки OQ (квалификация функционирования)",
+    )
+    .replace(
+      "В ходе эксплуатационной квалификации / валидации (PQ/PV) выполняется температурное картирование",
+      "В ходе этапа PQ/PV выполняется температурное картирование",
+    )
+    .replace(
+      "эксплуатационной квалификации / валидации (PQ/PV)",
+      "этапа PQ/PV",
+    );
+}
+
 function verdictLabelLocal(verdict: "pass" | "fail" | "none", input?: ReportInput): string {
   if (!isEnglishWarehouse(input)) return verdictLabel(verdict);
   if (verdict === "pass") return "Passed";
@@ -909,10 +935,13 @@ function getStageTrace(input: ReportInput, stage: "IQ" | "OQ" | "PV"): DataInteg
 
   const preparedBy = getTraceablePerson(input);
   const fallbackDate = input.dataIntegrity?.generatedAt || input.reportDate || input.generalInfo?.validationDate || input.protocol.createdAt;
+  const warehouse = isWarehouseLike(getReportEquipmentType(input));
   if (stage === "IQ") {
     return {
       stage,
-      label: "IQ — ввод данных и опросник квалификации монтажа",
+      label: warehouse
+        ? "IQ — ввод данных и опросник подготовительной проверки монтажа"
+        : "IQ — ввод данных и опросник квалификации монтажа",
       completedBy: preparedBy,
       completedAt: latestDate(input.iq.items.map(item => item.updatedAt)) ?? fallbackDate,
       source: "Записи чек-листа IQ",
@@ -921,7 +950,9 @@ function getStageTrace(input: ReportInput, stage: "IQ" | "OQ" | "PV"): DataInteg
   if (stage === "OQ") {
     return {
       stage,
-      label: "OQ — ввод данных и опросник квалификации функционирования",
+      label: warehouse
+        ? "OQ — ввод данных и опросник подготовительной проверки функционирования"
+        : "OQ — ввод данных и опросник квалификации функционирования",
       completedBy: preparedBy,
       completedAt: latestDate(input.oq.items.map(item => item.updatedAt)) ?? fallbackDate,
       source: "Записи чек-листа OQ",
@@ -929,7 +960,9 @@ function getStageTrace(input: ReportInput, stage: "IQ" | "OQ" | "PV"): DataInteg
   }
   return {
     stage,
-    label: "PQ/PV — ввод данных эксплуатационной квалификации",
+    label: warehouse
+      ? "PQ/PV — ввод данных температурного картирования"
+      : "PQ/PV — ввод данных эксплуатационной квалификации",
     completedBy: preparedBy,
     completedAt: getPvCompletionDate(input) ?? fallbackDate,
     source: "Параметры PQ/PV и загруженные файлы логгеров",
@@ -1496,9 +1529,15 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     margin: PAGE_MARGIN,
     bufferPages: true,
     info: {
-      Title: `${isEnglishWarehouse(input) ? "Qualification Protocol and Report" : "Протокол валидации"} ${input.protocol.number}`,
+      Title: `${isWarehouseLike(getReportEquipmentType(input))
+        ? (isEnglishWarehouse(input) ? WAREHOUSE_MAPPING_DOCUMENT_TITLE_EN : WAREHOUSE_MAPPING_DOCUMENT_TITLE_RU)
+        : (isEnglishWarehouse(input) ? "Qualification Protocol and Report" : "Протокол валидации")} ${input.protocol.number}`,
       Author: input.org.name,
-      Subject: isEnglishWarehouse(input)
+      Subject: isWarehouseLike(getReportEquipmentType(input))
+        ? (isEnglishWarehouse(input)
+            ? "Storage area temperature mapping protocol and report"
+            : "Температурное картирование зоны хранения лекарственных средств")
+        : isEnglishWarehouse(input)
         ? "Storage area temperature mapping qualification protocol and report"
         : "Протокол квалификации/валидации холодильного оборудования",
     },
@@ -1520,7 +1559,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   /* ЧАСТЬ I — ПРОТОКОЛ КВАЛИФИКАЦИИ (ПЛАН)            */
   /* ============================================================ */
   drawPartCover(doc, input, "part1");
-  const isWarehouseDoc = isWarehouseEaeu(getReportEquipmentType(input));
+  const isWarehouseDoc = isWarehouseLike(getReportEquipmentType(input));
   if (isWarehouseDoc) {
     // ── WAREHOUSE PART I: sections 1–7 per EEC Rec. #8 ───────────────────────
     drawWarehouseProtocolPart1(doc, input);
@@ -1579,21 +1618,48 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   drawTestPeriod(doc, input);
 
   doc.addPage();
-  drawSectionTitle(doc, isEnglishWarehouse(input) ? "7. IQ Results - Installation Qualification" : "7. Результаты IQ — Квалификация монтажа");
+  drawSectionTitle(
+    doc,
+    isWarehouseLike(getReportEquipmentType(input))
+      ? (isEnglishWarehouse(input)
+          ? "7. IQ Readiness Check Results - Installation Qualification"
+          : "7. Результаты подготовительной проверки IQ — квалификация монтажа")
+      : isEnglishWarehouse(input)
+        ? "7. IQ Results - Installation Qualification"
+        : "7. Результаты IQ — Квалификация монтажа",
+  );
   const iqItems = checklistItemsForReport(input, "iq");
   drawStageDataEntryTable(doc, input, "IQ");
   drawChecklistTable(doc, iqItems, input);
   drawStageVerdict(doc, "IQ", input.iq.verdict, iqItems, input);
 
   doc.addPage();
-  drawSectionTitle(doc, isEnglishWarehouse(input) ? "8. OQ Results - Operational Qualification" : "8. Результаты OQ — Квалификация функционирования");
+  drawSectionTitle(
+    doc,
+    isWarehouseLike(getReportEquipmentType(input))
+      ? (isEnglishWarehouse(input)
+          ? "8. OQ Readiness Check Results - Operational Qualification"
+          : "8. Результаты подготовительной проверки OQ — квалификация функционирования")
+      : isEnglishWarehouse(input)
+        ? "8. OQ Results - Operational Qualification"
+        : "8. Результаты OQ — Квалификация функционирования",
+  );
   const oqItems = checklistItemsForReport(input, "oq");
   drawStageDataEntryTable(doc, input, "OQ");
   drawChecklistTable(doc, oqItems, input);
   drawStageVerdict(doc, "OQ", input.oq.verdict, oqItems, input);
 
   doc.addPage();
-    drawSectionTitle(doc, isEnglishWarehouse(input) ? "9. PQ/PV Results - Performance Qualification / Validation" : "9. Результаты PQ/PV — Эксплуатационная квалификация / валидация");
+    drawSectionTitle(
+      doc,
+      isWarehouseLike(getReportEquipmentType(input))
+        ? (isEnglishWarehouse(input)
+            ? "9. PQ/PV Results - Temperature Mapping"
+            : "9. Результаты PQ/PV — температурное картирование")
+        : isEnglishWarehouse(input)
+          ? "9. PQ/PV Results - Performance Qualification / Validation"
+          : "9. Результаты PQ/PV — Эксплуатационная квалификация / валидация",
+    );
     if (getReportEquipmentType(input) === "thermal-container") {
       drawThermalTrialsSummary(doc, input);
     }
@@ -1736,7 +1802,16 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   }
 
   doc.addPage();
-  drawSectionTitle(doc, isEnglishWarehouse(input) ? (input.excursion?.enabled ? "11. Qualification Report" : "10. Qualification Report") : (input.excursion?.enabled ? "11. Отчёт о квалификации" : "10. Отчёт о квалификации"));
+  drawSectionTitle(
+    doc,
+    isWarehouseLike(getReportEquipmentType(input))
+      ? (isEnglishWarehouse(input)
+          ? `${input.excursion?.enabled ? "11" : "10"}. Temperature Mapping Report`
+          : `${input.excursion?.enabled ? "11" : "10"}. Отчёт о температурном картировании`)
+      : isEnglishWarehouse(input)
+        ? (input.excursion?.enabled ? "11. Qualification Report" : "10. Qualification Report")
+        : (input.excursion?.enabled ? "11. Отчёт о квалификации" : "10. Отчёт о квалификации"),
+  );
   drawFinalConclusion(doc, input);
 
   doc.addPage();
@@ -1748,7 +1823,18 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
 
   doc.addPage();
   drawSectionTitle(doc, isEnglishWarehouse(input) ? (input.excursion?.enabled ? "14. Report Signatures" : "13. Report Signatures") : (input.excursion?.enabled ? "14. Подписи к Отчёту" : "13. Подписи к Отчёту"));
-  drawSignaturesBlock(doc, getSignatoriesPart2(input), isEnglishWarehouse(input) ? "This qualification report has been reviewed and approved by:" : "Настоящий отчёт о квалификации рассмотрен и утверждён:", input);
+  drawSignaturesBlock(
+    doc,
+    getSignatoriesPart2(input),
+    isWarehouseLike(getReportEquipmentType(input))
+      ? (isEnglishWarehouse(input)
+          ? "This temperature mapping report has been reviewed and approved by:"
+          : "Настоящий отчёт о температурном картировании рассмотрен и утверждён:")
+      : isEnglishWarehouse(input)
+        ? "This qualification report has been reviewed and approved by:"
+        : "Настоящий отчёт о квалификации рассмотрен и утверждён:",
+    input,
+  );
 
   const mappingPeriodicitySectionNumber = input.excursion?.enabled ? 15 : 14;
   doc.addPage();
@@ -1825,13 +1911,21 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
   y += 130;
 
   const en = isEnglishWarehouse(input);
+  const eqType = getReportEquipmentType(input) || "";
+  const isWarehouseDocument = isWarehouseLike(eqType);
   const partLabel = part === "part1" ? (en ? "PART I" : "ЧАСТЬ I") : (en ? "PART II" : "ЧАСТЬ II");
-  const partTitle = part === "part1"
-    ? (en ? "QUALIFICATION PROTOCOL" : "ПРОТОКОЛ КВАЛИФИКАЦИИ")
-    : (en ? "QUALIFICATION REPORT" : "ОТЧЁТ О КВАЛИФИКАЦИИ");
-  const partSubtitle = part === "part1"
-    ? "IQ · OQ · PQ/PV"
-    : (en ? "IQ · OQ · PQ/PV Test Results" : "Результаты испытаний IQ · OQ · PQ/PV");
+  const partTitle = isWarehouseDocument
+    ? (en ? WAREHOUSE_MAPPING_DOCUMENT_TITLE_EN : WAREHOUSE_MAPPING_DOCUMENT_TITLE_RU)
+    : part === "part1"
+      ? (en ? "QUALIFICATION PROTOCOL" : "ПРОТОКОЛ КВАЛИФИКАЦИИ")
+      : (en ? "QUALIFICATION REPORT" : "ОТЧЁТ О КВАЛИФИКАЦИИ");
+  const partSubtitle = isWarehouseDocument
+    ? (part === "part1"
+        ? (en ? "Mapping plan · IQ/OQ readiness checks · PQ/PV" : "План картирования · подготовительные проверки IQ/OQ · PQ/PV")
+        : (en ? "Mapping results · IQ/OQ readiness checks · PQ/PV report" : "Результаты картирования · подготовительные проверки IQ/OQ · отчёт PQ/PV"))
+    : part === "part1"
+      ? "IQ · OQ · PQ/PV"
+      : (en ? "IQ · OQ · PQ/PV Test Results" : "Результаты испытаний IQ · OQ · PQ/PV");
 
   doc
     .fillColor(MUTED)
@@ -1843,10 +1937,13 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
   doc
     .fillColor(ACCENT)
     .font("bold")
-    .fontSize(26)
-    .text(partTitle, left, y, { align: "center" });
+    .fontSize(isWarehouseDocument ? 19 : 26)
+    .text(partTitle, left, y, { align: "center", width: right - left });
 
-  y += 38;
+  y += doc.heightOfString(partTitle, {
+    width: right - left,
+    align: "center",
+  }) + (isWarehouseDocument ? 12 : 10);
   doc
     .fillColor(MUTED)
     .font("body")
@@ -1854,7 +1951,6 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
     .text(partSubtitle, left, y, { align: "center" });
 
   y += 24;
-  const eqType = getReportEquipmentType(input) || "";
   const equipmentTypeLabel = en && isWarehouseLike(eqType)
     ? "Storage Room / Storage Area"
     : eqType === "chamber"
@@ -1899,7 +1995,12 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
     [en ? "Revision" : "Редакция", input.dataIntegrity?.revision || "01"],
     [en ? "Organization" : "Организация", input.org.name],
     [en ? "BIN / Tax ID" : "БИН / ИНН", input.org.bin || "—"],
-    [en ? "Qualification object" : "Объект квалификации", objectLabel],
+    [
+      en
+        ? (isWarehouseDocument ? "Mapping object" : "Qualification object")
+        : (isWarehouseDocument ? "Объект температурного картирования" : "Объект квалификации"),
+      objectLabel,
+    ],
     ...(isReeferLike(eqType)
       ? [
           [reeferLocationLabel(eqType), gi?.location || "\u2014"],
@@ -1915,7 +2016,12 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
         ] as Array<[string, string]>),
     [en ? "Temperature mode" : "Температурный режим", temperatureModeText],
     [en ? "Season" : "Сезон", gi?.season ? seasonLabels[gi.season] || "—" : "—"],
-    [en ? "Qualification type" : "Тип квалификации", gi?.qualificationType ? qualificationLabels[gi.qualificationType] || "—" : "—"],
+    [
+      en
+        ? (isWarehouseDocument ? "Mapping type" : "Qualification type")
+        : (isWarehouseDocument ? "Тип картирования" : "Тип квалификации"),
+      gi?.qualificationType ? qualificationLabels[gi.qualificationType] || "—" : "—",
+    ],
   ];
   const rows: Array<[string, string | undefined]> = part === "part1"
     ? [
@@ -1948,9 +2054,11 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
       "\u0422\u0440\u0430\u043d\u0441\u043f\u043e\u0440\u0442\u043d\u043e\u0435 \u0441\u0440\u0435\u0434\u0441\u0442\u0432\u043e / \u0433\u043e\u0441. \u043d\u043e\u043c\u0435\u0440",
       "Organization",
       "Object address",
+      "Mapping object",
     ]);
     const twoLineKeys = new Set([
       "\u041e\u0431\u044a\u0435\u043a\u0442 \u043a\u0432\u0430\u043b\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438",
+      "\u041e\u0431\u044a\u0435\u043a \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u043d\u043e\u0433\u043e \u043a\u0430\u0440\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u044f",
       "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430",
       "Qualification object",
     ]);
@@ -2003,9 +2111,13 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
       .font("body")
       .fontSize(8)
       .text(
-        en
-          ? "The document was generated in accordance with GMP / GDP / GPP requirements."
-          : "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442 \u0441\u0444\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u043d \u0432 \u0441\u043e\u043e\u0442\u0432\u0438\u0438 \u0441 \u0442\u0440\u0435\u0431\u043e\u0432\u0430\u043d\u0438\u044f\u043c\u0438 GMP / GDP / GPP.",
+        isWarehouseDocument
+          ? (en
+              ? "The document was generated with EEC Board Recommendation No. 8 used as the methodological basis."
+              : "Документ сформирован с учётом Рекомендации Коллегии ЕЭК № 8 как методической основы.")
+          : en
+            ? "The document was generated in accordance with GMP / GDP / GPP requirements."
+            : "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442 \u0441\u0444\u043e\u0440\u043c\u0438\u0440\u043e\u0432\u0430\u043d \u0432 \u0441\u043e\u043e\u0442\u0432\u0438\u0438 \u0441 \u0442\u0440\u0435\u0431\u043e\u0432\u0430\u043d\u0438\u044f\u043c\u0438 GMP / GDP / GPP.",
         left,
         footerNoteY,
         { width: right - left, align: "center" },
@@ -2319,12 +2431,17 @@ function drawRevisionHistorySection(doc: PDFKit.PDFDocument, input: ReportInput)
 
   const author = getTraceablePerson(input);
   const defaultDate = input.generalInfo?.validationDate || input.reportDate || input.protocol.createdAt || input.dataIntegrity?.generatedAt;
+  const defaultChange = isWarehouseLike(getReportEquipmentType(input))
+    ? (en
+        ? "Initial issue of the temperature mapping protocol and report."
+        : "Первичная редакция протокола и отчёта температурного картирования.")
+    : (en ? "Initial issue of the qualification protocol and report." : "Первичная редакция протокола и отчёта о квалификации.");
   const rows = (input.dataIntegrity?.revisionHistory?.length
     ? input.dataIntegrity.revisionHistory
     : [{
         revision,
         date: defaultDate,
-        change: en ? "Initial issue of the qualification protocol and report." : "Первичная редакция протокола и отчёта о квалификации.",
+        change: defaultChange,
         author,
       }]
   ).map(item => [
@@ -2373,9 +2490,9 @@ function drawStageBlocks(
   input?: ReportInput,
 ) {
   const blocks: Array<[string, string]> = [
-    [enRu(input, "Test objective", "Цель испытания"), refrigeratorIqTerminology(verificationTerminology(stage.purpose), input)],
-    [enRu(input, "Test description", "Описание испытания"), refrigeratorIqTerminology(verificationTerminology(stage.description), input)],
-    [enRu(input, "Acceptance criteria", "Критерии приемлемости"), refrigeratorIqTerminology(verificationTerminology(stage.criteria), input)],
+    [enRu(input, "Test objective", "Цель испытания"), warehouseMappingTerminology(refrigeratorIqTerminology(verificationTerminology(stage.purpose), input), input)],
+    [enRu(input, "Test description", "Описание испытания"), warehouseMappingTerminology(refrigeratorIqTerminology(verificationTerminology(stage.description), input), input)],
+    [enRu(input, "Acceptance criteria", "Критерии приемлемости"), warehouseMappingTerminology(refrigeratorIqTerminology(verificationTerminology(stage.criteria), input), input)],
   ];
   blocks.forEach(([k, v]) => {
     ensureSpace(doc, 60);
@@ -2465,6 +2582,7 @@ function drawStageVerdict(
   input?: ReportInput,
 ) {
   const en = isEnglishWarehouse(input);
+  const warehouse = isWarehouseLike(getReportEquipmentType(input));
   const noItems = items.filter(i => i.answer === "no");
   doc.moveDown(0.5);
   // Draw title and box together — reserve space for both to prevent orphaned title
@@ -2506,7 +2624,25 @@ function drawStageVerdict(
     bg = "#ecfdf5";
     bd = "#a7f3d0";
     fg = "#065f46";
-    if (en) {
+    if (warehouse && en) {
+      if (name === "IQ") {
+        text =
+          "All acceptance criteria are met. The IQ readiness check has been completed successfully. The storage area, utilities and supporting documentation meet the protocol requirements.";
+      } else if (name === "OQ") {
+        text =
+          "All acceptance criteria are met. The OQ readiness check has been completed successfully. The storage area and supporting systems operate in accordance with the defined requirements.";
+      } else {
+        text = `All acceptance criteria are met. The ${name} temperature mapping stage has been completed successfully.`;
+      }
+    } else if (warehouse && name === "IQ") {
+      text =
+        "Все критерии приемлемости выполнены. Подготовительная проверка IQ выполнена успешно. " +
+        "Помещение (зона) хранения, инженерные сети и сопроводительная документация соответствуют требованиям протокола.";
+    } else if (warehouse && name === "OQ") {
+      text =
+        "Все критерии приемлемости выполнены. Подготовительная проверка OQ выполнена успешно. " +
+        "Климатическое оборудование и поддерживающие системы функционируют в соответствии с заданными требованиями.";
+    } else if (en) {
       if (name === "IQ") {
         text =
           "All acceptance criteria are met. Installation Qualification (IQ) has been completed successfully. The storage area, utilities and supporting documentation meet the protocol requirements.";
@@ -2539,7 +2675,7 @@ function drawStageVerdict(
       : `Этап ${name} не пройден. Выявлены несоответствия:\n${list || "—"}`;
   }
 
-  text = refrigeratorIqTerminology(text, input);
+  text = warehouseMappingTerminology(refrigeratorIqTerminology(text, input), input);
 
   const padding = 14;
   doc.font("body").fontSize(10);
@@ -3311,12 +3447,12 @@ function drawStagePVVerdict(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], inpu
       const internalCount = pv.loggers.filter(l => l.role === "internal").length;
       
       text = en
-        ? "All acceptance criteria are met. Performance Qualification / Validation (PQ/PV) has been completed successfully. " +
+        ? "All acceptance criteria are met. The PQ/PV temperature mapping stage has been completed successfully. " +
           `Analysis of ${internalCount} internal logger(s) demonstrates stable temperature distribution throughout the storage room / storage area volume. ` +
           (hotSensor ? `The maximum temperature was recorded by ${hotLabel} (hot point). ` : "") +
           (coldSensor ? `The minimum temperature was recorded by ${coldLabel} (cold point). ` : "") +
           "The HVAC/heating system operates normally and provides appropriate storage conditions for medicinal products."
-        : "Все критерии приемлемости выполнены. Эксплуатационная квалификация / валидация (PQ/PV) пройдена успешно. " +
+        : "Все критерии приемлемости выполнены. Этап температурного картирования PQ/PV выполнен успешно. " +
           `Анализ данных ${internalCount} внутренних датчиков показал стабильное распределение температуры ` +
           "по всему объёму помещения (зоны) хранения. " +
           (hotSensor ? `Максимальная температура зафиксирована ${hotLabel} (горячая точка). ` : "") +
@@ -6673,7 +6809,7 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
 
   // ── Section 5: Общие сведения об объекте / оборудовании ────────────────────
   doc.addPage();
-  drawSectionTitle(doc, en ? "5. General Information on the Qualification Object" : "5. Общие сведения об объекте квалификации");
+  drawSectionTitle(doc, en ? "5. General Information on the Mapping Object" : "5. Общие сведения об объекте температурного картирования");
   drawGeneralInfoTable(doc, input);
   drawRevisionHistorySection(doc, input);
 
@@ -6706,21 +6842,21 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
     renderTextBlock(doc, sec(key));
   });
 
-  // 6.11 IQ plan
+  // 6.11 IQ readiness check plan
   ensureSpace(doc, 260);
-  drawSubTitle(doc, en ? "6.11. IQ Plan — Installation Qualification" : "6.11. План IQ — Квалификация монтажа");
+  drawSubTitle(doc, en ? "6.11. IQ Readiness Check Plan — Installation Qualification" : "6.11. План подготовительной проверки IQ — квалификация монтажа");
   drawStageBlocks(doc, input.iq, input);
   drawChecklistPlan(doc, checklistItemsForReport(input, "iq"), input);
 
-  // 6.12 OQ plan
+  // 6.12 OQ readiness check plan
   ensureSpace(doc, 260);
-  drawSubTitle(doc, en ? "6.12. OQ Plan — Operational Qualification" : "6.12. План OQ — Квалификация функционирования");
+  drawSubTitle(doc, en ? "6.12. OQ Readiness Check Plan — Operational Qualification" : "6.12. План подготовительной проверки OQ — квалификация функционирования");
   drawStageBlocks(doc, input.oq, input);
   drawChecklistPlan(doc, checklistItemsForReport(input, "oq"), input);
 
-  // 6.13 PQ/PV plan
+  // 6.13 PQ/PV mapping plan
   ensureSpace(doc, 260);
-  drawSubTitle(doc, en ? "6.13. PQ/PV Plan — Performance Qualification / Validation" : "6.13. План PQ/PV — Эксплуатационная квалификация / валидация");
+  drawSubTitle(doc, en ? "6.13. PQ/PV Plan — Temperature Mapping" : "6.13. План PQ/PV — температурное картирование");
   drawStageBlocks(doc, input.pv, input);
   drawPVPlan(doc, input.pv, input);
 
@@ -6730,7 +6866,7 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
   drawSignaturesBlock(
     doc,
     getSignatoriesPart1(input),
-    en ? "This qualification protocol has been reviewed and approved by:" : "Настоящий протокол квалификации рассмотрен и утверждён:",
+    en ? "This temperature mapping protocol has been reviewed and approved by:" : "Настоящий протокол температурного картирования рассмотрен и утверждён:",
     input,
   );
 }

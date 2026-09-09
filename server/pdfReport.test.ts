@@ -829,6 +829,84 @@ describe("generateProtocolPdf", () => {
   );
 
   it(
+    "labels warehouse documents as temperature mapping protocols and reports",
+    async () => {
+      const now = Date.UTC(2026, 7, 6, 9, 0, 0);
+      const captured: string[] = [];
+      const originalText = (PDFDocument.prototype as any).text;
+
+      (PDFDocument.prototype as any).text = function (text: string, ...args: any[]) {
+        captured.push(String(text));
+        return originalText.call(this, text, ...args);
+      };
+
+      try {
+        await generateProtocolPdf({
+          org: BASE_ORG,
+          protocol: { number: "VAL-STR-2026-010", createdAt: new Date(now), equipmentType: "warehouse" },
+          generalInfo: {
+            equipmentType: "warehouse",
+            manufacturer: "",
+            model: "",
+            serial: "",
+            inventory: "",
+            year: 2026,
+            tempMode: "15-25",
+            location: "Помещение хранения аптеки",
+            purpose: "Хранение лекарственных средств",
+            validationDate: "2026-08-06",
+            basis: "primary",
+          },
+          iq: {
+            purpose: "IQ",
+            description: "IQ",
+            criteria: "IQ",
+            items: [{ questionIndex: 0, questionText: "IQ question", answer: "yes", comment: null }],
+            verdict: "pass",
+          },
+          oq: {
+            purpose: "OQ",
+            description: "OQ",
+            criteria: "OQ",
+            items: [{ questionIndex: 0, questionText: "OQ question", answer: "yes", comment: null }],
+            verdict: "pass",
+          },
+          pv: {
+            purpose: "PV",
+            description: "PV",
+            criteria: "PV",
+            tempMode: "15-25",
+            rangeMin: 15,
+            rangeMax: 25,
+            startAt: now,
+            endAt: now + 72 * 3600_000,
+            minDurationHours: 72,
+            minSensorCount: 0,
+            loggers: [],
+            verdict: "pass",
+            failureReasons: [],
+            hotIdx: null,
+            coldIdx: null,
+            extIndices: [],
+          },
+        });
+      } finally {
+        (PDFDocument.prototype as any).text = originalText;
+      }
+
+      expect(captured).toContain("Протокол и отчёт температурного картирования зоны хранения лекарственных средств");
+      expect(captured).toContain("5. Общие сведения об объекте температурного картирования");
+      expect(captured).toContain("6.11. План подготовительной проверки IQ — квалификация монтажа");
+      expect(captured).toContain("6.12. План подготовительной проверки OQ — квалификация функционирования");
+      expect(captured).toContain("6.13. План PQ/PV — температурное картирование");
+      expect(captured).toContain("10. Отчёт о температурном картировании");
+      expect(captured).not.toContain("ПРОТОКОЛ КВАЛИФИКАЦИИ");
+      expect(captured).not.toContain("ОТЧЁТ О КВАЛИФИКАЦИИ");
+    },
+    60_000,
+  );
+
+  it(
     "advances past empty warehouse equipment values before rendering the next item",
     async () => {
       const now = Date.UTC(2026, 5, 12, 9, 0, 0);

@@ -2380,8 +2380,10 @@ export const appRouter = router({
               {
                 revision: "01",
                 date: revisionDate,
-                change: isEnglishWarehouseReport
-                  ? "Initial issue of the qualification protocol and report."
+                change: isWarehouseProtocol
+                  ? (isEnglishWarehouseReport
+                      ? "Initial issue of the temperature mapping protocol and report."
+                      : "Первичная редакция протокола и отчёта температурного картирования.")
                   : "Первичная редакция протокола и отчёта о квалификации.",
                 author: reportActor,
               },
