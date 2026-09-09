@@ -5333,9 +5333,18 @@ function drawWarehousePlanDiagram(
         averageNumberBySensor.get(normalizeSensorNumber(label)) ??
         null;
       if (avg === null || !Number.isFinite(avg)) return [];
+      const hasLeader =
+        typeof sp.leaderEndXPct === "number" &&
+        typeof sp.leaderEndYPct === "number" &&
+        Number.isFinite(sp.leaderEndXPct) &&
+        Number.isFinite(sp.leaderEndYPct);
       return [{
-        x: planX + ((sp.xPct + sp.widthPct / 2) / 100) * drawW,
-        y: planY + ((sp.yPct + sp.heightPct / 2) / 100) * drawH,
+        x: hasLeader
+          ? planX + ((sp.leaderEndXPct as number) / 100) * drawW
+          : planX + ((sp.xPct + sp.widthPct / 2) / 100) * drawW,
+        y: hasLeader
+          ? planY + ((sp.leaderEndYPct as number) / 100) * drawH
+          : planY + ((sp.yPct + sp.heightPct / 2) / 100) * drawH,
         avg,
       }];
     })
@@ -5532,10 +5541,10 @@ function drawWarehousePlanDiagram(
     const isCriticalHot = floorSensorPointMatchesTokens(sp, criticalSensorTokens.hot);
     const isCriticalCold = floorSensorPointMatchesTokens(sp, criticalSensorTokens.cold);
     doc.save();
-    let labelFont = Math.max(3.8, Math.min(7.2, r * 0.42));
+    let labelFont = Math.max(4.4, Math.min(8.4, r * 0.52));
     doc.font("bold").fontSize(labelFont);
-    const maxLabelW = r * 1.68;
-    while (labelFont > 3.2 && doc.widthOfString(label) > maxLabelW) {
+    const maxLabelW = r * 1.86;
+    while (labelFont > 3.8 && doc.widthOfString(label) > maxLabelW) {
       labelFont -= 0.2;
       doc.font("bold").fontSize(labelFont);
     }
@@ -5580,7 +5589,7 @@ function drawWarehousePlanDiagram(
     }
     if (avgLabel) {
       const avgText = `(${avgLabel})`;
-      const avgFont = Math.max(4.4, Math.min(6.2, r * 0.46));
+      const avgFont = Math.max(5.2, Math.min(7.4, r * 0.58));
       doc.font("bold").fontSize(avgFont);
       const avgW = Math.max(r * 2.35, doc.widthOfString(avgText) + 4);
       const avgH = avgFont + 3.2;
