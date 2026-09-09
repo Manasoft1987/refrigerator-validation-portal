@@ -95,6 +95,22 @@ describe("sensor verification status in PDF", () => {
 });
 
 describe("warehouse checklist normalization for PDF", () => {
+  it("keeps user-edited warehouse checklist rows and answers in the PDF input", () => {
+    const savedIqItems = [
+      { questionIndex: 0, questionText: "Custom IQ question A?", answer: "yes" as const, comment: "ok" },
+      { questionIndex: 1, questionText: "Custom IQ question B?", answer: "no" as const, comment: "fix planned" },
+      { questionIndex: 2, questionText: "Custom IQ question C?", answer: "na" as const, comment: null },
+    ];
+
+    const normalized = checklistItemsForReport({
+      generalInfo: { equipmentType: "warehouse" },
+      iq: { items: savedIqItems },
+      oq: { items: [] },
+    } as any, "iq");
+
+    expect(normalized).toEqual(savedIqItems);
+  });
+
   it("replaces legacy stored OQ rows with the reviewed 8-question warehouse checklist", () => {
     const legacyOqItems = [
       "Запускается ли всё оборудование зоны (холодильные установки, кондиционеры, обогреватели) в штатном режиме?",

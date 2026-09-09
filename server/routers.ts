@@ -30,6 +30,8 @@ import {
   isKyrgyzstanAutoRefrigerator,
   isWarehouseEaeu,
   isWarehouseLike,
+  findWarehouseChecklistQuestionMatch,
+  normalizeWarehouseChecklistQuestion,
 } from "@shared/validation";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -140,7 +142,6 @@ import { generateComputerizedSystemPdf } from "./computerizedSystemPdf";
 import type { Protocol } from "../drizzle/schema";
 import { getComputerizedSystemReleaseReadiness } from "@shared/computerizedSystem";
 import { storagePut, storageReadBuffer } from "./storage";
-import { buildWarehouseQuestions } from "./warehouseQuestions";
 import { calculateCriticalLoggerIndices } from "./pvCriticalPoints";
 
 function normalizeSensorNumber(value: string | null | undefined): string {
@@ -506,6 +507,87 @@ function defaultQuestionsFor(stage: "iq" | "oq", equipmentType?: string | null):
       : DEFAULT_OQ_QUESTIONS_THERMAL_CONTAINER;
   }
   return stage === "iq" ? DEFAULT_IQ_QUESTIONS : DEFAULT_OQ_QUESTIONS;
+}
+
+async function templateQuestionsForReport(stage: "iq" | "oq", equipmentType?: string | null): Promise<string[]> {
+  if (equipmentType === "chamber" || equipmentType === "thermal-container") {
+    await ensureChamberQuestionsReady();
+  }
+  if (!equipmentType) {
+    const dbTemplates = await listQuestionTemplates(stage);
+    return dbTemplates.length > 0
+      ? dbTemplates.map(template => template.text)
+      : defaultQuestionsFor(stage, equipmentType);
+  }
+
+  const typedTemplates = await listQuestionTemplates(stage, equipmentType);
+  if (typedTemplates.length > 0) return typedTemplates.map(template => template.text);
+
+  if (
+    isWarehouseLike(equipmentType) ||
+    isAutoRefrigeratorLike(equipmentType) ||
+    equipmentType === "chamber" ||
+    equipmentType === "thermal-container"
+  ) {
+    return defaultQuestionsFor(stage, equipmentType);
+  }
+
+  const genericTemplates = await listQuestionTemplates(stage);
+  return genericTemplates.length > 0
+    ? genericTemplates.map(template => template.text)
+    : defaultQuestionsFor(stage, equipmentType);
+}
+
+function activeWarehouseChecklistForReport<T extends {
+  questionIndex: number;
+  questionText: string;
+  answer: "yes" | "no" | "na" | "unset";
+  comment: string | null;
+  updatedAt?: string | Date | null;
+}>(
+  savedItems: T[],
+  activeQuestions: string[],
+): T[] {
+  const cleanSaved = savedItems
+    .slice()
+    .sort((a, b) => a.questionIndex - b.questionIndex)
+    .filter(item => String(item.questionText ?? "").trim().length > 0);
+  const cleanQuestions = activeQuestions.filter(question => question.trim().length > 0);
+
+  if (cleanSaved.length === 0) {
+    return cleanQuestions.map((questionText, questionIndex) => ({
+      questionIndex,
+      questionText,
+      answer: "unset" as const,
+      comment: null,
+    } as T));
+  }
+
+  const normalizedSaved = cleanSaved.map(item => normalizeWarehouseChecklistQuestion(item.questionText));
+  const hasDuplicateQuestions = new Set(normalizedSaved).size < normalizedSaved.length;
+  if (
+    cleanQuestions.length > 0 &&
+    cleanSaved.length > cleanQuestions.length &&
+    hasDuplicateQuestions
+  ) {
+    const usedIndexes = new Set<number>();
+    const normalizedToActive = cleanQuestions.map((questionText, questionIndex) => {
+      const matched = findWarehouseChecklistQuestionMatch(cleanSaved, questionText, usedIndexes);
+      if (matched) {
+        usedIndexes.add(matched.index);
+      }
+      return {
+        questionIndex,
+        questionText,
+        answer: matched?.item.answer ?? "unset",
+        comment: matched?.item.comment ?? null,
+        updatedAt: matched?.item.updatedAt ?? null,
+      } as T;
+    });
+    if (usedIndexes.size >= Math.min(cleanQuestions.length, 6)) return normalizedToActive;
+  }
+
+  return cleanSaved.map((item, questionIndex) => ({ ...item, questionIndex }));
 }
 
 async function ensureChamberQuestionsReady() {
@@ -1975,8 +2057,8 @@ export const appRouter = router({
             buffer,
           );
         }
-        const iqItems = await listChecklist(input.protocolId, "iq");
-        const oqItems = await listChecklist(input.protocolId, "oq");
+        const rawIqItems = await listChecklist(input.protocolId, "iq");
+        const rawOqItems = await listChecklist(input.protocolId, "oq");
         const reportTrialKey = protocol.equipmentType === "thermal-container"
           ? String((gi?.thermalContainerConfig as any)?.selectedModes?.[0] || gi?.tempMode || "2-8")
           : "default";
@@ -2059,6 +2141,18 @@ export const appRouter = router({
               : isThermalContainerProtocol
                 ? THERMAL_CONTAINER_STAGE_TEMPLATES
                 : STAGE_TEMPLATES;
+        const iqItems = isWarehouseProtocol && !isEnglishWarehouseReport
+          ? activeWarehouseChecklistForReport(
+              rawIqItems,
+              await templateQuestionsForReport("iq", effectiveEquipmentType),
+            )
+          : rawIqItems;
+        const oqItems = isWarehouseProtocol && !isEnglishWarehouseReport
+          ? activeWarehouseChecklistForReport(
+              rawOqItems,
+              await templateQuestionsForReport("oq", effectiveEquipmentType),
+            )
+          : rawOqItems;
         if (hasPVData) {
           for (const item of reportInternalLoggers) {
             const l = item.logger;
@@ -3073,8 +3167,8 @@ export const appRouter = router({
     autoQuestions: protectedProcedure
       .input(z.object({ protocolId: z.number(), stage: z.enum(["iq", "oq"]) }))
       .query(async ({ ctx, input }) => {
-        await ownProtocol(ctx.user.id, input.protocolId);
-        return buildWarehouseQuestions([], input.stage);
+        const protocol = await ownProtocol(ctx.user.id, input.protocolId);
+        return templateQuestionsForReport(input.stage, protocol.equipmentType);
       }),
 
     delete: protectedProcedure

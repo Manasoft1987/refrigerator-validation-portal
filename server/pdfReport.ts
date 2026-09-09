@@ -34,6 +34,7 @@ import {
   isKyrgyzstanWarehouse,
   isWarehouseEaeu,
   isWarehouseLike,
+  normalizeWarehouseChecklistQuestion,
   normalizeSensorAccuracyC,
   WAREHOUSE_MAPPING_METHOD_NOTE,
 } from "../shared/validation";
@@ -64,6 +65,9 @@ export function checklistItemsForReport(input: ReportInput, stage: "iq" | "oq"):
     .slice()
     .sort((a, b) => a.questionIndex - b.questionIndex)
     .filter(item => String(item.questionText ?? "").trim().length > 0);
+  if (savedItems.length > 0 && !shouldNormalizeLegacyWarehouseChecklist(savedItems, defaults)) {
+    return savedItems.map((item, index) => ({ ...item, questionIndex: index }));
+  }
 
   const usedIndexes = new Set<number>();
   return defaults.map((questionText, index) => {
@@ -80,6 +84,26 @@ export function checklistItemsForReport(input: ReportInput, stage: "iq" | "oq"):
       updatedAt: saved?.updatedAt ?? null,
     };
   });
+}
+
+function shouldNormalizeLegacyWarehouseChecklist(savedItems: ChecklistItem[], defaults: string[]): boolean {
+  if (savedItems.length <= defaults.length) return false;
+
+  const normalizedItems = savedItems.map(item => normalizeWarehouseChecklistQuestion(item.questionText));
+  const hasDuplicateQuestions = new Set(normalizedItems).size < normalizedItems.length;
+  if (!hasDuplicateQuestions) return false;
+
+  const usedIndexes = new Set<number>();
+  const matchedDefaults = defaults.filter((questionText) => {
+    const matched = findWarehouseChecklistQuestionMatch(savedItems, questionText, usedIndexes);
+    if (matched) {
+      usedIndexes.add(matched.index);
+      return true;
+    }
+    return false;
+  }).length;
+
+  return matchedDefaults >= Math.min(defaults.length, 6);
 }
 
 type LoggerSummary = {
