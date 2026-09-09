@@ -3250,7 +3250,7 @@ function drawSensorPlacementAnalysis(
   if (externals.length > 0) {
     if (isWarehouseLike(getReportEquipmentType(input))) {
       analysisText +=
-        "Внешний датчик (расположенный вне помещения (зоны) хранения) служит для мониторинга параметров окружающей среды " +
+        "Внешний датчик установлен на улице и служит для мониторинга температуры окружающей среды " +
         "и не входит в расчёт основных критериев приемлемости этапа PV. Данные внешнего датчика используются для " +
         "анализа влияния условий окружающей среды на работу оборудования и могут быть полезны при " +
         "диагностике отклонений. Внешний датчик помогает отличить проблемы, вызванные неисправностью оборудования, " +
@@ -3649,8 +3649,8 @@ function drawPVPlan(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
       pv.sensorPlacement
         || (isWarehouseLike(getReportEquipmentType(input))
           ? (en
-              ? "Data loggers shall be arranged as a representative grid covering the storage area across its length, width and height. Where possible, loggers are positioned at comparable intervals. The external logger monitors the temperature outside the room."
-              : "Регистраторы данных следует располагать в форме сетки и таким образом, чтобы они покрывали зону хранения по всей ее длине и ширине, а также высоте. Регистраторы данных размещаются по возможности с равными интервалами. Внешний датчик — для контроля температуры вне помещения.")
+              ? "Data loggers shall be arranged as a representative grid covering the storage area across its length, width and height. Where possible, loggers are positioned at comparable intervals. The external logger is installed outdoors to monitor ambient temperature."
+              : "Регистраторы данных следует располагать в форме сетки и таким образом, чтобы они покрывали зону хранения по всей ее длине и ширине, а также высоте. Регистраторы данных размещаются по возможности с равными интервалами. Внешний датчик установлен на улице для мониторинга температуры окружающей среды.")
               : "\u0414\u0430\u0442\u0447\u0438\u043a\u0438 \u0440\u0430\u0441\u043f\u043e\u043b\u0430\u0433\u0430\u044e\u0442\u0441\u044f \u0432 \u0445\u0430\u0440\u0430\u043a\u0442\u0435\u0440\u043d\u044b\u0445 \u0442\u043e\u0447\u043a\u0430\u0445 \u043e\u0431\u044a\u0451\u043c\u0430 " + reeferAreaGenitive(getReportEquipmentType(input)) + ", \u043e\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u043d\u044b\u0445 \u043f\u043e \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u0430\u043c \u0430\u043d\u0430\u043b\u0438\u0437\u0430 \u0440\u0438\u0441\u043a\u043e\u0432."),
     ],
   ];
