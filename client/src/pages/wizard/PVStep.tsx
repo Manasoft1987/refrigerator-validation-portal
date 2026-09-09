@@ -132,7 +132,7 @@ export default function PVStep({
   const saveSession = trpc.pv.saveSession.useMutation({
     onSuccess: () => {
       utils.pv.get.invalidate({ protocolId, trialKey: activeTrialKey });
-      toast.success("Параметры PV сохранены");
+      toast.success("Параметры PQ/PV сохранены");
     },
     onError: e => toast.error(e.message),
   });
@@ -172,8 +172,8 @@ export default function PVStep({
     onSuccess: res => {
       utils.pv.get.invalidate({ protocolId, trialKey: activeTrialKey });
       utils.protocols.get.invalidate({ id: protocolId });
-      if (res.verdict === "pass") toast.success("PV пройден. Можно формировать итоговый отчёт.");
-      else toast.warning(`PV не пройден: ${res.failureReasons[0] || "см. замечания"}`);
+      if (res.verdict === "pass") toast.success("PQ/PV пройден. Можно формировать итоговый отчёт.");
+      else toast.warning(`PQ/PV не пройден: ${res.failureReasons[0] || "см. замечания"}`);
       if (!isThermalContainer) onDone();
     },
     onError: e => toast.error(e.message),
@@ -316,7 +316,7 @@ export default function PVStep({
           <div className="flex items-start justify-between gap-4 flex-wrap">
             <div>
               <h2 className="text-xl font-semibold tracking-tight">
-                Эксплуатационная квалификация (PV)
+                Эксплуатационная квалификация / валидация (PQ/PV)
               </h2>
               <p className="text-sm text-muted-foreground mt-1 max-w-3xl leading-relaxed">
                 Загрузите файлы поверенных логгеров (CSV / XLSX), настройте режим и период
@@ -750,11 +750,11 @@ export default function PVStep({
             <div className="flex items-center gap-2 font-semibold tracking-tight">
               {session.verdict === "pass" ? (
                 <>
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600" /> PV пройден
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600" /> PQ/PV пройден
                 </>
               ) : (
                 <>
-                  <AlertTriangle className="h-5 w-5 text-rose-600" /> PV не пройден
+                  <AlertTriangle className="h-5 w-5 text-rose-600" /> PQ/PV не пройден
                 </>
               )}
             </div>
@@ -800,7 +800,7 @@ export default function PVStep({
             ) : (
               <Sparkles className="h-4 w-4" />
             )}
-            Провести анализ PV
+            Провести анализ PQ/PV
           </Button>
           <Button
             disabled={!allThermalTrialsAnalyzed || !session?.verdict || session.verdict === "none"}

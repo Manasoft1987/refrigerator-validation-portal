@@ -361,9 +361,9 @@ describe("generateProtocolPdf", () => {
       expect(allText).toContain("Риск-ориентированная фактическая расстановка датчиков");
       expect(allText).toContain("Количество и позиции логгеров приняты по риск-ориентированной фактической схеме");
       expect(allText).toContain("Для данного авторефрижератора принята риск-ориентированная фактическая схема размещения");
-      expect(allText).toContain("Схема 2. Температурная карта по средним значениям PV");
+      expect(allText).toContain("Схема 2. Температурная карта по средним значениям PQ/PV");
       expect(allText).not.toContain("Эталонные позиции ISPE");
-      expect(allText).not.toContain("Схема 3. Температурная карта по средним значениям PV");
+      expect(allText).not.toContain("Схема 3. Температурная карта по средним значениям PQ/PV");
     },
     60_000,
   );
@@ -449,10 +449,10 @@ describe("generateProtocolPdf", () => {
       }
 
       const allText = writtenText.join("\n");
-      expect(allText).toContain("Паспорт испытания PV");
-      expect(allText).toContain("Критические точки PV");
-      expect(allText).toContain("Интерпретация результата PV");
-      expect(allText).toContain("комплексной оценке PV");
+      expect(allText).toContain("Паспорт испытания PQ/PV");
+      expect(allText).toContain("Критические точки PQ/PV");
+      expect(allText).toContain("Интерпретация результата PQ/PV");
+      expect(allText).toContain("комплексной оценке PQ/PV");
       expect(allText).toContain("разница между максимальной и минимальной средней температурой");
     },
     60_000,
@@ -540,7 +540,7 @@ describe("generateProtocolPdf", () => {
       }> = [];
 
       (PDFDocument.prototype as any).text = function (text: string, ...args: any[]) {
-        if (text === "Заключение по этапу" || text === "Заключение по этапу PV") {
+        if (text === "Заключение по этапу" || text === "Заключение по этапу PQ/PV") {
           headingCalls.push({ text, x: args[0], options: args[2] ?? {} });
         }
         return originalText.call(this, text, ...args);

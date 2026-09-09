@@ -209,7 +209,7 @@ export default function FinalReportStep({
           <div className="grid md:grid-cols-3 gap-3">
             <SummaryStage title="IQ · Монтаж" state={p?.iqVerdict} />
             <SummaryStage title="OQ · Функционирование" state={p?.oqVerdict} />
-            <SummaryStage title="PV · Эксплуатация" state={p?.pvVerdict} />
+            <SummaryStage title="PQ/PV · Эксплуатация" state={p?.pvVerdict} />
           </div>
 
           <div
@@ -437,7 +437,7 @@ export default function FinalReportStep({
             rows={4}
             placeholder={
               hasFailures
-                ? "Например: устранить негерметичность уплотнителя двери, провести повторную PV в полном объёме."
+                ? "Например: устранить негерметичность уплотнителя двери, провести повторную PQ/PV в полном объёме."
                 : "Например: проводить мониторинг температуры в режиме реального времени; повторная квалификация — через 12 месяцев."
             }
           />

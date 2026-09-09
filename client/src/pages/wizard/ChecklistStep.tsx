@@ -127,7 +127,7 @@ export default function ChecklistStep({
         toast.success(
           stage === "iq"
             ? "IQ пройден — переходим к OQ"
-            : "OQ пройден — переходим к PV",
+            : "OQ пройден — переходим к PQ/PV",
         );
         onPass();
       } else if (verdict === "fail") {
@@ -330,7 +330,7 @@ export default function ChecklistStep({
             disabled={save.isPending || verdictPreview === "pending" || items.length === 0}
             onClick={saveItems}
           >
-            {stage === "iq" ? "Далее к OQ" : "Далее к PV"} <ArrowRight className="h-4 w-4" />
+            {stage === "iq" ? "Далее к OQ" : "Далее к PQ/PV"} <ArrowRight className="h-4 w-4" />
           </Button>
         </div>
       </div>

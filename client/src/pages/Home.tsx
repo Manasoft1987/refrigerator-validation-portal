@@ -20,7 +20,7 @@ const STATUS_LABEL: Record<string, string> = {
   general_info_done: "Общие сведения",
   iq_done: "IQ пройден",
   oq_done: "OQ пройден",
-  pv_done: "PV пройден",
+  pv_done: "PQ/PV пройден",
   completed: "Завершён",
 };
 
@@ -63,7 +63,7 @@ export default function Home() {
                 Добрый день{user?.name ? `, ${user.name.split(" ")[0]}` : ""}.
               </h1>
               <p className="text-muted-foreground leading-relaxed">
-                Формируйте протоколы квалификации и валидации (IQ · OQ · PV) холодильного
+                Формируйте протоколы квалификации и валидации (IQ · OQ · PQ/PV) холодильного
                 оборудования в соответствии с GDP / GSP — от ввода данных и загрузки показаний
                 логгеров до выпуска итогового PDF-протокола.
               </p>
@@ -299,13 +299,13 @@ function WorkflowGuide() {
     },
     {
       n: 4,
-      title: "PV",
+      title: "PQ/PV",
       body: "Загрузите файлы логгеров (CSV/XLSX) — портал рассчитает MKT, отклонения, критические точки.",
     },
     {
       n: 5,
       title: "PDF-протокол",
-      body: "Один PDF: титул, IQ, OQ, PV, графики, тепловая карта, заключение, подписи.",
+      body: "Один PDF: титул, IQ, OQ, PQ/PV, графики, тепловая карта, заключение, подписи.",
     },
   ];
   return (

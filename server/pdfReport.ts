@@ -908,7 +908,7 @@ function getStageTrace(input: ReportInput, stage: "IQ" | "OQ" | "PV"): DataInteg
     label: "PQ/PV — ввод данных эксплуатационной квалификации",
     completedBy: preparedBy,
     completedAt: getPvCompletionDate(input) ?? fallbackDate,
-    source: "Параметры PV и загруженные файлы логгеров",
+    source: "Параметры PQ/PV и загруженные файлы логгеров",
   };
 }
 
@@ -1535,7 +1535,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     drawStageBlocks(doc, input.oq, input);
     drawChecklistPlan(doc, checklistItemsForReport(input, "oq"), input);
     doc.addPage();
-    drawSectionTitle(doc, "4. План PV — Эксплуатационная квалификация");
+    drawSectionTitle(doc, "4. План PQ/PV — Эксплуатационная квалификация / валидация");
     drawStageBlocks(doc, input.pv, input);
     drawPVPlan(doc, input.pv, input);
     drawPVPlacementPlan(doc, input);
@@ -1569,7 +1569,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   drawStageVerdict(doc, "OQ", input.oq.verdict, oqItems, input);
 
   doc.addPage();
-    drawSectionTitle(doc, isEnglishWarehouse(input) ? "9. PV Results - Performance Qualification" : "9. Результаты PV — Эксплуатационная квалификация");
+    drawSectionTitle(doc, isEnglishWarehouse(input) ? "9. PQ/PV Results - Performance Qualification / Validation" : "9. Результаты PQ/PV — Эксплуатационная квалификация / валидация");
     if (getReportEquipmentType(input) === "thermal-container") {
       drawThermalTrialsSummary(doc, input);
     }
@@ -1655,7 +1655,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     if (supportsTemperatureMap && hasTemperatureMapData) {
       doc.addPage();
       drawTemperatureMapSummary(doc, temperatureMapLoggers as DiagramSensor[], PAGE_MARGIN, {
-        title: `Схема ${temperatureMapSchemaNumber}. Температурная карта по средним значениям PV`,
+        title: `Схема ${temperatureMapSchemaNumber}. Температурная карта по средним значениям PQ/PV`,
         objectType: isAutoRefrigeratorLike(eqType) ? "truck" : eqType === "freezer" ? "freezer" : "refrigerator",
         rangeMin: input.pv.rangeMin,
         rangeMax: input.pv.rangeMax,
@@ -1679,8 +1679,8 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
       input,
       false,
       isEnglishWarehouse(input)
-        ? "Diagram 3. PV temperature map on the storage area plan (logger IDs and average temperature)"
-        : "Схема 3. Температурная карта PV на плане помещения (номера логгеров и средняя температура)",
+        ? "Diagram 3. PQ/PV temperature map on the storage area plan (logger IDs and average temperature)"
+        : "Схема 3. Температурная карта PQ/PV на плане помещения (номера логгеров и средняя температура)",
       {
         showCriticalMarkers: true,
         showAverageLabels: true,
@@ -2686,7 +2686,7 @@ function drawPVPassportSummary(doc: PDFKit.PDFDocument, input: ReportInput) {
   const samplingStep = pv.samplingStepMinutes ? `${pv.samplingStepMinutes} мин` : "—";
   const accuracy = pv.sensorAccuracy !== undefined && pv.sensorAccuracy !== null ? `±${pv.sensorAccuracy.toFixed(1)} °C` : "—";
 
-  drawSubTitle(doc, "Паспорт испытания PV");
+  drawSubTitle(doc, "Паспорт испытания PQ/PV");
   drawKVTable(doc, [
     ["Объект испытания", getEquipmentName(input)],
     ["Температурный режим / критерий", `${pvTemperatureModeLabel(pv, input)}; расчетный диапазон ${fmtTempRange(pv.rangeMin, pv.rangeMax)}`],
@@ -2694,7 +2694,7 @@ function drawPVPassportSummary(doc: PDFKit.PDFDocument, input: ReportInput) {
     ["Фактическая длительность", durationMs > 0 ? fmtDuration(durationMs) : "—"],
     ["Логгеры в расчете", `${internal.length} внутренних; ${external.length} внешних`],
     ["Шаг регистрации / погрешность", `${samplingStep}; ${accuracy}`],
-    ["Итог PV", verdictLabelLocal(pv.verdict, input)],
+    ["Итог PQ/PV", verdictLabelLocal(pv.verdict, input)],
   ], 190);
 }
 
@@ -2788,7 +2788,7 @@ function criticalSelectionEvidence(input: ReportInput, logger: LoggerSummary, ki
     .map((label, index) => `${label}: ${criticalScoreFactorValue(logger, kind, index)}`)
     .join("; ");
   if (!next) {
-    return `Выбор выполнен по комплексной оценке PV: ${criticalDeviationEvidence(logger, kind)}; ${metricSummary}. Подтверждающие факторы выбранной точки: ${factorSummary}.`;
+    return `Выбор выполнен по комплексной оценке PQ/PV: ${criticalDeviationEvidence(logger, kind)}; ${metricSummary}. Подтверждающие факторы выбранной точки: ${factorSummary}.`;
   }
 
   const firstDiffIndex = logger
@@ -2798,18 +2798,18 @@ function criticalSelectionEvidence(input: ReportInput, logger: LoggerSummary, ki
     ? `Ключевое отличие от ближайшей альтернативы ${shortLoggerDisplay(next.item)}: ${CRITICAL_SCORE_LABELS[kind][firstDiffIndex]} (${criticalScoreFactorValue(logger, kind, firstDiffIndex)} против ${criticalScoreFactorValue(next.item, kind, firstDiffIndex)}).`
     : `Ближайшая альтернатива: ${shortLoggerDisplay(next.item)}; различия по расчетным факторам минимальны.`;
 
-  return `Выбор выполнен по комплексной оценке PV: ${criticalDeviationEvidence(logger, kind)}; ${metricSummary}. Подтверждающие факторы выбранной точки: ${factorSummary}. ${firstDiffText}`;
+  return `Выбор выполнен по комплексной оценке PQ/PV: ${criticalDeviationEvidence(logger, kind)}; ${metricSummary}. Подтверждающие факторы выбранной точки: ${factorSummary}. ${firstDiffText}`;
 }
 
 function drawPVCriticalPointsSummary(doc: PDFKit.PDFDocument, input: ReportInput) {
   const pv = input.pv;
   const internal = pv.loggers.filter(logger => logger.role === "internal" && finiteNumberOrNull(logger.avg) !== null);
-  drawSubTitle(doc, "Критические точки PV");
+  drawSubTitle(doc, "Критические точки PQ/PV");
 
   if (internal.length < 2) {
     drawPVInfoBox(
       doc,
-      "Для выделения отдельных горячей и холодной точек требуется не менее двух внутренних логгеров с расчетными показателями. При меньшем количестве точек результат оценивается по общей статистике PV.",
+      "Для выделения отдельных горячей и холодной точек требуется не менее двух внутренних логгеров с расчетными показателями. При меньшем количестве точек результат оценивается по общей статистике PQ/PV.",
       { bg: "#fff7ed", border: "#fed7aa", color: "#9a3412" },
     );
     return;
@@ -2818,7 +2818,7 @@ function drawPVCriticalPointsSummary(doc: PDFKit.PDFDocument, input: ReportInput
   const critical = calculateCriticalLoggerIndices(pv.loggers);
   drawPVInfoBox(
     doc,
-    "Критические точки PV определяются по комплексной оценке PV, риск-ориентированно, а не по одному минимальному или максимальному значению. Для каждого внутреннего логгера сопоставляются расчетные факторы температурного риска. Для горячей точки последовательно учитываются: наличие превышений верхней границы, суммарная длительность превышений, наиболее выраженное превышение, Max, MKT и Avg. Для холодной точки последовательно учитываются: наличие понижений ниже нижней границы, суммарная длительность понижений, наиболее выраженное понижение, Min и Avg. Сравнение выполняется по первому отличающемуся фактору в указанном порядке; поэтому логгер с самым высоким Avg не обязательно является горячей точкой, если другой логгер имеет более значимый температурный риск.",
+    "Критические точки PQ/PV определяются по комплексной оценке PQ/PV, риск-ориентированно, а не по одному минимальному или максимальному значению. Для каждого внутреннего логгера сопоставляются расчетные факторы температурного риска. Для горячей точки последовательно учитываются: наличие превышений верхней границы, суммарная длительность превышений, наиболее выраженное превышение, Max, MKT и Avg. Для холодной точки последовательно учитываются: наличие понижений ниже нижней границы, суммарная длительность понижений, наиболее выраженное понижение, Min и Avg. Сравнение выполняется по первому отличающемуся фактору в указанном порядке; поэтому логгер с самым высоким Avg не обязательно является горячей точкой, если другой логгер имеет более значимый температурный риск.",
     { bg: "#f8fafc", border: BORDER, color: ACCENT },
   );
   const rows: string[][] = [];
@@ -2858,7 +2858,7 @@ function drawPVResultInterpretation(doc: PDFKit.PDFDocument, input: ReportInput)
     .map(logger => ({ logger, avg: finiteNumberOrNull(logger.avg) }))
     .filter(item => item.avg !== null) as Array<{ logger: LoggerSummary; avg: number }>;
 
-  drawSubTitle(doc, "Интерпретация результата PV");
+  drawSubTitle(doc, "Интерпретация результата PQ/PV");
 
   if (internal.length === 0) {
     drawPVInfoBox(doc, "Интерпретация не сформирована: отсутствуют расчетные данные внутренних логгеров.");
@@ -2881,10 +2881,10 @@ function drawPVResultInterpretation(doc: PDFKit.PDFDocument, input: ReportInput)
 
   const verdictText =
     pv.verdict === "pass"
-      ? "На основании выполненного мониторинга эксплуатационная квалификация PV признана пройденной."
+      ? "На основании выполненного мониторинга эксплуатационная квалификация / валидация PQ/PV признана пройденной."
       : pv.verdict === "fail"
-        ? "На основании выполненного мониторинга эксплуатационная квалификация PV признана не пройденной; требуется анализ причин и корректирующие действия."
-        : "Итоговый вывод PV не сформирован, так как этап не завершен.";
+        ? "На основании выполненного мониторинга эксплуатационная квалификация / валидация PQ/PV признана не пройденной; требуется анализ причин и корректирующие действия."
+        : "Итоговый вывод PQ/PV не сформирован, так как этап не завершен.";
 
   const deviationText =
     deviations === 0
@@ -3056,12 +3056,12 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
       pv.rangeMax,
     );
     const externalChartText = en
-      ? "The external logger chart shows ambient temperature outside the storage room / storage area. This logger is not included in the main PV acceptance calculation, but supports assessment of environmental influence."
+      ? "The external logger chart shows ambient temperature outside the storage room / storage area. This logger is not included in the main PQ/PV acceptance calculation, but supports assessment of environmental influence."
       : isWarehouseLike(getReportEquipmentType(input))
       ? "\u0413\u0440\u0430\u0444\u0438\u043a \u0432\u043d\u0435\u0448\u043d\u0435\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0430\u0435\u0442 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u0443 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u044b \u0432\u043d\u0435 \u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u044f (\u0437\u043e\u043d\u044b) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f. " +
-        "\u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u043d\u0435 \u0432\u0445\u043e\u0434\u0438\u0442 \u0432 \u0440\u0430\u0441\u0447\u0451\u0442 \u043a\u0440\u0438\u0442\u0435\u0440\u0438\u0435\u0432 \u043f\u0440\u0438\u0435\u043c\u043b\u0435\u043c\u043e\u0441\u0442\u0438 PV, \u043d\u043e \u043f\u043e\u043c\u043e\u0433\u0430\u0435\u0442 \u043e\u0446\u0435\u043d\u0438\u0442\u044c \u0432\u043b\u0438\u044f\u043d\u0438\u0435 \u0441\u0440\u0435\u0434\u044b."
+        "Этот датчик не входит в расчёт критериев приемлемости PQ/PV, но помогает оценить влияние среды."
       : "\u0413\u0440\u0430\u0444\u0438\u043a \u0432\u043d\u0435\u0448\u043d\u0435\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 \u043e\u0442\u043e\u0431\u0440\u0430\u0436\u0430\u0435\u0442 \u0442\u0435\u043c\u043f\u0435\u0440\u0430\u0442\u0443\u0440\u0443 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u044b \u0432\u043d\u0435 " + reeferAreaGenitive(getReportEquipmentType(input)) + ". " +
-        "\u042d\u0442\u043e\u0442 \u0434\u0430\u0442\u0447\u0438\u043a \u043d\u0435 \u0432\u0445\u043e\u0434\u0438\u0442 \u0432 \u0440\u0430\u0441\u0447\u0451\u0442 \u043a\u0440\u0438\u0442\u0435\u0440\u0438\u0435\u0432 \u043f\u0440\u0438\u0435\u043c\u043b\u0435\u043c\u043e\u0441\u0442\u0438 PV, \u043d\u043e \u043f\u043e\u043c\u043e\u0433\u0430\u0435\u0442 \u043e\u0446\u0435\u043d\u0438\u0442\u044c \u0432\u043b\u0438\u044f\u043d\u0438\u0435 \u0441\u0440\u0435\u0434\u044b.";
+        "Этот датчик не входит в расчёт критериев приемлемости PQ/PV, но помогает оценить влияние среды.";
     drawChartExplanation(doc, externalChartText);
   }
 
@@ -3080,10 +3080,10 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     drawChartExplanation(
       doc,
       en
-        ? "The hot point chart shows the internal logger selected by PV temperature-risk ranking: out-of-range excursions, excursion duration and severity, maximum temperature, MKT and average temperature. This supports worst-case assessment of the warmest/least favourable area."
+        ? "The hot point chart shows the internal logger selected by PQ/PV temperature-risk ranking: out-of-range excursions, excursion duration and severity, maximum temperature, MKT and average temperature. This supports worst-case assessment of the warmest/least favourable area."
         : isWarehouseLike(getReportEquipmentType(input))
-        ? "График горячей точки показывает внутренний датчик, выбранный по риск-оценке PV: отклонения за пределы режима, длительность и выраженность отклонений, максимальная температура, MKT и среднее значение. Это поддерживает оценку наихудшей тёплой зоны помещения."
-        : "График горячей точки показывает внутренний датчик, выбранный по риск-оценке PV: отклонения за пределы режима, длительность и выраженность отклонений, максимальная температура, MKT и среднее значение. Это поддерживает оценку наихудшей тёплой зоны в " + reeferAreaAfterIn(getReportEquipmentType(input)) + "."
+        ? "График горячей точки показывает внутренний датчик, выбранный по риск-оценке PQ/PV: отклонения за пределы режима, длительность и выраженность отклонений, максимальная температура, MKT и среднее значение. Это поддерживает оценку наихудшей тёплой зоны помещения."
+        : "График горячей точки показывает внутренний датчик, выбранный по риск-оценке PQ/PV: отклонения за пределы режима, длительность и выраженность отклонений, максимальная температура, MKT и среднее значение. Это поддерживает оценку наихудшей тёплой зоны в " + reeferAreaAfterIn(getReportEquipmentType(input)) + "."
     );
   }
 
@@ -3102,10 +3102,10 @@ function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     drawChartExplanation(
       doc,
       en
-        ? "The cold point chart shows the internal logger selected by PV temperature-risk ranking: out-of-range low excursions, excursion duration and severity, minimum temperature and average temperature. This supports worst-case assessment of the coldest area."
+        ? "The cold point chart shows the internal logger selected by PQ/PV temperature-risk ranking: out-of-range low excursions, excursion duration and severity, minimum temperature and average temperature. This supports worst-case assessment of the coldest area."
         : isWarehouseLike(getReportEquipmentType(input))
-        ? "График холодной точки показывает внутренний датчик, выбранный по риск-оценке PV: отклонения ниже режима, длительность и выраженность отклонений, минимальная температура и среднее значение. Это поддерживает оценку наихудшей холодной зоны помещения."
-        : "График холодной точки показывает внутренний датчик, выбранный по риск-оценке PV: отклонения ниже режима, длительность и выраженность отклонений, минимальная температура и среднее значение. Это поддерживает оценку наихудшей холодной зоны в " + reeferAreaAfterIn(getReportEquipmentType(input)) + "."
+        ? "График холодной точки показывает внутренний датчик, выбранный по риск-оценке PQ/PV: отклонения ниже режима, длительность и выраженность отклонений, минимальная температура и среднее значение. Это поддерживает оценку наихудшей холодной зоны помещения."
+        : "График холодной точки показывает внутренний датчик, выбранный по риск-оценке PQ/PV: отклонения ниже режима, длительность и выраженность отклонений, минимальная температура и среднее значение. Это поддерживает оценку наихудшей холодной зоны в " + reeferAreaAfterIn(getReportEquipmentType(input)) + "."
     );
   }
 
@@ -3261,7 +3261,7 @@ function drawStagePVVerdict(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], inpu
   doc.moveDown(0.5);
   doc.x = left;
   doc.fillColor(ACCENT).font("bold").fontSize(12).text(
-    en ? "PV Stage Conclusion" : "Заключение по этапу PV",
+    en ? "PQ/PV Stage Conclusion" : "Заключение по этапу PQ/PV",
     left,
     doc.y,
     { width: w, align: "center", lineBreak: false },
@@ -3285,12 +3285,12 @@ function drawStagePVVerdict(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], inpu
       const internalCount = pv.loggers.filter(l => l.role === "internal").length;
       
       text = en
-        ? "All acceptance criteria are met. Performance Qualification / Validation (PV) has been completed successfully. " +
+        ? "All acceptance criteria are met. Performance Qualification / Validation (PQ/PV) has been completed successfully. " +
           `Analysis of ${internalCount} internal logger(s) demonstrates stable temperature distribution throughout the storage room / storage area volume. ` +
           (hotSensor ? `The maximum temperature was recorded by ${hotLabel} (hot point). ` : "") +
           (coldSensor ? `The minimum temperature was recorded by ${coldLabel} (cold point). ` : "") +
           "The HVAC/heating system operates normally and provides appropriate storage conditions for medicinal products in accordance with GDP/GSP requirements."
-        : "Все критерии приемлемости выполнены. Эксплуатационная квалификация (PV) пройдена успешно. " +
+        : "Все критерии приемлемости выполнены. Эксплуатационная квалификация / валидация (PQ/PV) пройдена успешно. " +
           `Анализ данных ${internalCount} внутренних датчиков показал стабильное распределение температуры ` +
           "по всему объёму помещения (зоны) хранения. " +
           (hotSensor ? `Максимальная температура зафиксирована ${hotLabel} (горячая точка). ` : "") +
@@ -3299,7 +3299,7 @@ function drawStagePVVerdict(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], inpu
           "температуры и надлежащие условия для хранения лекарственных средств в соответствии с требованиями GDP/GSP.";
     } else {
       text =
-        "Все критерии приемлемости выполнены. Эксплуатационная квалификация (PV) пройдена успешно. " +
+        "Все критерии приемлемости выполнены. Эксплуатационная квалификация / валидация (PQ/PV) пройдена успешно. " +
         "Оборудование признано пригодным для хранения лекарственных средств в указанном режиме.";
     }
   } else if (pv.verdict === "fail") {
@@ -3307,7 +3307,7 @@ function drawStagePVVerdict(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], inpu
     bd = "#fecaca";
     fg = "#991b1b";
     text =
-      (en ? "Performance Qualification / Validation (PV) failed. Non-conformities were recorded:\n" : "Эксплуатационная квалификация (PV) не пройдена. Зафиксированы несоответствия:\n") +
+      (en ? "Performance Qualification / Validation (PQ/PV) failed. Non-conformities were recorded:\n" : "Эксплуатационная квалификация / валидация (PQ/PV) не пройдена. Зафиксированы несоответствия:\n") +
       pv.failureReasons.map((r, i) => `${i + 1}. ${r}`).join("\n");
   }
 
@@ -3357,7 +3357,7 @@ function drawSensorPlacementAnalysis(
       `Internal data loggers are placed at representative points across the storage room / storage area volume to identify temperature gradients, hot points and cold points. ` +
       `The placement covers the room geometry and relevant risk areas such as walls, corners, doors, shelving zones and areas influenced by HVAC/heating equipment where applicable. ` +
       (externals.length > 0
-        ? "The external logger monitors ambient conditions outside the storage area and is not included in the main PV acceptance calculation, but supports interpretation of environmental influence."
+        ? "The external logger monitors ambient conditions outside the storage area and is not included in the main PQ/PV acceptance calculation, but supports interpretation of environmental influence."
         : "No external logger is included in the sensor placement set.");
     doc.font("body").fontSize(10).fillColor(ACCENT);
     doc.text(analysisText, left, doc.y, { width: w, align: "justify", lineGap: 2 });
@@ -3435,14 +3435,14 @@ function drawSensorPlacementAnalysis(
     if (isWarehouseLike(getReportEquipmentType(input))) {
       analysisText +=
         "Внешний датчик установлен на улице и служит для мониторинга температуры окружающей среды " +
-        "и не входит в расчёт основных критериев приемлемости этапа PV. Данные внешнего датчика используются для " +
+        "и не входит в расчёт основных критериев приемлемости этапа PQ/PV. Данные внешнего датчика используются для " +
         "анализа влияния условий окружающей среды на работу оборудования и могут быть полезны при " +
         "диагностике отклонений. Внешний датчик помогает отличить проблемы, вызванные неисправностью оборудования, " +
         "от колебаний, обусловленных изменениями температуры в окружающей среде.";
     } else {
       analysisText +=
         "\u0412\u043d\u0435\u0448\u043d\u0438\u0439 \u0434\u0430\u0442\u0447\u0438\u043a (\u0440\u0430\u0441\u043f\u043e\u043b\u043e\u0436\u0435\u043d\u043d\u044b\u0439 \u0432\u043d\u0435 " + reeferAreaGenitive(getReportEquipmentType(input)) + ") \u0441\u043b\u0443\u0436\u0438\u0442 \u0434\u043b\u044f \u043c\u043e\u043d\u0438\u0442\u043e\u0440\u0438\u043d\u0433\u0430 \u043f\u0430\u0440\u0430\u043c\u0435\u0442\u0440\u043e\u0432 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u044b " +
-        "\u0438 \u043d\u0435 \u0432\u0445\u043e\u0434\u0438\u0442 \u0432 \u0440\u0430\u0441\u0447\u0451\u0442 \u043e\u0441\u043d\u043e\u0432\u043d\u044b\u0445 \u043a\u0440\u0438\u0442\u0435\u0440\u0438\u0435\u0432 \u043f\u0440\u0438\u0435\u043c\u043b\u0435\u043c\u043e\u0441\u0442\u0438 \u044d\u0442\u0430\u043f\u0430 PV. \u0414\u0430\u043d\u043d\u044b\u0435 \u0432\u043d\u0435\u0448\u043d\u0435\u0433\u043e \u0434\u0430\u0442\u0447\u0438\u043a\u0430 \u0438\u0441\u043f\u043e\u043b\u044c\u0437\u0443\u044e\u0442\u0441\u044f \u0434\u043b\u044f \u0430\u043d\u0430\u043b\u0438\u0437\u0430 \u0432\u043b\u0438\u044f\u043d\u0438\u044f \u0443\u0441\u043b\u043e\u0432\u0438\u0439 \u043e\u043a\u0440\u0443\u0436\u0430\u044e\u0449\u0435\u0439 \u0441\u0440\u0435\u0434\u044b \u043d\u0430 \u0440\u0430\u0431\u043e\u0442\u0443 \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u044f.";
+        "и не входит в расчёт основных критериев приемлемости этапа PQ/PV. Данные внешнего датчика используются для анализа влияния условий окружающей среды на работу оборудования.";
     }
   }
 
@@ -3468,7 +3468,7 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
   const lines: Array<[string, string]> = [
     [en ? "IQ stage — Installation Qualification" : "Этап IQ — квалификация монтажа", verdictLabelLocal(input.iq.verdict, input)],
     [en ? "OQ stage — Operational Qualification" : "Этап OQ — квалификация функционирования", verdictLabelLocal(input.oq.verdict, input)],
-    [en ? "PV stage — Performance Qualification" : "Этап PV — эксплуатационная квалификация", verdictLabelLocal(input.pv.verdict, input)],
+    [en ? "PQ/PV stage — Performance Qualification / Validation" : "Этап PQ/PV — эксплуатационная квалификация / валидация", verdictLabelLocal(input.pv.verdict, input)],
   ];
   if (input.excursion?.enabled) {
     const excVerdict = excursionVerdictLabel(input.excursion);
@@ -3568,8 +3568,8 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
       : "";
     const suitabilityWord = getReportEquipmentType(input) === "chamber" ? "пригодной" : "пригодным";
     text = en
-      ? `Based on IQ, OQ and PV results, the commission recognizes the storage room / storage area as suitable for storage of medicinal products within the temperature regime ${pvTemperatureModeLabel(input.pv, input)} in accordance with GDP / GPP requirements. The HVAC/heating system provides stable temperature distribution throughout the room volume. Validation has been completed with a positive conclusion.${excNote}`
-      : "\u041d\u0430 \u043e\u0441\u043d\u043e\u0432\u0430\u043d\u0438\u0438 \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u043e\u0432 IQ, OQ \u0438 PV \u043a\u043e\u043c\u0438\u0441\u0441\u0438\u044f \u043f\u0440\u0438\u0437\u043d\u0430\u0451\u0442 " + (isWarehouseLike(getReportEquipmentType(input)) ? "\u043f\u043e\u043c\u0435\u0449\u0435\u043d\u0438\u0435 (\u0437\u043e\u043d\u0443) \u0445\u0440\u0430\u043d\u0435\u043d\u0438\u044f" : reeferConclusionObject(input)) + " " +
+      ? `Based on IQ, OQ and PQ/PV results, the commission recognizes the storage room / storage area as suitable for storage of medicinal products within the temperature regime ${pvTemperatureModeLabel(input.pv, input)} in accordance with GDP / GPP requirements. The HVAC/heating system provides stable temperature distribution throughout the room volume. Validation has been completed with a positive conclusion.${excNote}`
+      : "На основании результатов IQ, OQ и PQ/PV комиссия признаёт " + (isWarehouseLike(getReportEquipmentType(input)) ? "помещение (зону) хранения" : reeferConclusionObject(input)) + " " +
         `${suitabilityWord} для хранения лекарственных средств ` +
         `в температурном режиме ${pvTemperatureModeLabel(input.pv, input)} в соответствии с требованиями GDP / GPP. ` +
         (isWarehouseLike(getReportEquipmentType(input))
@@ -3764,7 +3764,7 @@ function drawPVPlacementPlan(doc: PDFKit.PDFDocument, input: ReportInput) {
   drawSectionTitle(
     doc,
     en
-      ? "4.1. PV sensor placement plan and risk assessment"
+      ? "4.1. PQ/PV sensor placement plan and risk assessment"
       : "4.1. План расстановки датчиков и оценка рисков",
   );
 
@@ -3850,8 +3850,8 @@ function drawTestPeriod(doc: PDFKit.PDFDocument, input: ReportInput) {
   const pv = input.pv;
   const durationMs = pv.startAt && pv.endAt ? pv.endAt - pv.startAt : 0;
   const rows: Array<[string, string]> = [
-    [en ? "Test start (PV)" : "Начало испытаний (PV)", pv.startAt ? fmtDate(pv.startAt) : "—"],
-    [en ? "Test end (PV)" : "Окончание испытаний (PV)", pv.endAt ? fmtDate(pv.endAt) : "—"],
+    [en ? "Test start (PQ/PV)" : "Начало испытаний (PQ/PV)", pv.startAt ? fmtDate(pv.startAt) : "—"],
+    [en ? "Test end (PQ/PV)" : "Окончание испытаний (PQ/PV)", pv.endAt ? fmtDate(pv.endAt) : "—"],
     [en ? "Actual duration" : "Фактическая длительность", durationMs ? fmtDuration(durationMs) : "—"],
   ];
   drawKVTable(doc, rows);
@@ -4298,8 +4298,8 @@ function drawExcursionSection(
   const w = right - left;
 
   const TIMING_LABELS: Record<string, string> = {
-    before_pv: "До этапа PV",
-    after_pv: "После этапа PV",
+    before_pv: "До этапа PQ/PV",
+    after_pv: "После этапа PQ/PV",
     independent: "Независимо",
   };
 
@@ -4312,7 +4312,7 @@ function drawExcursionSection(
   if (excursion.test3Enabled) enabledTests.push("Отключение питания (время до нарушения режима)");
   const paramRows: Array<[string, string]> = [
     ["Окно записи", `${excursion.recordStartAt ? fmtDate(excursion.recordStartAt) : "—"} – ${excursion.recordEndAt ? fmtDate(excursion.recordEndAt) : "—"}`],
-    ["Срок проведения относительно PV", TIMING_LABELS[excursion.timingVsPv || ""] || excursion.timingVsPv || "—"],
+    ["Срок проведения относительно PQ/PV", TIMING_LABELS[excursion.timingVsPv || ""] || excursion.timingVsPv || "—"],
     ["Проводимые тесты", enabledTests.join(", ") || "—"],
     ...(sensorAccuracy !== undefined && sensorAccuracy !== null
       ? [
@@ -6329,7 +6329,7 @@ GMP (Good Manufacturing Practice) — Правила надлежащей про
 СОП — стандартная операционная процедура
 IQ (Installation Qualification) — квалификация монтажа
 OQ (Operational Qualification) — квалификация функционирования
-PV / PQ (Performance Validation / Qualification) — эксплуатационная квалификация / валидация
+PQ/PV (Performance Qualification / Process Validation) — эксплуатационная квалификация / валидация
 Т — температура
 MKT (Mean Kinetic Temperature) — среднекинетическая температура`,
 
@@ -6416,7 +6416,7 @@ GMP (Good Manufacturing Practice)
 SOP — Standard Operating Procedure
 IQ (Installation Qualification)
 OQ (Operational Qualification)
-PV / PQ (Performance Validation / Performance Qualification)
+PQ/PV (Performance Qualification / Process Validation)
 T — Temperature
 MKT (Mean Kinetic Temperature)`,
 
@@ -6689,9 +6689,9 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
   drawStageBlocks(doc, input.oq, input);
   drawChecklistPlan(doc, checklistItemsForReport(input, "oq"), input);
 
-  // 6.13 PV plan
+  // 6.13 PQ/PV plan
   ensureSpace(doc, 260);
-  drawSubTitle(doc, en ? "6.13. PV Plan — Performance Qualification" : "6.13. План PV — Эксплуатационная квалификация");
+  drawSubTitle(doc, en ? "6.13. PQ/PV Plan — Performance Qualification / Validation" : "6.13. План PQ/PV — Эксплуатационная квалификация / валидация");
   drawStageBlocks(doc, input.pv, input);
   drawPVPlan(doc, input.pv, input);
 

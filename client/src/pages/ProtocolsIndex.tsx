@@ -50,7 +50,7 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
   general_info_done: { label: "Общие сведения", cls: "bg-sky-50 text-sky-700" },
   iq_done: { label: "IQ пройден", cls: "bg-indigo-50 text-indigo-700" },
   oq_done: { label: "OQ пройден", cls: "bg-violet-50 text-violet-700" },
-  pv_done: { label: "PV выполнен", cls: "bg-amber-50 text-amber-700" },
+  pv_done: { label: "PQ/PV выполнен", cls: "bg-amber-50 text-amber-700" },
   completed: { label: "Завершён", cls: "bg-emerald-50 text-emerald-700" },
 };
 
@@ -368,7 +368,7 @@ export default function ProtocolsIndex() {
                 {([
                   { id: "refrigerator", label: "Холодильник", icon: "🧊", desc: "Фармацевтический холодильник / камера хранения" },
                   { id: "freezer", label: "Морозильник", icon: "🧊", desc: "Морозильное оборудование с заданным минусовым или пользовательским режимом" },
-                  { id: "chamber", label: "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430", icon: "\u2744\uFE0F", desc: "Холодильная камера с объёмной расстановкой регистраторов и PV 24–72 ч" },
+                  { id: "chamber", label: "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430", icon: "\u2744\uFE0F", desc: "Холодильная камера с объёмной расстановкой регистраторов и PQ/PV 24–72 ч" },
                   { id: "auto-refrigerator", label: "Авторефрижератор", icon: "🚛", desc: "Транспортный рефрижератор с активной холодильной установкой" },
                   { id: "auto-refrigerator-kg", label: "Авторефрижератор Кыргызстана", icon: "🚛", desc: "Транспортный рефрижератор: GDP ЕАЭС + требования Кыргызской Республики" },
                   { id: "thermal-container", label: "Термоконтейнер", icon: "📦", desc: "Пассивный изотермический контейнер с термоэлементами" },
@@ -475,7 +475,7 @@ export default function ProtocolsIndex() {
           <AlertDialogHeader>
             <AlertDialogTitle>Удалить протокол?</AlertDialogTitle>
             <AlertDialogDescription>
-              Это действие нельзя отменить. Все данные IQ / OQ / PV будут удалены.
+              Это действие нельзя отменить. Все данные IQ / OQ / PQ/PV будут удалены.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

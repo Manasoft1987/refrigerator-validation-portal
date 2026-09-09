@@ -448,13 +448,13 @@ const WAREHOUSE_STAGE_TEMPLATES_EN = {
     description:
       "During Operational Qualification (OQ), equipment operation, controls, indication, alarms, air distribution and the ability to maintain the specified temperature regime are verified.",
     criteria:
-      "All OQ checklist items shall be answered “Yes” or “N/A”. If any item is answered “No”, the stage is considered failed and progression to PV is blocked until correction.",
+      "All OQ checklist items shall be answered “Yes” or “N/A”. If any item is answered “No”, the stage is considered failed and progression to PQ/PV is blocked until correction.",
   },
   pv: {
     purpose:
       "To confirm that the storage room / storage area consistently maintains the specified temperature regime throughout the working volume during the study period, including hot and cold points.",
     description:
-      "During Performance Qualification / Validation (PV), temperature mapping is performed using verified data loggers placed across the storage area volume. Temperature is recorded continuously during normal operating conditions.",
+      "During Performance Qualification / Validation (PQ/PV), temperature mapping is performed using verified data loggers placed across the storage area volume. Temperature is recorded continuously during normal operating conditions.",
     criteria:
       "All internal loggers shall remain within the specified temperature range throughout the study period. MKT for each internal logger shall also remain within the specified range. Minimum, maximum, average temperature and MKT shall be calculated for each logger, with tabular data and graphical visualization included in the report.",
   },
@@ -1395,7 +1395,7 @@ export const appRouter = router({
         await assertCanEditProtocol(ctx.user.id, input.protocolId);
         const trialKey = input.trialKey ?? "default";
         const session = await getPVSession(input.protocolId, trialKey);
-        if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "PV session missing" });
+        if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "PQ/PV session missing" });
         const m = input.dataUrl.match(/^data:image\/(png|jpeg|jpg);base64,(.+)$/);
         const base64 = m ? m[2] : input.dataUrl;
         const ext = m && (m[1] === "jpeg" || m[1] === "jpg") ? "jpg" : "png";
@@ -1467,7 +1467,7 @@ export const appRouter = router({
         await assertCanEditProtocol(ctx.user.id, input.protocolId);
         const trialKey = input.trialKey ?? "default";
         const session = await getPVSession(input.protocolId, trialKey);
-        if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "PV session missing" });
+        if (!session) throw new TRPCError({ code: "NOT_FOUND", message: "PQ/PV session missing" });
         const buf = Buffer.from(input.base64, "base64");
         const series = parseLoggerBuffer(buf, input.fileName);
         if (series.ts.length === 0) {

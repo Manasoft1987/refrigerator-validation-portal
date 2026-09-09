@@ -37,7 +37,7 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
   general_info_done: { label: "Общие сведения", cls: "bg-sky-50 text-sky-700" },
   iq_done: { label: "IQ пройден", cls: "bg-indigo-50 text-indigo-700" },
   oq_done: { label: "OQ пройден", cls: "bg-violet-50 text-violet-700" },
-  pv_done: { label: "PV выполнен", cls: "bg-amber-50 text-amber-700" },
+  pv_done: { label: "PQ/PV выполнен", cls: "bg-amber-50 text-amber-700" },
   completed: { label: "Завершён", cls: "bg-emerald-50 text-emerald-700" },
 };
 
@@ -340,7 +340,7 @@ export default function OrganizationDetail() {
               </div>
               <h3 className="mt-3 font-semibold tracking-tight">Пока нет протоколов</h3>
               <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
-                Создайте первый протокол — он пройдёт 5 шагов: общие сведения, IQ, OQ, PV и
+                Создайте первый протокол — он пройдёт 5 шагов: общие сведения, IQ, OQ, PQ/PV и
                 финальный отчёт.
               </p>
             </div>
@@ -448,7 +448,7 @@ export default function OrganizationDetail() {
           <AlertDialogHeader>
             <AlertDialogTitle>Удалить протокол?</AlertDialogTitle>
             <AlertDialogDescription>
-              Это действие нельзя отменить. Все данные IQ / OQ / PV будут удалены.
+              Это действие нельзя отменить. Все данные IQ / OQ / PQ/PV будут удалены.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

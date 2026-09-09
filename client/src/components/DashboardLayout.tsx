@@ -91,7 +91,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
           <div className="z-10 space-y-4 max-w-md">
             <h2 className="text-4xl font-bold tracking-tight leading-tight">
-              Протоколы IQ · OQ · PV
+              Протоколы IQ · OQ · PQ/PV
               <span className="block text-white/70">за одну сессию</span>
             </h2>
             <p className="text-white/70 leading-relaxed">

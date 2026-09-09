@@ -235,7 +235,7 @@ export default function EquipmentTypeSelector() {
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-primary mt-1">✓</span>
-                  <span>Схема, PV и приложения как у авторефрижератора</span>
+                  <span>Схема, PQ/PV и приложения как у авторефрижератора</span>
                 </li>
               </ul>
               <Button className="w-full mt-6" size="lg" variant="outline">
@@ -319,7 +319,7 @@ export default function EquipmentTypeSelector() {
                 </li>
                 <li className="flex items-start gap-2">
                   <span className="text-primary mt-1">✓</span>
-                  <span>Схема помещения, PV и приложения как у объекта хранения</span>
+                  <span>Схема помещения, PQ/PV и приложения как у объекта хранения</span>
                 </li>
               </ul>
               <Button className="w-full mt-6" size="lg" variant="outline">

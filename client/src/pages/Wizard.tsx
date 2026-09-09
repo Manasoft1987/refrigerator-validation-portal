@@ -50,7 +50,7 @@ const STANDARD_STEPS = [
   { id: 1, key: "general", label: "Общие сведения", icon: FileText },
   { id: 2, key: "iq", label: "IQ · Квалификация монтажа", icon: ClipboardCheck },
   { id: 3, key: "oq", label: "OQ · Квалификация функционирования", icon: ClipboardCheck },
-  { id: 4, key: "pv", label: "PV · Эксплуатационная квалификация", icon: Thermometer },
+  { id: 4, key: "pv", label: "PQ/PV · Эксплуатационная квалификация", icon: Thermometer },
   { id: 5, key: "excursion", label: "Испытания на отклонение", icon: Thermometer },
   { id: 6, key: "final", label: "Итоговый отчёт", icon: Download },
 ] as const;
@@ -109,7 +109,7 @@ export default function Wizard() {
     { id: 1, key: "general", label: "Общие сведения", icon: FileText },
     { id: 2, key: "iq", label: "IQ · Квалификация монтажа", icon: ClipboardCheck },
     { id: 3, key: "oq", label: "OQ · Квалификация функционирования", icon: ClipboardCheck },
-    { id: 4, key: "pv", label: "PV · Эксплуатационная квалификация", icon: Thermometer },
+    { id: 4, key: "pv", label: "PQ/PV · Эксплуатационная квалификация", icon: Thermometer },
     { id: 5, key: "excursion", label: "Испытания на отклонение", icon: Thermometer },
     { id: 6, key: "attachments", label: "Приложения", icon: Paperclip },
     { id: 7, key: "final", label: "Итоговый отчёт", icon: Download },
@@ -342,7 +342,7 @@ export default function Wizard() {
             <p className="text-sm text-muted-foreground mt-1">
               {isComputerizedSystem
                 ? "Заполните 6 этапов — портал подготовит GAMP-отчёт и решение о выпуске системы."
-                : `Заполните ${totalSteps} этапов — портал автоматически рассчитает статистику PV и подготовит PDF.`}
+                : `Заполните ${totalSteps} этапов — портал автоматически рассчитает статистику PQ/PV и подготовит PDF.`}
             </p>
           </div>
           <div className="space-y-1 w-full max-w-xs">
