@@ -7073,8 +7073,19 @@ function warehouseStudyLabel(input: ReportInput): string {
 }
 
 function warehouseSeasonLabel(input: ReportInput): string {
-  const key = input.generalInfo?.whSeason || input.generalInfo?.season || "";
-  return WAREHOUSE_SEASON_LABEL[key] || SEASON_LABEL_RU[key] || "—";
+  const ruSeasonLabels: Record<string, string> = {
+    warm: "Тёплый период",
+    cold: "Холодный период",
+    interseasonal: "Межсезонье",
+    none: "Не применимо",
+  };
+  const season = String(input.generalInfo?.season ?? "").trim();
+  if (season) return ruSeasonLabels[season] || SEASON_LABEL_RU[season] || WAREHOUSE_SEASON_LABEL[season] || season;
+
+  const legacySeason = String(input.generalInfo?.whSeason ?? "").trim();
+  if (!legacySeason) return "—";
+  if (legacySeason === "n_a" && input.generalInfo?.whExternalEnv) return "—";
+  return WAREHOUSE_SEASON_LABEL[legacySeason] || SEASON_LABEL_RU[legacySeason] || legacySeason;
 }
 
 function warehouseBasisLabel(input: ReportInput): string {

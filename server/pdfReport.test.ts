@@ -391,12 +391,14 @@ describe("warehouse methodology logger table", () => {
           purpose: "Хранение лекарственных средств",
           validationDate: "2024-07-15",
           basis: "primary",
+          season: "warm",
           whLengthM: 4.2,
           whWidthM: 3.1,
           whHeightM: 2.5,
           whHumidityControl: 1,
           whHumidityMax: 65,
           whExternalEnv: 1,
+          whSeason: "n_a",
           fillStatus: "loaded",
           loadPercent: 70,
         },
@@ -461,6 +463,7 @@ describe("warehouse methodology logger table", () => {
     const text = capturedText.join("\n");
     expect(text).toContain("6.3. Сведения об объекте исследования");
     expect(text).toContain("Геометрические размеры: 4.20 x 3.10 x 2.50 м");
+    expect(text).toContain("сезон исследования: Тёплый период");
     expect(text).toContain("6.5. Сведения об определении точек размещения");
     expect(text).toContain("Фактически на схеме размещено: внутренних регистраторов 1, внешних регистраторов 1");
     expect(text).toContain("6.10. Сведения о загрузке и объединении данных");
