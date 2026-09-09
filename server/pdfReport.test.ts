@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import PDFDocument from "pdfkit";
 import {
   addHeadersAndFooters,
+  checklistItemsForReport,
   filterProtocolSensorsForReport,
   generateProtocolPdf,
   getSensorCalibrationStatusAtProtocolDate,
@@ -90,6 +91,46 @@ describe("sensor verification status in PDF", () => {
     ).toBe("valid");
     expect(getSensorCalibrationStatusAtProtocolDate(null, protocolDate)).toBeNull();
     expect(getSensorCalibrationStatusAtProtocolDate("not-a-date", protocolDate)).toBeNull();
+  });
+});
+
+describe("warehouse checklist normalization for PDF", () => {
+  it("replaces legacy stored OQ rows with the reviewed 8-question warehouse checklist", () => {
+    const legacyOqItems = [
+      "Запускается ли всё оборудование зоны (холодильные установки, кондиционеры, обогреватели) в штатном режиме?",
+      "Корректно ли работают пульты управления и интерфейсы оборудования зоны?",
+      "Реагирует ли оборудование на изменение уставки температуры в заданных пределах?",
+      "Корректно ли отображается температура (и влажность) на индикаторах оборудования и системе мониторинга?",
+      "Срабатывает ли сигнализация (звуковая/визуальная/уведомления) при отклонении температуры за установленные границы?",
+      "Обеспечивается ли равномерное воздухораспределение по объёму зоны (вентиляторы, воздуховоды работают штатно)?",
+      "Удерживается ли заданный температурный режим в пустой зоне в течение тестового периода?",
+      "Готово ли резервное оборудование к включению при выходе из строя основного (если предусмотрено)?",
+      "Корректно ли логируются и архивируются данные системы мониторинга температуры (и влажности)?",
+      "Отсутствуют ли посторонние шумы/вибрации, свидетельствующие о неисправностях оборудования зоны?",
+      "Корректно ли работает индикация на дисплее (температура, режимы)?",
+      "Оборудование включается и издает характерный звук работы вентилятора, компрессора?",
+      "Корректно ли работает индикация на дисплее (температура, режимы)?",
+      "Реагируют ли оборудование на изменение уставки температуры?",
+      "Отсутствуют ли посторонние шумы / вибрации, указывающие на неисправность?",
+    ].map((questionText, questionIndex) => ({
+      questionIndex,
+      questionText,
+      answer: "yes" as const,
+      comment: null,
+    }));
+
+    const normalized = checklistItemsForReport({
+      generalInfo: { equipmentType: "warehouse" },
+      iq: { items: [] },
+      oq: { items: legacyOqItems },
+    } as any, "oq");
+
+    expect(normalized).toHaveLength(8);
+    expect(normalized.map(item => item.questionText)).not.toContain(
+      "Запускается ли всё оборудование зоны (холодильные установки, кондиционеры, обогреватели) в штатном режиме?",
+    );
+    expect(normalized[0]?.questionText).toBe("Запускается ли оборудование в штатном режиме?");
+    expect(normalized[7]?.questionText).toBe("Оборудование включается и издает характерный звук работы вентилятора, компрессора?");
   });
 });
 

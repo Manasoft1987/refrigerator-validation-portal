@@ -53,7 +53,7 @@ type ChecklistItem = {
   updatedAt?: string | Date | null;
 };
 
-function checklistItemsForReport(input: ReportInput, stage: "iq" | "oq"): ChecklistItem[] {
+export function checklistItemsForReport(input: ReportInput, stage: "iq" | "oq"): ChecklistItem[] {
   const sourceItems = stage === "iq" ? input.iq.items : input.oq.items;
   if (!isWarehouseLike(getReportEquipmentType(input)) || isEnglishWarehouse(input)) {
     return sourceItems.filter(item => String(item.questionText ?? "").trim().length > 0);
@@ -1370,11 +1370,11 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     doc.addPage();
     drawSectionTitle(doc, "2. План IQ — Квалификация монтажа");
     drawStageBlocks(doc, input.iq, input);
-    drawChecklistPlan(doc, input.iq.items);
+    drawChecklistPlan(doc, checklistItemsForReport(input, "iq"), input);
     doc.addPage();
     drawSectionTitle(doc, "3. План OQ — Квалификация функционирования");
     drawStageBlocks(doc, input.oq, input);
-    drawChecklistPlan(doc, input.oq.items);
+    drawChecklistPlan(doc, checklistItemsForReport(input, "oq"), input);
     doc.addPage();
     drawSectionTitle(doc, "4. План PV — Эксплуатационная квалификация");
     drawStageBlocks(doc, input.pv, input);
