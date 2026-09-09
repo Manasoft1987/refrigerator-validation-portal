@@ -3291,14 +3291,14 @@ function drawStagePVVerdict(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], inpu
           `Analysis of ${internalCount} internal logger(s) demonstrates stable temperature distribution throughout the storage room / storage area volume. ` +
           (hotSensor ? `The maximum temperature was recorded by ${hotLabel} (hot point). ` : "") +
           (coldSensor ? `The minimum temperature was recorded by ${coldLabel} (cold point). ` : "") +
-          "The HVAC/heating system operates normally and provides appropriate storage conditions for medicinal products in accordance with GDP/GPP requirements."
+          "The HVAC/heating system operates normally and provides appropriate storage conditions for medicinal products."
         : "Все критерии приемлемости выполнены. Эксплуатационная квалификация / валидация (PQ/PV) пройдена успешно. " +
           `Анализ данных ${internalCount} внутренних датчиков показал стабильное распределение температуры ` +
           "по всему объёму помещения (зоны) хранения. " +
           (hotSensor ? `Максимальная температура зафиксирована ${hotLabel} (горячая точка). ` : "") +
           (coldSensor ? `Минимальная температура зафиксирована ${coldLabel} (холодная точка). ` : "") +
           "Система кондиционирования/отопления функционирует в штатном режиме, обеспечивая равномерное распределение " +
-          "температуры и надлежащие условия для хранения лекарственных средств в соответствии с требованиями GDP/GPP.";
+          "температуры и надлежащие условия для хранения лекарственных средств.";
     } else {
       text =
         "Все критерии приемлемости выполнены. Эксплуатационная квалификация / валидация (PQ/PV) пройдена успешно. " +
@@ -3569,11 +3569,12 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
       ? (en ? " Temperature excursion testing was performed and documented in the relevant section of this report." : ` Испытания на температурное отклонение проведены и зафиксированы в разделе 10 настоящего отчёта.`)
       : "";
     const suitabilityWord = getReportEquipmentType(input) === "chamber" ? "пригодной" : "пригодным";
+    const isWarehouseConclusion = isWarehouseLike(getReportEquipmentType(input));
     text = en
-      ? `Based on IQ, OQ and PQ/PV results, the commission recognizes the storage room / storage area as suitable for storage of medicinal products within the temperature regime ${pvTemperatureModeLabel(input.pv, input)} in accordance with GDP / GPP requirements. The HVAC/heating system provides stable temperature distribution throughout the room volume. Validation has been completed with a positive conclusion.${excNote}`
+      ? `Based on IQ, OQ and PQ/PV results, the commission recognizes the storage room / storage area as suitable for storage of medicinal products within the temperature regime ${pvTemperatureModeLabel(input.pv, input)}${isWarehouseConclusion ? "." : " in accordance with GDP / GPP requirements."} The HVAC/heating system provides stable temperature distribution throughout the room volume. Validation has been completed with a positive conclusion.${excNote}`
       : "На основании результатов IQ, OQ и PQ/PV комиссия признаёт " + (isWarehouseLike(getReportEquipmentType(input)) ? "помещение (зону) хранения" : reeferConclusionObject(input)) + " " +
         `${suitabilityWord} для хранения лекарственных средств ` +
-        `в температурном режиме ${pvTemperatureModeLabel(input.pv, input)} в соответствии с требованиями GDP / GPP. ` +
+        `в температурном режиме ${pvTemperatureModeLabel(input.pv, input)}${isWarehouseConclusion ? ". " : " в соответствии с требованиями GDP / GPP. "}` +
         (isWarehouseLike(getReportEquipmentType(input))
           ? `Система кондиционирования/отопления обеспечивает стабильное распределение температуры по всему объёму помещения. ` 
           : "") +
