@@ -212,7 +212,7 @@ export type ReportInput = {
     basis: string | null;
     season?: string | null;
     qualificationType?: string | null;
-    commissionMembers?: Array<{ name: string; role: string }> | null;
+    commissionMembers?: Array<{ name: string; role: string; company?: string | null }> | null;
     // Warehouse / storage zone (EEC Rec. №8)
     whLengthM?: string | number | null;
     whWidthM?: string | number | null;
@@ -2452,6 +2452,7 @@ function drawSimpleTable(
     });
     doc.y = y + rowH;
   });
+  doc.x = PAGE_MARGIN;
   doc.moveDown(0.7);
 }
 
@@ -7036,6 +7037,98 @@ function drawWarehouseLoggerSelectionTable(doc: PDFKit.PDFDocument, input: Repor
   );
 }
 
+type WarehousePersonnelEntry = {
+  name?: string | null;
+  role?: string | null;
+  company?: string | null;
+};
+
+function nonEmptyText(value: string | null | undefined): string {
+  return String(value ?? "").trim();
+}
+
+function buildWarehousePersonnelEntries(input: ReportInput): WarehousePersonnelEntry[] {
+  const source =
+    (input.generalInfo?.commissionMembers && input.generalInfo.commissionMembers.length > 0
+      ? input.generalInfo.commissionMembers
+      : null) ??
+    (input.signatoriesPart1 && input.signatoriesPart1.length > 0
+      ? input.signatoriesPart1
+      : null) ??
+    (input.signatoriesPart2 && input.signatoriesPart2.length > 0
+      ? input.signatoriesPart2
+      : null) ??
+    [];
+
+  const entries: WarehousePersonnelEntry[] = [];
+  const seen = new Set<string>();
+  const add = (entry: WarehousePersonnelEntry) => {
+    const name = nonEmptyText(entry.name);
+    const role = nonEmptyText(entry.role);
+    const company = nonEmptyText(entry.company);
+    if (!name && !role && !company) return;
+    const key = `${name.toLowerCase()}|${role.toLowerCase()}|${company.toLowerCase()}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    entries.push({ name, role, company });
+  };
+
+  source.forEach(add);
+  if (entries.length === 0 && nonEmptyText(input.org.responsible)) {
+    add({
+      name: input.org.responsible,
+      role: enRu(input, "Responsible person", "Ответственное лицо"),
+      company: input.org.name,
+    });
+  }
+
+  return entries;
+}
+
+function drawWarehousePersonnelTable(doc: PDFKit.PDFDocument, input: ReportInput): void {
+  const en = isEnglishWarehouse(input);
+  const personnel = buildWarehousePersonnelEntries(input);
+
+  if (personnel.length === 0) {
+    renderTextBlock(
+      doc,
+      en
+        ? "Study personnel are specified in the protocol general information and signature sections."
+        : "Сведения об исполнителях указываются в общих сведениях протокола и разделах подписей.",
+    );
+    return;
+  }
+
+  doc.font("body").fontSize(10).fillColor(ACCENT).text(
+    en
+      ? "The temperature mapping study is performed by the following personnel:"
+      : "Температурное картирование выполняется следующими исполнителями:",
+    { align: "justify" },
+  );
+  doc.moveDown(0.5);
+
+  drawSimpleTable(
+    doc,
+    en ? ["No.", "Role / function", "Full name", "Organization"] : ["№", "Роль / функция", "ФИО", "Организация"],
+    personnel.map((person, index) => [
+      String(index + 1),
+      person.role || "—",
+      person.name || "—",
+      person.company || input.org.name || "—",
+    ]),
+    [0.06, 0.30, 0.34, 0.30],
+    { fontSize: 9, headerFontSize: 9, padding: 6 },
+  );
+
+  doc.font("body").fontSize(10).fillColor(ACCENT).text(
+    en
+      ? "The responsible personnel have the required preparation to place and program data loggers, retrieve data and perform the temperature mapping assessment."
+      : "Ответственные лица обладают необходимой подготовкой для размещения и программирования регистраторов данных, считывания данных и выполнения оценки результатов температурного картирования.",
+    { align: "left" },
+  );
+  doc.moveDown(0.8);
+}
+
 function normalizeWarehouseSectionText(key: string, text: string, en: boolean): string {
   let out = text;
   if (!en) {
@@ -7199,6 +7292,8 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
     drawSubTitle(doc, title);
     if (key === "6.1") {
       drawWarehouseLoggerSelectionTable(doc, input);
+    } else if (key === "6.2") {
+      drawWarehousePersonnelTable(doc, input);
     } else {
       renderTextBlock(doc, sec(key));
     }

@@ -286,6 +286,85 @@ describe("warehouse methodology logger table", () => {
     expect(capturedText).toContain("±0.15 °C");
     expect(capturedText).toContain("Годна");
   });
+
+  it("renders study personnel from the portal commission in section 6.2", async () => {
+    const capturedText: string[] = [];
+    const originalText = PDFDocument.prototype.text;
+    const textSpy = vi.spyOn(PDFDocument.prototype, "text").mockImplementation(function (
+      this: PDFKit.PDFDocument,
+      ...args: Parameters<PDFKit.PDFDocument["text"]>
+    ) {
+      if (typeof args[0] === "string") capturedText.push(args[0]);
+      return originalText.apply(this, args);
+    });
+
+    try {
+      const now = Date.UTC(2024, 6, 15, 9, 0, 0);
+      const series = mkSeries(now, 168, 20);
+      await generateProtocolPdf({
+        org: BASE_ORG,
+        protocol: { number: "VAL-STR-TEST", createdAt: new Date(now), equipmentType: "warehouse" },
+        generalInfo: {
+          ...BASE_GI,
+          equipmentType: "warehouse",
+          tempMode: "15-25",
+          location: "г. Алматы, помещение хранения аптеки",
+          purpose: "Хранение лекарственных средств",
+          validationDate: "2024-07-15",
+          basis: "primary",
+          commissionMembers: [
+            { role: "Специалист по валидации", name: "Сафуллин А.В.", company: "ТОО «GxP Training»" },
+            { role: "Ответственное лицо за качество", name: "Бабаева А.Б.", company: "ИП \"РИСЛИНГ Н.А.\"" },
+          ],
+        },
+        iq: { purpose: "", description: "", criteria: "", items: [], verdict: "pass" },
+        oq: { purpose: "", description: "", criteria: "", items: [], verdict: "pass" },
+        pv: {
+          purpose: "",
+          description: "",
+          criteria: "",
+          tempMode: "15-25",
+          rangeMin: 15,
+          rangeMax: 25,
+          startAt: now,
+          endAt: now + 168 * 3600_000,
+          minDurationHours: 168,
+          minSensorCount: 1,
+          loggers: [
+            {
+              id: 1,
+              label: "230804STS0019282",
+              customName: null,
+              role: "internal",
+              pointCount: series.temp.length,
+              min: 19.2,
+              max: 20.4,
+              avg: 19.8,
+              std: 0.1,
+              mkt: 19.9,
+              series,
+              deviations: [],
+            },
+          ],
+          verdict: "pass",
+          failureReasons: [],
+          hotIdx: 0,
+          coldIdx: 0,
+          extIndices: [],
+        },
+      } as any);
+    } finally {
+      textSpy.mockRestore();
+    }
+
+    expect(capturedText).toContain("6.2. Сведения об исполнителях");
+    expect(capturedText).toContain("Специалист по валидации");
+    expect(capturedText).toContain("Сафуллин А.В.");
+    expect(capturedText).toContain("ТОО «GxP Training»");
+    expect(capturedText).toContain("Ответственное лицо за качество");
+    expect(capturedText).toContain("Бабаева А.Б.");
+    expect(capturedText).toContain("ИП \"РИСЛИНГ Н.А.\"");
+  });
 });
 
 describe("generateProtocolPdf", () => {
