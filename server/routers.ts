@@ -16,6 +16,7 @@ import {
   AUTO_REFRIGERATOR_KG_STAGE_TEMPLATES,
   KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE,
   KYRGYZSTAN_WAREHOUSE_EQUIPMENT_TYPE,
+  WAREHOUSE_EXPERT_EQUIPMENT_TYPE,
   CHAMBER_STAGE_TEMPLATES,
   THERMAL_CONTAINER_STAGE_TEMPLATES,
   WAREHOUSE_STAGE_TEMPLATES,
@@ -528,6 +529,12 @@ async function templateQuestionSourceForReport(stage: "iq" | "oq", equipmentType
   const typedTemplates = await listQuestionTemplates(stage, equipmentType);
   if (typedTemplates.length > 0) {
     return { questions: typedTemplates.map(template => template.text), fromDbTemplate: true };
+  }
+  if (equipmentType === WAREHOUSE_EXPERT_EQUIPMENT_TYPE) {
+    const pharmacyTemplates = await listQuestionTemplates(stage, "warehouse");
+    if (pharmacyTemplates.length > 0) {
+      return { questions: pharmacyTemplates.map(template => template.text), fromDbTemplate: true };
+    }
   }
 
   if (

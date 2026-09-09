@@ -36,6 +36,7 @@ import {
   isWarehouseLike,
   normalizeWarehouseChecklistQuestion,
   normalizeSensorAccuracyC,
+  WAREHOUSE_EXPERT_EQUIPMENT_TYPE,
   WAREHOUSE_MAPPING_METHOD_NOTE,
   PHARMACY_STORAGE_MAPPING_METHOD_NOTE,
 } from "../shared/validation";
@@ -465,6 +466,14 @@ function isEnglishWarehouse(input?: ReportInput): boolean {
   return isWarehouseLike(getReportEquipmentType(input)) && input?.generalInfo?.reportLanguage === "en";
 }
 
+function isPharmacyStorageType(type: string | null | undefined): boolean {
+  return type === "warehouse" || type === WAREHOUSE_EXPERT_EQUIPMENT_TYPE;
+}
+
+function isPharmacyStorageReport(input?: ReportInput): boolean {
+  return isPharmacyStorageType(getReportEquipmentType(input));
+}
+
 function hasCyrillic(text: string | null | undefined): boolean {
   return /[А-Яа-яЁё]/.test(text || "");
 }
@@ -599,9 +608,9 @@ function getEquipmentName(input: ReportInput): string {
   }
   // For storage protocols, use the selected pharmacy/warehouse object name instead of equipment terminology.
   if (isWarehouseLike(type)) {
-    if (isEnglishWarehouse(input)) return type === "warehouse" ? "pharmacy storage room / area" : "storage room / storage area";
+    if (isEnglishWarehouse(input)) return isPharmacyStorageType(type) ? "pharmacy storage room / area" : "storage room / storage area";
     if (isKyrgyzstanWarehouse(type)) return "помещение (зона) хранения Кыргызстана";
-    return type === "warehouse" ? "помещение (зона) хранения аптеки" : "помещение (зона) хранения";
+    return isPharmacyStorageType(type) ? "помещение (зона) хранения аптеки" : "помещение (зона) хранения";
   }
   return EQUIPMENT_LABEL[type || ""] || "Оборудование";
 }
@@ -631,7 +640,7 @@ function getEquipmentNameWithCase(input: ReportInput, gramCase: "nominative" | "
         default: return "Помещение (зона) хранения Кыргызстана";
       }
     }
-    if (type === "warehouse") {
+    if (isPharmacyStorageType(type)) {
       switch (gramCase) {
         case "genitive": return "помещения (зоны) хранения аптеки";
         case "accusative": return "помещение (зону) хранения аптеки";
@@ -1975,7 +1984,7 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
     align: "center",
   }) + (isWarehouseDocument ? 14 : 12);
   const equipmentTypeLabel = en && isWarehouseLike(eqType)
-    ? (eqType === "warehouse" ? "Pharmacy Storage Room / Area" : "Storage Room / Storage Area")
+    ? (isPharmacyStorageType(eqType) ? "Pharmacy Storage Room / Area" : "Storage Room / Storage Area")
     : eqType === "chamber"
     ? "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430"
     : eqType === "thermal-container"
@@ -3754,8 +3763,8 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
     const suitabilityWord = getReportEquipmentType(input) === "chamber" ? "пригодной" : "пригодным";
     const isWarehouseConclusion = isWarehouseLike(getReportEquipmentType(input));
     text = en
-      ? `Based on IQ, OQ and PQ/PV results, the commission recognizes ${getReportEquipmentType(input) === "warehouse" ? "the pharmacy storage room / area" : "the storage room / storage area"} as suitable for storage of medicinal products within the temperature regime ${pvTemperatureModeLabel(input.pv, input)}${isWarehouseConclusion ? "." : " in accordance with GDP / GPP requirements."} The HVAC/heating system provides stable temperature distribution throughout the room volume. Validation has been completed with a positive conclusion.${excNote}`
-      : "На основании результатов IQ, OQ и PQ/PV комиссия признаёт " + (getReportEquipmentType(input) === "warehouse" ? "помещение (зону) хранения аптеки" : isWarehouseLike(getReportEquipmentType(input)) ? "помещение (зону) хранения" : reeferConclusionObject(input)) + " " +
+      ? `Based on IQ, OQ and PQ/PV results, the commission recognizes ${isPharmacyStorageReport(input) ? "the pharmacy storage room / area" : "the storage room / storage area"} as suitable for storage of medicinal products within the temperature regime ${pvTemperatureModeLabel(input.pv, input)}${isWarehouseConclusion ? "." : " in accordance with GDP / GPP requirements."} The HVAC/heating system provides stable temperature distribution throughout the room volume. Validation has been completed with a positive conclusion.${excNote}`
+      : "На основании результатов IQ, OQ и PQ/PV комиссия признаёт " + (isPharmacyStorageReport(input) ? "помещение (зону) хранения аптеки" : isWarehouseLike(getReportEquipmentType(input)) ? "помещение (зону) хранения" : reeferConclusionObject(input)) + " " +
         `${suitabilityWord} для хранения лекарственных средств ` +
         `в температурном режиме ${pvTemperatureModeLabel(input.pv, input)}${isWarehouseConclusion ? ". " : " в соответствии с требованиями GDP / GPP. "}` +
         (isWarehouseLike(getReportEquipmentType(input))
@@ -6328,7 +6337,7 @@ function drawWarehouseAnnex2(doc: PDFKit.PDFDocument, input: ReportInput) {
   drawSectionTitle(doc, "Приложение №2. Сводная таблица показаний регистраторов");
   doc.fillColor(MUTED).font("body").fontSize(9)
     .text(
-      `Сводные результаты температурного картирования ${getReportEquipmentType(input) === "warehouse" ? "помещения (зоны) хранения аптеки" : "зоны хранения"} за период ` +
+      `Сводные результаты температурного картирования ${isPharmacyStorageReport(input) ? "помещения (зоны) хранения аптеки" : "зоны хранения"} за период ` +
       `${formatDateRange(input.pv.startAt, input.pv.endAt)}; режим ` +
       `${input.pv.rangeMin.toFixed(1)} … ${input.pv.rangeMax.toFixed(1)} °C.`,
       { align: "justify" },
@@ -6824,7 +6833,7 @@ function isDefaultPharmacySection(key: string, text: string): boolean {
 }
 
 function warehouseDefaultSectionText(key: string, input: ReportInput, en: boolean): string {
-  const pharmacy = getReportEquipmentType(input) === "warehouse";
+  const pharmacy = isPharmacyStorageReport(input);
   if (isKyrgyzstanWarehouse(getReportEquipmentType(input))) {
     if (en && key === "2.2.1") {
       return `This temperature mapping study is performed with consideration of:
@@ -6863,7 +6872,7 @@ function drawWarehouseEquipmentList(doc: PDFKit.PDFDocument, input: ReportInput,
   const eqList = input.warehouseEquipment ?? [];
   if (eqList.length === 0) return;
 
-    const pharmacy = getReportEquipmentType(input) === "warehouse";
+    const pharmacy = isPharmacyStorageReport(input);
     drawSubTitle(doc, en
       ? `${prefix} Equipment Installed in the ${pharmacy ? "Pharmacy Storage Room / Area" : "Storage Area"}`
       : `${prefix} Перечень оборудования ${pharmacy ? "помещения (зоны) хранения аптеки" : "зоны хранения"}`);
@@ -6954,21 +6963,23 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
   const en = isEnglishWarehouse(input);
   const sec = (key: string): string => {
     const custom = input.warehouseSections?.[key];
-    if (getReportEquipmentType(input) === "warehouse" && (key === "2.1" || key === "2.2.2")) {
-      const current = custom?.trim() || "";
+    if (isPharmacyStorageReport(input) && (key === "2.1" || key === "2.2.2")) {
       const autoText = pharmacyAutoSectionText(key, input, en);
-      if (autoText && isDefaultPharmacySection(key, current)) return autoText;
+      if (autoText) return autoText;
     }
-    if (getReportEquipmentType(input) === "warehouse" && custom !== undefined && isDefaultPharmacySection(key, custom)) {
+    if (isPharmacyStorageReport(input) && ["2.2.1", "3", "4"].includes(key)) {
+      return normalizePharmacySectionText(warehouseDefaultSectionText(key, input, en), en);
+    }
+    if (isPharmacyStorageReport(input) && custom !== undefined && isDefaultPharmacySection(key, custom)) {
       return normalizePharmacySectionText(warehouseDefaultSectionText(key, input, en), en);
     }
     if (custom !== undefined && custom.trim() !== "" && (!en || !hasCyrillic(custom))) {
       const normalized = normalizeWarehouseSectionText(key, custom, en);
-      return getReportEquipmentType(input) === "warehouse" ? normalizePharmacySectionText(normalized, en) : normalized;
+      return isPharmacyStorageReport(input) ? normalizePharmacySectionText(normalized, en) : normalized;
     }
     const fallback = warehouseDefaultSectionText(key, input, en);
     const normalized = normalizeWarehouseSectionText(key, fallback, en);
-    return getReportEquipmentType(input) === "warehouse" ? normalizePharmacySectionText(normalized, en) : normalized;
+    return isPharmacyStorageReport(input) ? normalizePharmacySectionText(normalized, en) : normalized;
   };
 
   // ── Section 1: Сокращения и определения ─────────────────────────────────
@@ -7002,8 +7013,8 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
   renderTextBlock(doc, sec("2.2.1"));
   drawSubTitle2(doc, en ? "Methodological Approach" : "Принятый методологический подход");
   renderTextBlock(doc, en
-    ? (getReportEquipmentType(input) === "warehouse" ? PHARMACY_STORAGE_MAPPING_METHOD_NOTE_EN : WAREHOUSE_MAPPING_METHOD_NOTE_EN)
-    : (getReportEquipmentType(input) === "warehouse" ? PHARMACY_STORAGE_MAPPING_METHOD_NOTE : WAREHOUSE_MAPPING_METHOD_NOTE));
+    ? (isPharmacyStorageReport(input) ? PHARMACY_STORAGE_MAPPING_METHOD_NOTE_EN : WAREHOUSE_MAPPING_METHOD_NOTE_EN)
+    : (isPharmacyStorageReport(input) ? PHARMACY_STORAGE_MAPPING_METHOD_NOTE : WAREHOUSE_MAPPING_METHOD_NOTE));
   drawSubTitle2(doc, en ? "2.2.2. Study-Specific Rationale" : "2.2.2. Конкретные основания для проведения исследования");
   renderTextBlock(doc, sec("2.2.2"));
 

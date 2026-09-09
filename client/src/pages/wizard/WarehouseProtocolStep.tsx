@@ -12,7 +12,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { PHARMACY_STORAGE_MAPPING_METHOD_NOTE, WAREHOUSE_MAPPING_METHOD_NOTE } from "@shared/validation";
+import {
+  PHARMACY_STORAGE_MAPPING_METHOD_NOTE,
+  WAREHOUSE_EXPERT_EQUIPMENT_TYPE,
+  WAREHOUSE_MAPPING_METHOD_NOTE,
+} from "@shared/validation";
 import {
   Accordion,
   AccordionContent,
@@ -487,6 +491,10 @@ function pharmacyAutoSectionText(key: string, generalInfo: any): string | null {
   return null;
 }
 
+function isPharmacyStorageType(type: string | null | undefined): boolean {
+  return type === "warehouse" || type === WAREHOUSE_EXPERT_EQUIPMENT_TYPE;
+}
+
 function isDefaultPharmacySection(key: string, value: string): boolean {
   const text = value.trim();
   if (key === "2.1") return !text || text.startsWith("Настоящий протокол описывает") || text.startsWith("Объект картирования:") || text.includes("[указать адрес");
@@ -505,7 +513,8 @@ export default function WarehouseProtocolStep({ protocolId, onDone, onBack }: Pr
     onSuccess: () => utils.warehouseSections.get.invalidate({ protocolId }),
   });
 
-  const defaultSections = giData?.equipmentType === "warehouse" ? DEFAULT_SECTIONS : GENERIC_DEFAULT_SECTIONS;
+  const isPharmacyStorage = isPharmacyStorageType(giData?.equipmentType);
+  const defaultSections = isPharmacyStorage ? DEFAULT_SECTIONS : GENERIC_DEFAULT_SECTIONS;
   // Local editable state — initialised from DB or defaults
   const [sections, setSections] = useState<Record<string, string>>(DEFAULT_SECTIONS);
   const [dirty, setDirty] = useState(false);
@@ -518,18 +527,18 @@ export default function WarehouseProtocolStep({ protocolId, onDone, onBack }: Pr
     const merged: Record<string, string> = { ...defaultSections };
     for (const [k, v] of Object.entries(savedSections ?? {})) {
       if (v !== undefined && v !== null) {
-        merged[k] = giData?.equipmentType === "warehouse"
+        merged[k] = isPharmacyStorage
           ? normalizePharmacySectionText(v as string)
           : v as string;
       }
     }
-    if (giData?.equipmentType === "warehouse") {
+    if (isPharmacyStorage) {
       for (const key of ["2.1", "2.2.2"]) {
         const autoText = pharmacyAutoSectionText(key, giData);
-        if (autoText && isDefaultPharmacySection(key, merged[key] || "")) merged[key] = autoText;
+        if (autoText) merged[key] = autoText;
       }
       for (const key of ["2.2.1", "3", "4"]) {
-        if (isDefaultPharmacySection(key, merged[key] || "")) merged[key] = defaultSections[key] ?? merged[key];
+        merged[key] = defaultSections[key] ?? merged[key];
       }
     }
     // Auto-fill 6.2 from commission if it still has the default placeholder text
@@ -694,7 +703,7 @@ export default function WarehouseProtocolStep({ protocolId, onDone, onBack }: Pr
         <Info />
         <AlertTitle>Методологическое основание</AlertTitle>
         <AlertDescription className="text-sky-900/80">
-          <p>{giData?.equipmentType === "warehouse" ? PHARMACY_STORAGE_MAPPING_METHOD_NOTE : WAREHOUSE_MAPPING_METHOD_NOTE}</p>
+          <p>{isPharmacyStorage ? PHARMACY_STORAGE_MAPPING_METHOD_NOTE : WAREHOUSE_MAPPING_METHOD_NOTE}</p>
         </AlertDescription>
       </Alert>
 
