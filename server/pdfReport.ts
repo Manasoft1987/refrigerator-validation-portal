@@ -1207,7 +1207,7 @@ function drawWarehouseTemperatureOverlay(
   doc: PDFKit.PDFDocument,
   plan: WarehouseMarkerBox,
   points: Array<{ x: number; y: number; avg: number }>,
-  opacity = 0.64,
+  opacity = 0.9,
 ): { lo: number; hi: number } | null {
   const finitePoints = points.filter(point =>
     Number.isFinite(point.x) &&
@@ -1224,9 +1224,9 @@ function drawWarehouseTemperatureOverlay(
   doc.save();
   doc.rect(plan.x, plan.y, plan.w, plan.h).clip();
 
-  // A very light neutral wash keeps the color map readable without making the
-  // whole rectangular canvas look like a measured hot/cold zone.
-  doc.opacity(0.08).fillColor(warehouseTemperatureColor(midTemp, range.lo, range.hi))
+  // Keep the neutral wash subtle so the warm/cold fields remain saturated and
+  // the underlying plan is still clearly visible.
+  doc.opacity(0.035).fillColor(warehouseTemperatureColor(midTemp, range.lo, range.hi))
     .rect(plan.x, plan.y, plan.w, plan.h)
     .fill();
 
@@ -1239,11 +1239,11 @@ function drawWarehouseTemperatureOverlay(
     for (let ring = rings; ring >= 1; ring -= 1) {
       const k = ring / rings;
       const radius = baseRadius * k;
-      const ringOpacity = opacity * (0.008 + Math.pow(1 - k, 1.75) * 0.075);
+      const ringOpacity = opacity * (0.012 + Math.pow(1 - k, 1.55) * 0.17);
       doc.opacity(ringOpacity).fillColor(color).circle(point.x, point.y, radius).fill();
     }
-    doc.opacity(Math.min(0.62, opacity * 0.70)).fillColor(color)
-      .circle(point.x, point.y, Math.max(5.5, baseRadius * 0.075))
+    doc.opacity(Math.min(0.96, opacity * 0.96)).fillColor(color)
+      .circle(point.x, point.y, Math.max(7, baseRadius * 0.10))
       .fill();
   }
   doc.restore();
@@ -5361,7 +5361,7 @@ function drawWarehousePlanDiagram(
     })
     : [];
   const heatmapRange = heatmapPoints.length > 0
-    ? drawWarehouseTemperatureOverlay(doc, markerPlanBox, heatmapPoints, embeddedPlanBackground ? 0.78 : 0.84)
+    ? drawWarehouseTemperatureOverlay(doc, markerPlanBox, heatmapPoints, embeddedPlanBackground ? 0.9 : 0.96)
     : null;
   if (heatmapRange) {
     doc.save();
