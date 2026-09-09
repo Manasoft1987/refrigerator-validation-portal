@@ -103,6 +103,7 @@ describe("generateProtocolPdf – warehouse / storage zone", () => {
       let imageCallCount = 0;
       let diagramTitlePage: number | undefined;
       let diagramLengthLabelPage: number | undefined;
+      let currentPageHasDiagram2Title = false;
       let operationalEventsFound = false;
       const planImageBuffer = Buffer.from("clean room plan background should be embedded");
 
@@ -114,10 +115,11 @@ describe("generateProtocolPdf – warehouse / storage zone", () => {
       };
       (PDFDocument.prototype as any).text = function (text: string, ...args: any[]) {
         const pageId = (this.page as any)?.dictionary?.id;
-        if (text.startsWith("Схема. Расстановка датчиков")) {
+        if (text.startsWith("Схема 2. Расстановка регистраторов")) {
           diagramTitlePage = pageId;
+          currentPageHasDiagram2Title = true;
         }
-        if (text === "25.0 м (длина)") {
+        if (text === "25.0 м (длина)" && currentPageHasDiagram2Title && pageId === diagramTitlePage) {
           diagramLengthLabelPage = pageId;
         }
         if (text === "Журнал эксплуатационных событий") {

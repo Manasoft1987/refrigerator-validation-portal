@@ -966,6 +966,30 @@ function buildSensorAverageMap(input: ReportInput): Map<string, string> {
   return map;
 }
 
+function buildSensorAverageNumberMap(input: ReportInput): Map<string, number> {
+  const map = new Map<string, number>();
+  const add = (label: string | null | undefined, avg: number | string | null | undefined) => {
+    const numeric = finiteNumberOrNull(avg);
+    if (numeric === null) return;
+    const normalized = normalizeSensorNumber(label);
+    if (!normalized) return;
+    map.set(normalized, numeric);
+    const shortId = normalizeSensorNumber(shortSensorId(label));
+    if (shortId) map.set(shortId, numeric);
+  };
+
+  input.pv.loggers.forEach(logger => {
+    add(logger.label, logger.avg);
+    add(logger.customName, logger.avg);
+  });
+  input.pvLoggers?.forEach(logger => {
+    add(logger.label, logger.avg);
+    add(logger.customName, logger.avg);
+  });
+
+  return map;
+}
+
 function sensorLabelWithAverage(label: string | null | undefined, avgBySensor: Map<string, string>): string {
   const shortId = shortSensorId(label) || "D";
   const direct = normalizeSensorNumber(label);
@@ -1056,6 +1080,25 @@ function buildWarehouseCriticalSensorTokens(input: ReportInput): { hot: Set<stri
   return { hot, cold };
 }
 
+function buildWarehouseSensorTokensByRole(input: ReportInput, role: string): Set<string> {
+  const tokens = new Set<string>();
+  const add = (value: string | number | null | undefined) => {
+    for (const token of sensorTokenVariants(value)) tokens.add(token);
+  };
+  for (const logger of input.pv.loggers ?? []) {
+    if (logger.role !== role) continue;
+    add(logger.label);
+    add(logger.customName);
+  }
+  for (const logger of input.pvLoggers ?? []) {
+    if (logger.role !== role) continue;
+    add(logger.label);
+    add(logger.customName);
+    add(logger.position);
+  }
+  return tokens;
+}
+
 function floorSensorPointMatchesTokens(
   sp: { id?: string; label?: string | null },
   tokens: Set<string>,
@@ -1115,6 +1158,117 @@ function drawPdfArrowHead(
 }
 
 type WarehouseMarkerBox = { x: number; y: number; w: number; h: number };
+
+function warehouseClamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
+}
+
+function warehouseTemperatureColor(value: number, lo: number, hi: number): string {
+  const t = warehouseClamp01((value - lo) / (hi - lo || 1));
+  const stops = [
+    { at: 0.00, rgb: [37, 99, 235] },
+    { at: 0.24, rgb: [6, 182, 212] },
+    { at: 0.50, rgb: [34, 197, 94] },
+    { at: 0.74, rgb: [250, 204, 21] },
+    { at: 1.00, rgb: [239, 68, 68] },
+  ];
+  let left = stops[0];
+  let right = stops[stops.length - 1];
+  for (let i = 0; i < stops.length - 1; i += 1) {
+    if (t >= stops[i].at && t <= stops[i + 1].at) {
+      left = stops[i];
+      right = stops[i + 1];
+      break;
+    }
+  }
+  const k = (t - left.at) / (right.at - left.at || 1);
+  const toHex = (n: number) => Math.round(Math.max(0, Math.min(255, n))).toString(16).padStart(2, "0");
+  const r = left.rgb[0] + (right.rgb[0] - left.rgb[0]) * k;
+  const g = left.rgb[1] + (right.rgb[1] - left.rgb[1]) * k;
+  const b = left.rgb[2] + (right.rgb[2] - left.rgb[2]) * k;
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+}
+
+function warehouseTemperatureOverlayRange(values: number[]): { lo: number; hi: number } | null {
+  const finiteValues = values.filter(value => Number.isFinite(value));
+  if (finiteValues.length === 0) return null;
+  const min = Math.min(...finiteValues);
+  const max = Math.max(...finiteValues);
+  const span = max - min;
+  const margin = Math.max(0.4, span * 0.12);
+  if (span < 0.2) {
+    return { lo: min - 0.5, hi: max + 0.5 };
+  }
+  return { lo: min - margin, hi: max + margin };
+}
+
+function drawWarehouseTemperatureOverlay(
+  doc: PDFKit.PDFDocument,
+  plan: WarehouseMarkerBox,
+  points: Array<{ x: number; y: number; avg: number }>,
+  opacity = 0.24,
+): { lo: number; hi: number } | null {
+  const range = warehouseTemperatureOverlayRange(points.map(point => point.avg));
+  if (!range) return null;
+  const cols = 44;
+  const rows = Math.max(18, Math.round(cols * (plan.h / Math.max(1, plan.w))));
+  const cellW = plan.w / cols;
+  const cellH = plan.h / rows;
+  const minD2 = Math.pow(Math.max(plan.w, plan.h) * 0.055, 2);
+
+  doc.save();
+  doc.rect(plan.x, plan.y, plan.w, plan.h).clip();
+  doc.opacity(opacity);
+  for (let row = 0; row < rows; row += 1) {
+    for (let col = 0; col < cols; col += 1) {
+      const x = plan.x + (col + 0.5) * cellW;
+      const y = plan.y + (row + 0.5) * cellH;
+      let numerator = 0;
+      let denominator = 0;
+      for (const point of points) {
+        const dx = x - point.x;
+        const dy = y - point.y;
+        const d2 = Math.max(minD2, dx * dx + dy * dy);
+        const weight = 1 / Math.pow(d2, 1.08);
+        numerator += point.avg * weight;
+        denominator += weight;
+      }
+      const interpolated = denominator > 0 ? numerator / denominator : points[0]?.avg ?? range.lo;
+      doc
+        .fillColor(warehouseTemperatureColor(interpolated, range.lo, range.hi))
+        .rect(plan.x + col * cellW, plan.y + row * cellH, cellW + 0.8, cellH + 0.8)
+        .fill();
+    }
+  }
+  doc.restore();
+  return range;
+}
+
+function drawWarehouseTemperatureLegend(
+  doc: PDFKit.PDFDocument,
+  plan: WarehouseMarkerBox,
+  range: { lo: number; hi: number },
+): void {
+  const barW = Math.min(260, plan.w * 0.5);
+  const barH = 7;
+  const x = plan.x + (plan.w - barW) / 2;
+  const y = plan.y + plan.h + 8;
+  const segments = 64;
+  doc.save();
+  for (let i = 0; i < segments; i += 1) {
+    const t = i / Math.max(1, segments - 1);
+    const value = range.lo + (range.hi - range.lo) * t;
+    doc.fillColor(warehouseTemperatureColor(value, range.lo, range.hi))
+      .rect(x + (i / segments) * barW, y, barW / segments + 0.6, barH)
+      .fill();
+  }
+  doc.strokeColor("#cbd5e1").lineWidth(0.4).rect(x, y, barW, barH).stroke();
+  doc.fillColor(MUTED).font("body").fontSize(6.5)
+    .text(`${fmtPlainNumber(range.lo, 1)} °C`, x, y + barH + 2, { width: 46, align: "left", lineBreak: false })
+    .text(`${fmtPlainNumber(range.hi, 1)} °C`, x + barW - 46, y + barH + 2, { width: 46, align: "right", lineBreak: false });
+  doc.restore();
+}
 
 function warehouseMarkerBox(cx: number, cy: number, radius: number): WarehouseMarkerBox {
   return { x: cx - radius, y: cy - radius, w: radius * 2, h: radius * 2 };
@@ -1428,9 +1582,12 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     const internalPvLoggerCount = input.pvLoggers.filter(logger => logger.role === "internal").length;
     const useRiskOrientedReeferPlacement = isAutoRefrigeratorLike(eqType) && internalPvLoggerCount > 0 && internalPvLoggerCount < 15;
     if (isWarehouseLike(eqType)) {
-      // Warehouse: single floor plan diagram only (no ISPE grid schema)
-      drawWarehousePlanDiagram(doc, input, false, isEnglishWarehouse(input) ? "Diagram. Sensor placement on the storage area plan (ID and average temperature)" : "Схема. Расстановка датчиков на плане помещения (ID и средняя температура)", {
-        showAverageLabels: true,
+      // Warehouse schema 2: actual placement before statistics/critical-point
+      // analysis. Keep it clean: logger IDs only, no averages and no hot/cold
+      // markers yet.
+      drawWarehousePlanDiagram(doc, input, false, isEnglishWarehouse(input) ? "Diagram 2. Logger placement on the storage area plan (logger IDs)" : "Схема 2. Расстановка регистраторов на плане помещения (номера логгеров)", {
+        showCriticalMarkers: false,
+        showAverageLabels: false,
         showPlacementTable: false,
       });
     } else {
@@ -1510,6 +1667,23 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   const statsCritical = calculateCriticalLoggerIndices(input.pv.loggers);
   drawStatsTable(doc, input.pv.loggers, statsCritical.hotIdx, statsCritical.coldIdx, input.pv.extIndices, input);
   drawPVCriticalInterpretationSummary(doc, input);
+  if (isWarehouseLike(getReportEquipmentType(input)) && (input.pvLoggers?.length ?? 0) > 0) {
+    doc.addPage();
+    drawWarehousePlanDiagram(
+      doc,
+      input,
+      false,
+      isEnglishWarehouse(input)
+        ? "Diagram 3. PV temperature map on the storage area plan (logger IDs and average temperature)"
+        : "Схема 3. Температурная карта PV на плане помещения (номера логгеров и средняя температура)",
+      {
+        showCriticalMarkers: true,
+        showAverageLabels: true,
+        showPlacementTable: false,
+        showTemperatureOverlay: true,
+      },
+    );
+  }
   drawWarehouseOperationalEventsSection(doc, input);
 
   if (isWarehouseEaeu(getReportEquipmentType(input))) {
@@ -4927,6 +5101,7 @@ type WarehousePlanDiagramOptions = {
   showHeightLabels?: boolean;
   showPlacementTable?: boolean;
   showCaption?: boolean;
+  showTemperatureOverlay?: boolean;
 };
 
 /** Draw a top-view plan with EEC recommended logger grid for warehouse */
@@ -4943,6 +5118,7 @@ function drawWarehousePlanDiagram(
   const showHeightLabels = options.showHeightLabels ?? false;
   const showPlacementTable = options.showPlacementTable ?? false;
   const showCaption = options.showCaption ?? true;
+  const showTemperatureOverlay = options.showTemperatureOverlay ?? false;
   const gi = input.generalInfo;
   const isEaeuWarehouse = isWarehouseEaeu(getReportEquipmentType(input));
   // Prefer pvSession room dims (saved by FloorPlanEditor), fall back to generalInfo
@@ -5142,6 +5318,37 @@ function drawWarehousePlanDiagram(
     ? buildWarehouseCriticalSensorTokens(input)
     : { hot: new Set<string>(), cold: new Set<string>() };
   const averageBySensor = showAverageLabels ? buildSensorAverageMap(input) : new Map<string, string>();
+  const averageNumberBySensor = showTemperatureOverlay ? buildSensorAverageNumberMap(input) : new Map<string, number>();
+  const externalSensorTokens = showTemperatureOverlay
+    ? buildWarehouseSensorTokensByRole(input, "external")
+    : new Set<string>();
+  const markerPlanBox = { x: planX, y: planY, w: drawW, h: drawH };
+  const heatmapPoints = showTemperatureOverlay
+    ? sensorPointObjs.flatMap(sp => {
+      if (floorSensorPointMatchesTokens(sp, externalSensorTokens)) return [];
+      const label = shortSensorId(sp.label) || "D";
+      const directSensorKey = normalizeSensorNumber(sp.label);
+      const avg =
+        averageNumberBySensor.get(directSensorKey) ??
+        averageNumberBySensor.get(normalizeSensorNumber(label)) ??
+        null;
+      if (avg === null || !Number.isFinite(avg)) return [];
+      return [{
+        x: planX + ((sp.xPct + sp.widthPct / 2) / 100) * drawW,
+        y: planY + ((sp.yPct + sp.heightPct / 2) / 100) * drawH,
+        avg,
+      }];
+    })
+    : [];
+  const heatmapRange = heatmapPoints.length > 0
+    ? drawWarehouseTemperatureOverlay(doc, markerPlanBox, heatmapPoints, embeddedPlanBackground ? 0.20 : 0.24)
+    : null;
+  if (heatmapRange) {
+    doc.save();
+    doc.lineWidth(1.2).strokeColor(ACCENT)
+      .rect(planX, planY, drawW, drawH).stroke();
+    doc.restore();
+  }
   if (floorObjs.length > 0) {
     // Object type visual properties
     const OBJ_STYLES: Record<string, { fill: string; stroke: string; text: string }> = {
@@ -5288,7 +5495,6 @@ function drawWarehousePlanDiagram(
   }
 
   // ── Render sensor_point objects as circles on the plan ─────────────────────
-  const markerPlanBox = { x: planX, y: planY, w: drawW, h: drawH };
   const occupiedSensorBubbles: WarehouseMarkerBox[] = [];
   const sensorMarkerRadii = sensorPointObjs
     .map(sp => Math.min((sp.widthPct / 100) * drawW, (sp.heightPct / 100) * drawH) / 2)
@@ -5468,6 +5674,12 @@ function drawWarehousePlanDiagram(
     });
     doc.restore();
     planBottomY = startY + externalBadgeRows * 22 + 2;
+  }
+
+  if (heatmapRange) {
+    const legendAnchor = { x: planX, y: planY, w: drawW, h: planBottomY - planY };
+    drawWarehouseTemperatureLegend(doc, legendAnchor, heatmapRange);
+    planBottomY = legendAnchor.y + legendAnchor.h + 28;
   }
 
   doc.x = pageLeft;
