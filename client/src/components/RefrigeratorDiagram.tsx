@@ -9,6 +9,13 @@
 
 import { Button } from "@/components/ui/button";
 import { trpc } from "@/lib/trpc";
+import {
+  canonicalRefrigeratorPlacements,
+  parseRefrigeratorPlacement,
+  refrigeratorPlacementCode,
+  REFRIGERATOR_ZONES,
+  type RefrigeratorZoneCode,
+} from "@shared/refrigeratorPlacement";
 import { useMemo, useState } from "react";
 
 type Logger = {
@@ -35,19 +42,18 @@ type Props = {
   coldLoggerId?: number | null;
 };
 
-type ZoneCode = "BL" | "BC" | "BR" | "FL" | "FC" | "FR";
+type ZoneCode = RefrigeratorZoneCode;
 type Placement = { shelf: number; zone: ZoneCode };
 
-const ZONES: Array<{ code: ZoneCode; x: number; depth: number; label: string; short: string }> = [
-  // In the perspective projection, the larger depth value is closer to the
-  // door/front edge (lower on the page). Keep the codes and labels aligned.
-  { code: "BL", x: 14, depth: 20, label: "у задней стенки слева", short: "зад. слева" },
-  { code: "BC", x: 50, depth: 20, label: "у задней стенки по середине", short: "зад. центр" },
-  { code: "BR", x: 86, depth: 20, label: "у задней стенки справа", short: "зад. справа" },
-  { code: "FL", x: 14, depth: 84, label: "у дверцы слева", short: "дверь слева" },
-  { code: "FC", x: 50, depth: 84, label: "у дверцы по середине", short: "дверь центр" },
-  { code: "FR", x: 86, depth: 84, label: "у дверцы справа", short: "дверь справа" },
-];
+const ZONE_LABELS: Record<ZoneCode, { label: string; short: string }> = {
+  BL: { label: "у задней стенки слева", short: "зад. слева" },
+  BC: { label: "у задней стенки по середине", short: "зад. центр" },
+  BR: { label: "у задней стенки справа", short: "зад. справа" },
+  FL: { label: "у дверцы слева", short: "дверь слева" },
+  FC: { label: "у дверцы по середине", short: "дверь центр" },
+  FR: { label: "у дверцы справа", short: "дверь справа" },
+};
+const ZONES = REFRIGERATOR_ZONES.map(zone => ({ ...zone, ...ZONE_LABELS[zone.code] }));
 
 const PALETTE = [
   "#2563eb", "#16a34a", "#dc2626", "#d97706",
@@ -89,35 +95,6 @@ function diamondPoints(cx: number, cy: number, size: number): string {
   return `${cx},${cy - size} ${cx + size},${cy} ${cx},${cy + size} ${cx - size},${cy}`;
 }
 
-function parsePlacement(position: string | null | undefined): Placement | null {
-  const match = String(position || "").match(/^RF:S(\d+):(BL|BC|BR|FL|FC|FR)$/);
-  if (!match) return null;
-  return { shelf: Math.max(1, Number(match[1])), zone: match[2] as ZoneCode };
-}
-
-function placementCode(p: Placement): string {
-  return `RF:S${p.shelf}:${p.zone}`;
-}
-
-function legacyPlacement(logger: Logger, index: number, total: number): Placement {
-  if (logger.position === "top") return { shelf: 1, zone: "FC" };
-  if (logger.position === "middle") return { shelf: Math.max(2, Math.ceil(total / 2)), zone: "FC" };
-  if (logger.position === "bottom") return { shelf: Math.max(3, total), zone: "FC" };
-  if (logger.position === "door") return { shelf: Math.max(1, Math.ceil(total / 2)), zone: "FR" };
-
-  if (logger.posX != null && logger.posY != null) {
-    const x = Number(logger.posX);
-    const y = Number(logger.posY);
-    const shelf = Math.max(1, Math.min(9, Math.round((y / 100) * Math.max(1, total - 1)) + 1));
-    const zone: ZoneCode = x < 33 ? "FL" : x > 66 ? "FR" : "FC";
-    return { shelf, zone };
-  }
-
-  const shelf = total <= 1 ? 1 : Math.round((index / (total - 1)) * Math.max(1, total - 1)) + 1;
-  const pattern: ZoneCode[] = ["FL", "FR", "BC"];
-  return { shelf, zone: pattern[index % pattern.length] };
-}
-
 function shelfTitle(shelf: number, total: number, drawerCount = 0): string {
   if (drawerCount > 0 && shelf === total) {
     return drawerCount === 1 ? `${shelf} уровень (лоток)` : `${shelf} уровень (лотки)`;
@@ -156,7 +133,7 @@ export default function RefrigeratorDiagram({
   });
   const internals = loggers.filter(l => l.role === "internal");
   const externals = loggers.filter(l => l.role === "external");
-  const maxPlacedShelf = Math.max(0, ...internals.map(l => parsePlacement(l.position)?.shelf ?? 0));
+  const maxPlacedShelf = Math.max(0, ...internals.map(l => parseRefrigeratorPlacement(l.position)?.shelf ?? 0));
   const [visibleShelves, setVisibleShelves] = useState(normalizeLevelCount(levelCount ?? Math.max(7, maxPlacedShelf)));
   const [localDrawerCount, setLocalDrawerCount] = useState<0 | 1 | 2>(normalizeDrawerCount(drawerCount));
   const shelfCount = normalizeLevelCount(levelCount ?? visibleShelves);
@@ -166,24 +143,20 @@ export default function RefrigeratorDiagram({
 
   const placements = useMemo(() => {
     const map = new Map<string, Logger>();
-    internals.forEach((logger, idx) => {
-      const parsed = parsePlacement(logger.position);
-      const placement = parsed
-        ? { ...parsed, shelf: Math.min(parsed.shelf, shelfCount) }
-        : legacyPlacement(logger, idx, Math.max(3, shelfCount));
-      map.set(placementCode(placement), logger);
+    canonicalRefrigeratorPlacements(internals, shelfCount).forEach(({ sensor, placement }) => {
+      map.set(refrigeratorPlacementCode(placement), sensor);
     });
     return map;
   }, [internals, shelfCount]);
 
   const unassigned = internals.filter(logger => {
-    const parsed = parsePlacement(logger.position);
-    return !parsed || !placements.get(placementCode(parsed)) || placements.get(placementCode(parsed))?.id === logger.id;
+    const parsed = parseRefrigeratorPlacement(logger.position);
+    return !parsed || !placements.get(refrigeratorPlacementCode(parsed)) || placements.get(refrigeratorPlacementCode(parsed))?.id === logger.id;
   });
 
   const assignLogger = (loggerId: number | null) => {
     if (!assigningTo || readOnly) return;
-    const code = placementCode(assigningTo);
+    const code = refrigeratorPlacementCode(assigningTo);
     const already = placements.get(code);
     if (already && loggerId !== already.id) {
       updateLogger.mutate({ protocolId, loggerId: already.id, position: "unset" as any, posX: null, posY: null });
@@ -196,7 +169,7 @@ export default function RefrigeratorDiagram({
 
   const clearPlacement = () => {
     if (!assigningTo || readOnly) return;
-    const logger = placements.get(placementCode(assigningTo));
+    const logger = placements.get(refrigeratorPlacementCode(assigningTo));
     if (logger) {
       updateLogger.mutate({ protocolId, loggerId: logger.id, position: "unset" as any, posX: null, posY: null });
     }
@@ -228,12 +201,12 @@ export default function RefrigeratorDiagram({
     setVisibleShelves(normalized);
     onLevelCountChange?.(normalized);
     internals.forEach(logger => {
-      const parsed = parsePlacement(logger.position);
+      const parsed = parseRefrigeratorPlacement(logger.position);
       if (parsed && parsed.shelf > normalized) {
         updateLogger.mutate({
           protocolId,
           loggerId: logger.id,
-          position: placementCode({ ...parsed, shelf: normalized }) as any,
+          position: refrigeratorPlacementCode({ ...parsed, shelf: normalized }) as any,
           posX: null,
           posY: null,
         });
@@ -370,7 +343,7 @@ export default function RefrigeratorDiagram({
           {Array.from({ length: shelfCount }, (_, i) => i + 1).flatMap(shelf =>
             ZONES.map(zone => {
               const p = project(shelf, zone.code);
-              const code = placementCode({ shelf, zone: zone.code });
+      const code = refrigeratorPlacementCode({ shelf, zone: zone.code });
               const logger = placements.get(code);
               const loggerIdx = logger ? internals.findIndex(item => item.id === logger.id) : -1;
               const color = logger ? colorFor(loggerIdx) : "#94a3b8";
@@ -479,7 +452,7 @@ export default function RefrigeratorDiagram({
         <div className="space-y-2">
           {Array.from({ length: shelfCount }, (_, i) => i + 1).map(shelf => {
             const rows = ZONES
-              .map(zone => ({ zone, logger: placements.get(placementCode({ shelf, zone: zone.code })) }))
+              .map(zone => ({ zone, logger: placements.get(refrigeratorPlacementCode({ shelf, zone: zone.code })) }))
               .filter(row => row.logger);
             return (
               <div key={shelf} className="rounded-lg border bg-white p-3 text-sm">
@@ -518,8 +491,8 @@ export default function RefrigeratorDiagram({
           </div>
           <div className="flex flex-wrap gap-2">
             {unassigned.map((logger, idx) => {
-              const assignedHere = placements.get(placementCode(assigningTo))?.id === logger.id;
-              const alreadyAssigned = parsePlacement(logger.position) && !assignedHere;
+              const assignedHere = placements.get(refrigeratorPlacementCode(assigningTo))?.id === logger.id;
+              const alreadyAssigned = parseRefrigeratorPlacement(logger.position) && !assignedHere;
               return (
                 <Button
                   key={logger.id}
@@ -534,7 +507,7 @@ export default function RefrigeratorDiagram({
                 </Button>
               );
             })}
-            {placements.get(placementCode(assigningTo)) && (
+            {placements.get(refrigeratorPlacementCode(assigningTo)) && (
               <Button size="sm" variant="outline" className="bg-background text-destructive hover:text-destructive" onClick={clearPlacement}>
                 Очистить точку
               </Button>

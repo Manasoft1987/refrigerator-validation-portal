@@ -10,6 +10,11 @@
  * current cursor (`doc.y`) and advance the cursor by `height + spacing`.
  */
 
+import {
+  canonicalRefrigeratorPlacements,
+  type RefrigeratorPlacement,
+} from "../shared/refrigeratorPlacement";
+
 export type Series = {
   name: string;
   ts: number[];
@@ -1073,30 +1078,9 @@ function drawRefrigeratorDiagramPortalStyle(
     };
   };
 
-  const slots = Array.from({ length: shelfCount }, (_, shelfIdx) => shelfIdx + 1)
-    .flatMap(shelf => zoneEntries.map(zone => ({ shelf, zone: zone.code })));
   const placements = new Map<string, { sensor: DiagramSensor; idx: number }>();
-  const fallbackZonePattern: FridgeZoneCode[] = ["BL", "BR", "FC", "FL", "FR", "BC"];
-  const nearestShelf = (rawShelf: number) => Math.max(1, Math.min(shelfCount, Math.round(rawShelf)));
-  const fallbackPlacement = (sensor: DiagramSensor, idx: number): { shelf: number; zone: FridgeZoneCode } => {
-    if (sensor.position === "top") return { shelf: 1, zone: "FC" };
-    if (sensor.position === "middle") return { shelf: nearestShelf(Math.ceil(shelfCount / 2)), zone: "FC" };
-    if (sensor.position === "bottom") return { shelf: shelfCount, zone: "FC" };
-    if (sensor.position === "door") return { shelf: nearestShelf(Math.ceil(shelfCount / 2)), zone: "FR" };
-    const free = slots.find(slot => !placements.has(placementCode(slot.shelf, slot.zone)));
-    if (free) return free;
-    return {
-      shelf: nearestShelf(1 + Math.floor(idx / fallbackZonePattern.length)),
-      zone: fallbackZonePattern[idx % fallbackZonePattern.length],
-    };
-  };
-
-  internals.forEach((sensor, idx) => {
-    const parsed = parseFridgePlacement(sensor.position);
-    const placement = parsed
-      ? { shelf: nearestShelf(parsed.shelf), zone: parsed.zone }
-      : fallbackPlacement(sensor, idx);
-    placements.set(placementCode(placement.shelf, placement.zone), { sensor, idx });
+  canonicalRefrigeratorPlacements(internals, shelfCount).forEach(({ sensor, placement, index }) => {
+    placements.set(placementCode(placement.shelf, placement.zone), { sensor, idx: index });
   });
 
   // Schema 1 is a placement reference, so its T-numbers must describe the
@@ -1698,8 +1682,9 @@ function refrigeratorHeatPoint(
   idx: number,
   shelfCount: number,
   drawerCount: number,
+  canonicalPlacement?: RefrigeratorPlacement | null,
 ): { x: number; y: number } {
-  const parsed = parseFridgePlacement(sensor.position);
+  const parsed = canonicalPlacement ?? parseFridgePlacement(sensor.position);
   if (parsed) {
     const zoneX = FRIDGE_ZONES[parsed.zone].x / 100;
     const drawerReserve = drawerCount > 0 ? 0.12 : 0.04;
@@ -1816,6 +1801,14 @@ export function drawTemperatureMapSummary(
     coldLabel?: string | null;
   },
 ): void {
+  const refrigeratorShelfCount = normalizeFridgeLevelCount(options.levelCount ?? fridgeShelfCount(sensors));
+  const refrigeratorDrawerCount = Math.max(0, Math.min(2, Math.round(Number(options.drawerCount ?? 2))));
+  const canonicalPlacementBySensorId = options.objectType === "truck"
+    ? new Map<number, RefrigeratorPlacement>()
+    : new Map(
+        Array.from(canonicalRefrigeratorPlacements(sensors, refrigeratorShelfCount).values())
+          .map(entry => [entry.sensor.id, entry.placement] as const),
+      );
   const internalPoints = sensors
     .filter(sensor => sensor.role === "internal")
     .map((sensor, idx) => {
@@ -1826,8 +1819,9 @@ export function drawTemperatureMapSummary(
         : refrigeratorHeatPoint(
           sensor,
           idx,
-          normalizeFridgeLevelCount(options.levelCount ?? fridgeShelfCount(sensors)),
-          Math.max(0, Math.min(2, Math.round(Number(options.drawerCount ?? 2)))),
+          refrigeratorShelfCount,
+          refrigeratorDrawerCount,
+          canonicalPlacementBySensorId.get(sensor.id) ?? null,
         );
       return { sensor, avg, x: p.x, y: p.y };
     })
