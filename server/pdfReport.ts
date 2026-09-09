@@ -1594,6 +1594,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
         showCriticalMarkers: false,
         showAverageLabels: false,
         showPlacementTable: false,
+        showLoggerPlacementTable: true,
       });
     } else {
       // Non-warehouse: Schema 1/2 describe planned/actual placement only.
@@ -5105,6 +5106,7 @@ type WarehousePlanDiagramOptions = {
   showSensorLabels?: boolean;
   showHeightLabels?: boolean;
   showPlacementTable?: boolean;
+  showLoggerPlacementTable?: boolean;
   showCaption?: boolean;
   showTemperatureOverlay?: boolean;
 };
@@ -5122,6 +5124,7 @@ function drawWarehousePlanDiagram(
   const showSensorLabels = options.showSensorLabels ?? true;
   const showHeightLabels = options.showHeightLabels ?? false;
   const showPlacementTable = options.showPlacementTable ?? false;
+  const showLoggerPlacementTable = options.showLoggerPlacementTable ?? false;
   const showCaption = options.showCaption ?? true;
   const showTemperatureOverlay = options.showTemperatureOverlay ?? false;
   const gi = input.generalInfo;
@@ -5801,7 +5804,7 @@ function drawWarehousePlanDiagram(
 
   // ── Sensor placement table (height + comments) ──────────────────────────────
   // Only render when pvLoggers are available (second diagram call with template=false)
-  if (!template && showPlacementTable) {
+  if (!template && showLoggerPlacementTable) {
     const pvLoggers = input.pvLoggers ?? [];
     const internals = pvLoggers.filter(l => l.role === "internal");
     const externals = pvLoggers.filter(l => l.role === "external");

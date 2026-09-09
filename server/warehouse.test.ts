@@ -104,6 +104,7 @@ describe("generateProtocolPdf – warehouse / storage zone", () => {
       let diagramTitlePage: number | undefined;
       let diagramLengthLabelPage: number | undefined;
       let currentPageHasDiagram2Title = false;
+      const textOrder: string[] = [];
       let operationalEventsFound = false;
       const planImageBuffer = Buffer.from("clean room plan background should be embedded");
 
@@ -114,6 +115,7 @@ describe("generateProtocolPdf – warehouse / storage zone", () => {
         return originalImage.apply(this, args);
       };
       (PDFDocument.prototype as any).text = function (text: string, ...args: any[]) {
+        textOrder.push(text);
         const pageId = (this.page as any)?.dictionary?.id;
         if (text.startsWith("Схема 2. Расстановка регистраторов")) {
           diagramTitlePage = pageId;
@@ -244,6 +246,9 @@ describe("generateProtocolPdf – warehouse / storage zone", () => {
       expect(imageCallCount).toBeGreaterThan(0);
       expect(diagramTitlePage).toBeDefined();
       expect(diagramLengthLabelPage).toBe(diagramTitlePage);
+      expect(textOrder.indexOf("Таблица размещения регистраторов данных")).toBeGreaterThan(
+        textOrder.findIndex(text => text.startsWith("Схема 2. Расстановка регистраторов")),
+      );
       expect(operationalEventsFound).toBe(true);
     },
     90_000,
