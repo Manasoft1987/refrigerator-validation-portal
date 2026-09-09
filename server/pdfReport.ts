@@ -2395,12 +2395,15 @@ function drawSimpleTable(
   headers: string[],
   rows: string[][],
   colFractions: number[],
+  opts: { fontSize?: number; headerFontSize?: number; padding?: number } = {},
 ) {
   const left = PAGE_MARGIN;
   const right = doc.page.width - PAGE_MARGIN;
   const totalW = right - left;
   const colW = colFractions.map(fraction => fraction * totalW);
-  const padding = 6;
+  const padding = opts.padding ?? 6;
+  const fontSize = opts.fontSize ?? 9;
+  const headerFontSize = opts.headerFontSize ?? fontSize;
 
   ensureSpace(doc, 28);
   let y = doc.y;
@@ -2410,7 +2413,7 @@ function drawSimpleTable(
   doc.restore();
 
   let cx = left;
-  doc.fillColor("white").font("bold").fontSize(9);
+  doc.fillColor("white").font("bold").fontSize(headerFontSize);
   headers.forEach((header, index) => {
     doc.text(header, cx + padding, y + 7, { width: colW[index] - padding * 2, lineBreak: false });
     cx += colW[index];
@@ -2418,7 +2421,7 @@ function drawSimpleTable(
   doc.y = y + headerH;
 
   rows.forEach((cells, rowIndex) => {
-    doc.font("body").fontSize(9);
+    doc.font("body").fontSize(fontSize);
     const rowH = Math.max(
       26,
       ...cells.map((cell, index) =>
@@ -2443,7 +2446,7 @@ function drawSimpleTable(
         doc.strokeColor(BORDER).lineWidth(0.5).moveTo(cx, y).lineTo(cx, y + rowH).stroke();
         doc.restore();
       }
-      doc.fillColor(ACCENT).font("body").fontSize(9)
+      doc.fillColor(ACCENT).font("body").fontSize(fontSize)
         .text(cell || "—", cx + padding, y + padding, { width: colW[index] - padding * 2 });
       cx += colW[index];
     });
@@ -6898,6 +6901,141 @@ function drawWarehouseEquipmentList(doc: PDFKit.PDFDocument, input: ReportInput,
   });
 }
 
+type WarehouseLoggerSelectionEntry = {
+  id?: number;
+  label?: string | null;
+  customName?: string | null;
+  role?: string | null;
+};
+
+function buildWarehouseLoggerSelectionEntries(input: ReportInput): WarehouseLoggerSelectionEntry[] {
+  const entries: Array<{ logger: WarehouseLoggerSelectionEntry; tokens: Set<string> }> = [];
+  const add = (logger: WarehouseLoggerSelectionEntry) => {
+    const tokens = new Set([
+      ...sensorTokenVariants(logger.label),
+      ...sensorTokenVariants(logger.customName),
+    ]);
+    if (tokens.size === 0 && logger.id === undefined) return;
+
+    const existing = entries.find(entry => tokenSetsIntersect(entry.tokens, tokens));
+    if (!existing) {
+      entries.push({ logger: { ...logger }, tokens });
+      return;
+    }
+
+    const currentLabel = existing.logger.label ?? "";
+    const nextLabel = logger.label ?? "";
+    if (nextLabel.length > currentLabel.length) existing.logger.label = nextLabel;
+    if (!existing.logger.customName && logger.customName) existing.logger.customName = logger.customName;
+    if (!existing.logger.role && logger.role) existing.logger.role = logger.role;
+    loggerTokenVariants(logger).forEach(token => existing.tokens.add(token));
+  };
+
+  input.pv.loggers.forEach(logger => add(logger));
+  input.pvLoggers?.forEach(logger => add(logger));
+
+  return entries.map(entry => entry.logger);
+}
+
+function loggerTokenVariants(logger: WarehouseLoggerSelectionEntry): string[] {
+  return [
+    ...sensorTokenVariants(logger.label),
+    ...sensorTokenVariants(logger.customName),
+  ];
+}
+
+function findProtocolSensorForLogger(
+  sensors: NonNullable<ReportInput["protocolSensors"]>,
+  logger: WarehouseLoggerSelectionEntry,
+) {
+  const loggerTokens = loggerTokenVariants(logger);
+  if (loggerTokens.length === 0) return null;
+  return sensors.find(sensor => tokenSetsIntersect(loggerTokens, sensorTokenVariants(sensor.number))) ?? null;
+}
+
+function warehouseLoggerRoleLabel(role: string | null | undefined, en: boolean): string {
+  if (role === "external") {
+    return en
+      ? "external; ambient temperature monitoring"
+      : "внешний; мониторинг температуры окружающей среды";
+  }
+  return en ? "internal; mapping point" : "внутренний; точка картирования";
+}
+
+function warehouseLoggerCalibrationStatusLabel(
+  sensor: NonNullable<ReportInput["protocolSensors"]>[number] | null,
+  input: ReportInput,
+  en: boolean,
+): string {
+  if (!sensor) return "—";
+  const protocolDate = resolveProtocolReferenceDate(input.generalInfo?.validationDate, input.protocol.createdAt);
+  const calibrationStatus = getSensorCalibrationStatusAtProtocolDate(sensor.nextCalibrationDate, protocolDate);
+  if (calibrationStatus === "expired") return en ? "Expired" : "Истекла";
+  if (calibrationStatus === "valid") return en ? "Valid" : "Годна";
+  return sensor.status?.trim() || "—";
+}
+
+function warehouseLoggerAccuracyLabel(
+  sensor: NonNullable<ReportInput["protocolSensors"]>[number] | null,
+  input: ReportInput,
+): string {
+  if (!sensor) return "—";
+  if (!sensor.accuracyC && input.pv.sensorAccuracy === undefined) return "—";
+  const accuracy = normalizeSensorAccuracyC(sensor?.accuracyC, input.pv.sensorAccuracy ?? 0.2);
+  return `±${accuracy.toFixed(2)} °C`;
+}
+
+function drawWarehouseLoggerSelectionTable(doc: PDFKit.PDFDocument, input: ReportInput): void {
+  const en = isEnglishWarehouse(input);
+  const loggers = buildWarehouseLoggerSelectionEntries(input);
+  const sensors = filterProtocolSensorsForReport(input) ?? [];
+
+  if (loggers.length === 0) {
+    renderTextBlock(
+      doc,
+      en
+        ? "Information on the data loggers used in the study is completed after PQ/PV logger data are uploaded."
+        : "Сведения об использованных регистраторах данных формируются после загрузки данных логгеров PQ/PV.",
+    );
+    return;
+  }
+
+  doc.font("body").fontSize(10).fillColor(ACCENT).text(
+    en
+      ? "The following data loggers were used for temperature mapping and ambient temperature monitoring:"
+      : "Для температурного картирования и мониторинга температуры окружающей среды использованы следующие регистраторы данных:",
+    { align: "justify" },
+  );
+  doc.moveDown(0.5);
+
+  const rows = loggers.map((logger, index) => {
+    const sensor = findProtocolSensorForLogger(sensors, logger);
+    const displayedNumber = sensor?.number || logger.label || logger.customName || (logger.id ? String(logger.id) : "—");
+    const displayedLogger = logger.customName && logger.customName !== displayedNumber
+      ? `${displayedNumber}\n(${logger.customName})`
+      : displayedNumber;
+    return [
+      String(index + 1),
+      displayedLogger,
+      warehouseLoggerRoleLabel(logger.role, en),
+      sensor ? fmtTraceDate(sensor.calibrationDate) : "—",
+      sensor ? fmtTraceDate(sensor.nextCalibrationDate) : "—",
+      warehouseLoggerAccuracyLabel(sensor, input),
+      warehouseLoggerCalibrationStatusLabel(sensor, input, en),
+    ];
+  });
+
+  drawSimpleTable(
+    doc,
+    en
+      ? ["No.", "Data logger", "Purpose", "Verification date", "Valid until", "Accuracy", "Status"]
+      : ["№", "Регистратор", "Назначение", "Дата поверки", "Действ. до", "Погрешность", "Статус"],
+    rows,
+    [0.05, 0.25, 0.18, 0.14, 0.14, 0.11, 0.13],
+    { fontSize: 8, headerFontSize: 8, padding: 5 },
+  );
+}
+
 function normalizeWarehouseSectionText(key: string, text: string, en: boolean): string {
   let out = text;
   if (!en) {
@@ -7059,7 +7197,11 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
   methodSubs.forEach(([title, key]) => {
     ensureSpace(doc, 80);
     drawSubTitle(doc, title);
-    renderTextBlock(doc, sec(key));
+    if (key === "6.1") {
+      drawWarehouseLoggerSelectionTable(doc, input);
+    } else {
+      renderTextBlock(doc, sec(key));
+    }
   });
 
   // 6.11 IQ readiness check plan

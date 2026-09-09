@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import PDFDocument from "pdfkit";
 import {
   addHeadersAndFooters,
@@ -170,6 +170,121 @@ describe("protocol sensor filtering", () => {
       "230609STS0013706",
       "230609STS0013708",
     ]);
+  });
+});
+
+describe("warehouse methodology logger table", () => {
+  it("renders actually used loggers in section 6.1", async () => {
+    const capturedText: string[] = [];
+    const originalText = PDFDocument.prototype.text;
+    const textSpy = vi.spyOn(PDFDocument.prototype, "text").mockImplementation(function (
+      this: PDFKit.PDFDocument,
+      ...args: Parameters<PDFKit.PDFDocument["text"]>
+    ) {
+      if (typeof args[0] === "string") capturedText.push(args[0]);
+      return originalText.apply(this, args);
+    });
+
+    try {
+      const now = Date.UTC(2024, 6, 15, 9, 0, 0);
+      const series = mkSeries(now, 168, 20);
+      await generateProtocolPdf({
+        org: BASE_ORG,
+        protocol: { number: "VAL-STR-TEST", createdAt: new Date(now), equipmentType: "warehouse" },
+        generalInfo: {
+          ...BASE_GI,
+          equipmentType: "warehouse",
+          manufacturer: "",
+          model: "",
+          serial: "",
+          inventory: "",
+          year: null,
+          tempMode: "15-25",
+          location: "г. Алматы, помещение хранения аптеки",
+          purpose: "Хранение лекарственных средств",
+          validationDate: "2024-07-15",
+          basis: "primary",
+        },
+        iq: { purpose: "", description: "", criteria: "", items: [], verdict: "pass" },
+        oq: { purpose: "", description: "", criteria: "", items: [], verdict: "pass" },
+        pv: {
+          purpose: "",
+          description: "",
+          criteria: "",
+          tempMode: "15-25",
+          rangeMin: 15,
+          rangeMax: 25,
+          startAt: now,
+          endAt: now + 168 * 3600_000,
+          minDurationHours: 168,
+          minSensorCount: 2,
+          loggers: [
+            {
+              id: 1,
+              label: "230804STS0019282",
+              customName: null,
+              role: "internal",
+              pointCount: series.temp.length,
+              min: 19.2,
+              max: 20.4,
+              avg: 19.8,
+              std: 0.1,
+              mkt: 19.9,
+              series,
+              deviations: [],
+            },
+            {
+              id: 2,
+              label: "240903STS0042037",
+              customName: null,
+              role: "external",
+              pointCount: series.temp.length,
+              min: 17.5,
+              max: 18.8,
+              avg: 18.0,
+              std: 0.1,
+              mkt: 18.1,
+              series,
+              deviations: [],
+            },
+          ],
+          verdict: "pass",
+          failureReasons: [],
+          hotIdx: 0,
+          coldIdx: 1,
+          extIndices: [1],
+        },
+        protocolSensors: [
+          {
+            id: 1,
+            number: "230804STS0019282",
+            calibrationDate: "2024-01-10",
+            nextCalibrationDate: "2025-01-10",
+            accuracyC: "0.15",
+            status: "active",
+          },
+          {
+            id: 2,
+            number: "240903STS0042037",
+            calibrationDate: "2024-02-20",
+            nextCalibrationDate: "2025-02-20",
+            accuracyC: "0.20",
+            status: "active",
+          },
+        ],
+      } as any);
+    } finally {
+      textSpy.mockRestore();
+    }
+
+    expect(capturedText).toContain("6.1. Сведения о выборе типа регистратора данных");
+    expect(capturedText).toContain("Регистратор");
+    expect(capturedText).toContain("230804STS0019282");
+    expect(capturedText).toContain("240903STS0042037");
+    expect(capturedText).toContain("внутренний; точка картирования");
+    expect(capturedText).toContain("внешний; мониторинг температуры окружающей среды");
+    expect(capturedText).toContain("±0.15 °C");
+    expect(capturedText).toContain("Годна");
   });
 });
 
