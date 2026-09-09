@@ -96,7 +96,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </h2>
             <p className="text-white/70 leading-relaxed">
               Автоматическое формирование профессиональных протоколов квалификации и валидации
-              холодильного оборудования в соответствии с практиками GDP / GSP.
+              холодильного оборудования в соответствии с практиками GDP / GPP.
             </p>
           </div>
           <div className="z-10 text-xs text-white/50">
@@ -280,7 +280,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
                       ColdChain Portal
                     </div>
                     <div className="text-[10px] text-muted-foreground truncate">
-                      Валидация GDP / GSP
+                      Валидация GDP / GPP
                     </div>
                   </div>
                 </button>

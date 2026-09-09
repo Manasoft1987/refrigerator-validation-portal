@@ -3290,14 +3290,14 @@ function drawStagePVVerdict(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], inpu
           `Analysis of ${internalCount} internal logger(s) demonstrates stable temperature distribution throughout the storage room / storage area volume. ` +
           (hotSensor ? `The maximum temperature was recorded by ${hotLabel} (hot point). ` : "") +
           (coldSensor ? `The minimum temperature was recorded by ${coldLabel} (cold point). ` : "") +
-          "The HVAC/heating system operates normally and provides appropriate storage conditions for medicinal products in accordance with GDP/GSP requirements."
+          "The HVAC/heating system operates normally and provides appropriate storage conditions for medicinal products in accordance with GDP/GPP requirements."
         : "Все критерии приемлемости выполнены. Эксплуатационная квалификация / валидация (PQ/PV) пройдена успешно. " +
           `Анализ данных ${internalCount} внутренних датчиков показал стабильное распределение температуры ` +
           "по всему объёму помещения (зоны) хранения. " +
           (hotSensor ? `Максимальная температура зафиксирована ${hotLabel} (горячая точка). ` : "") +
           (coldSensor ? `Минимальная температура зафиксирована ${coldLabel} (холодная точка). ` : "") +
           "Система кондиционирования/отопления функционирует в штатном режиме, обеспечивая равномерное распределение " +
-          "температуры и надлежащие условия для хранения лекарственных средств в соответствии с требованиями GDP/GSP.";
+          "температуры и надлежащие условия для хранения лекарственных средств в соответствии с требованиями GDP/GPP.";
     } else {
       text =
         "Все критерии приемлемости выполнены. Эксплуатационная квалификация / валидация (PQ/PV) пройдена успешно. " +
