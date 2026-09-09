@@ -46,17 +46,17 @@ const MUTED = "#64748b";
 const BORDER = "#e2e8f0";
 const SOFT_BG = "#f8fafc";
 const WAREHOUSE_MAPPING_DOCUMENT_TITLE_RU =
-  "Протокол и отчёт температурного картирования зоны хранения лекарственных средств";
+  "Протокол и отчёт температурного картирования помещения (зоны) хранения лекарственных средств";
 const WAREHOUSE_MAPPING_DOCUMENT_TITLE_EN =
-  "Storage Area Temperature Mapping Protocol and Report";
+  "Storage Room / Area Temperature Mapping Protocol and Report";
 const WAREHOUSE_MAPPING_PROTOCOL_TITLE_RU =
-  "Протокол температурного картирования зоны хранения лекарственных средств";
+  "Протокол температурного картирования помещения (зоны) хранения лекарственных средств";
 const WAREHOUSE_MAPPING_PROTOCOL_TITLE_EN =
-  "Storage Area Temperature Mapping Protocol";
+  "Storage Room / Area Temperature Mapping Protocol";
 const WAREHOUSE_MAPPING_REPORT_TITLE_RU =
-  "Отчёт температурного картирования зоны хранения лекарственных средств";
+  "Отчёт температурного картирования помещения (зоны) хранения лекарственных средств";
 const WAREHOUSE_MAPPING_REPORT_TITLE_EN =
-  "Storage Area Temperature Mapping Report";
+  "Storage Room / Area Temperature Mapping Report";
 
 type ChecklistItem = {
   questionIndex: number;

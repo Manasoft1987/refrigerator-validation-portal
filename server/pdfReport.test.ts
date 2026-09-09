@@ -894,8 +894,8 @@ describe("generateProtocolPdf", () => {
         (PDFDocument.prototype as any).text = originalText;
       }
 
-      expect(captured).toContain("Протокол температурного картирования зоны хранения лекарственных средств");
-      expect(captured).toContain("Отчёт температурного картирования зоны хранения лекарственных средств");
+      expect(captured).toContain("Протокол температурного картирования помещения (зоны) хранения лекарственных средств");
+      expect(captured).toContain("Отчёт температурного картирования помещения (зоны) хранения лекарственных средств");
       expect(captured).toContain("5. Общие сведения об объекте температурного картирования");
       expect(captured).toContain("6.11. План подготовительной проверки IQ — квалификация монтажа");
       expect(captured).toContain("6.12. План подготовительной проверки OQ — квалификация функционирования");
