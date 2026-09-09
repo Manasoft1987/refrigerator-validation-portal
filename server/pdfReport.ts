@@ -49,6 +49,14 @@ const WAREHOUSE_MAPPING_DOCUMENT_TITLE_RU =
   "Протокол и отчёт температурного картирования зоны хранения лекарственных средств";
 const WAREHOUSE_MAPPING_DOCUMENT_TITLE_EN =
   "Storage Area Temperature Mapping Protocol and Report";
+const WAREHOUSE_MAPPING_PROTOCOL_TITLE_RU =
+  "Протокол температурного картирования зоны хранения лекарственных средств";
+const WAREHOUSE_MAPPING_PROTOCOL_TITLE_EN =
+  "Storage Area Temperature Mapping Protocol";
+const WAREHOUSE_MAPPING_REPORT_TITLE_RU =
+  "Отчёт температурного картирования зоны хранения лекарственных средств";
+const WAREHOUSE_MAPPING_REPORT_TITLE_EN =
+  "Storage Area Temperature Mapping Report";
 
 type ChecklistItem = {
   questionIndex: number;
@@ -1915,7 +1923,9 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
   const isWarehouseDocument = isWarehouseLike(eqType);
   const partLabel = part === "part1" ? (en ? "PART I" : "ЧАСТЬ I") : (en ? "PART II" : "ЧАСТЬ II");
   const partTitle = isWarehouseDocument
-    ? (en ? WAREHOUSE_MAPPING_DOCUMENT_TITLE_EN : WAREHOUSE_MAPPING_DOCUMENT_TITLE_RU)
+    ? (part === "part1"
+        ? (en ? WAREHOUSE_MAPPING_PROTOCOL_TITLE_EN : WAREHOUSE_MAPPING_PROTOCOL_TITLE_RU)
+        : (en ? WAREHOUSE_MAPPING_REPORT_TITLE_EN : WAREHOUSE_MAPPING_REPORT_TITLE_RU))
     : part === "part1"
       ? (en ? "QUALIFICATION PROTOCOL" : "ПРОТОКОЛ КВАЛИФИКАЦИИ")
       : (en ? "QUALIFICATION REPORT" : "ОТЧЁТ О КВАЛИФИКАЦИИ");
@@ -1948,9 +1958,12 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
     .fillColor(MUTED)
     .font("body")
     .fontSize(13)
-    .text(partSubtitle, left, y, { align: "center" });
+    .text(partSubtitle, left, y, { align: "center", width: right - left });
 
-  y += 24;
+  y += doc.heightOfString(partSubtitle, {
+    width: right - left,
+    align: "center",
+  }) + (isWarehouseDocument ? 14 : 12);
   const equipmentTypeLabel = en && isWarehouseLike(eqType)
     ? "Storage Room / Storage Area"
     : eqType === "chamber"
