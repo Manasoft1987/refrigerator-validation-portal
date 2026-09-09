@@ -1196,9 +1196,9 @@ function warehouseTemperatureOverlayRange(values: number[]): { lo: number; hi: n
   const min = Math.min(...finiteValues);
   const max = Math.max(...finiteValues);
   const span = max - min;
-  const margin = Math.max(0.4, span * 0.12);
+  const margin = Math.max(0.15, span * 0.06);
   if (span < 0.2) {
-    return { lo: min - 0.5, hi: max + 0.5 };
+    return { lo: min - 0.35, hi: max + 0.35 };
   }
   return { lo: min - margin, hi: max + margin };
 }
@@ -5341,7 +5341,7 @@ function drawWarehousePlanDiagram(
     })
     : [];
   const heatmapRange = heatmapPoints.length > 0
-    ? drawWarehouseTemperatureOverlay(doc, markerPlanBox, heatmapPoints, embeddedPlanBackground ? 0.20 : 0.24)
+    ? drawWarehouseTemperatureOverlay(doc, markerPlanBox, heatmapPoints, embeddedPlanBackground ? 0.34 : 0.38)
     : null;
   if (heatmapRange) {
     doc.save();
