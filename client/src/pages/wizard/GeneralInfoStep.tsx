@@ -178,9 +178,13 @@ export default function GeneralInfoStep({
 
   const isWarehouse = isWarehouseLike(form.equipmentType);
   const isWarehouseByEaeu = isWarehouseEaeu(form.equipmentType);
+  const isPharmacyStorage = form.equipmentType === "warehouse";
   const isThermalContainer = form.equipmentType === "thermal-container";
   const isAutoRefrigerator = isAutoRefrigeratorLike(form.equipmentType);
   const standardTempModes = TEMP_MODES.filter(m => m.id !== "custom");
+  const storageStudyTypes = isPharmacyStorage
+    ? [{ id: "warehouse", label: "Помещение (зона) хранения аптеки", duration: "не менее 7 суток" }]
+    : WAREHOUSE_STUDY_TYPES;
   const supportsCustomTempMode = form.equipmentType === "refrigerator" || form.equipmentType === "freezer";
   const tempModesForEquipment = supportsCustomTempMode
     ? TEMP_MODES
@@ -387,12 +391,14 @@ export default function GeneralInfoStep({
         <div>
           <h2 className="text-xl font-semibold tracking-tight">
             {isWarehouse
-              ? "Общие сведения об объекте квалификации"
+              ? "Общие сведения об объекте температурного картирования"
               : "Общие сведения об оборудовании"}
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
             {isWarehouse
-              ? "Параметры помещения / зоны хранения. Оборудование, установленное в объекте, добавляется на следующем шаге."
+              ? isPharmacyStorage
+                ? "Параметры помещения (зоны) хранения аптеки. Климатическое и вспомогательное оборудование, установленное в объекте, добавляется на следующем шаге."
+                : "Параметры помещения / зоны хранения. Оборудование, установленное в объекте, добавляется на следующем шаге."
               : "Эти данные попадут в шапку протокола и используются во всех стадиях квалификации."}
           </p>
         </div>
@@ -505,7 +511,7 @@ export default function GeneralInfoStep({
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div>
                   <h3 className="font-semibold tracking-tight">
-                    {isWarehouseByEaeu ? "Параметры зоны хранения (Рек. ЕЭК №8)" : "Параметры зоны хранения (экспертное размещение)"}
+                    {isPharmacyStorage ? "Параметры помещения (зоны) хранения аптеки" : isWarehouseByEaeu ? "Параметры помещения / зоны хранения (Рек. ЕЭК №8)" : "Параметры помещения / зоны хранения (экспертное размещение)"}
                   </h3>
                   <p className="text-xs text-muted-foreground mt-1">
                     {isWarehouseByEaeu
@@ -543,7 +549,7 @@ export default function GeneralInfoStep({
                   <Select value={form.whStudyType || undefined} onValueChange={v => setForm({ ...form, whStudyType: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {WAREHOUSE_STUDY_TYPES.map(s => (
+                      {storageStudyTypes.map(s => (
                         <SelectItem key={s.id} value={s.id}>{s.label} — {s.duration}</SelectItem>
                       ))}
                     </SelectContent>
@@ -595,10 +601,10 @@ export default function GeneralInfoStep({
                     </Field>
                   </>
                 ) : null}
-                <Field label="Описание планировки зоны" className="md:col-span-3">
+                <Field label={isPharmacyStorage ? "Описание планировки помещения (зоны)" : "Описание планировки зоны"} className="md:col-span-3">
                   <Textarea rows={3} value={form.whLayoutNotes || ""}
                     onChange={e => setForm({ ...form, whLayoutNotes: e.target.value })}
-                    placeholder="Расположение стеллажей, охлаждающих элементов, вентиляции, зон приёмки/экспедиции и т.д." />
+                    placeholder={isPharmacyStorage ? "Расположение шкафов, стеллажей, дверей, окон, кондиционера, отопительных приборов и вентиляции." : "Расположение стеллажей, охлаждающих элементов, вентиляции, зон приёмки/экспедиции и т.д."} />
                 </Field>
               </div>
               {isWarehouseByEaeu && sensorCalc.total > 0 && (
@@ -951,7 +957,7 @@ export default function GeneralInfoStep({
             * обязательные поля
             {isWarehouse
               ? isWarehouseByEaeu
-                ? " — адрес, температурный режим и размеры зоны обязательны."
+                ? " — адрес, температурный режим и размеры помещения (зоны) обязательны."
                 : " — адрес и температурный режим обязательны; количество датчиков задаётся вручную на этапе PQ/PV."
               : " — без них нельзя перейти к IQ."}
           </div>

@@ -78,7 +78,7 @@ export const EQUIPMENT_TYPES = [
   { id: "auto-refrigerator-kg", label: "Авторефрижератор Кыргызстана" },
   { id: "thermal-container", label: "Термоконтейнер" },
   { id: "computerized-system", label: "Компьютеризированная система" },
-  { id: "warehouse", label: "Помещение / зона хранения" },
+  { id: "warehouse", label: "Помещение (зона) хранения аптеки" },
   { id: "warehouse-kg", label: "Помещение / зона хранения Кыргызстана" },
   { id: "warehouse-expert", label: "Помещение / зона хранения (экспертное)" },
   { id: "other", label: "Другое" },
@@ -111,7 +111,7 @@ export function isWarehouseEaeu(type: string | null | undefined): boolean {
 /** Returns a human-readable label for any equipmentType value */
 export function getEquipmentLabel(type: string | null | undefined, customName?: string | null): string {
   if (!type) return "Холодильник";
-  if (type === "warehouse") return "Помещение / зона хранения (Рек. ЕЭК №8)";
+  if (type === "warehouse") return "Помещение (зона) хранения аптеки";
   if (type === KYRGYZSTAN_WAREHOUSE_EQUIPMENT_TYPE) return "Помещение / зона хранения Кыргызстана";
   if (type === WAREHOUSE_EXPERT_EQUIPMENT_TYPE) return "Помещение / зона хранения (экспертное)";
   if (type === KYRGYZSTAN_AUTO_REFRIGERATOR_EQUIPMENT_TYPE) return "Авторефрижератор Кыргызстана";
@@ -128,6 +128,7 @@ export function getPurposePlaceholder(type: string | null | undefined): string {
   if (type === "thermal-container") return "Транспортировка термолабильной продукции в квалифицированной конфигурации упаковки…";
   if (type === "freezer") return "Хранение термолабильных лекарственных средств при −20 °C…";
   if (type === "chamber") return "Хранение термолабильных лекарственных средств и вакцин при 2–8 °C…";
+  if (type === "warehouse") return "Хранение лекарственных средств в помещении (зоне) хранения аптеки…";
   if (isWarehouseLike(type)) return "Хранение лекарственных средств и медицинских изделий в помещении (зоне) с контролируемой средой…";
   if (type === "other") return "Назначение оборудования…";
   return "Хранение термолабильных лекарственных средств при 2–8 °C…";
@@ -139,6 +140,7 @@ export function getLocationPlaceholder(type: string | null | undefined): string 
   if (type === "auto-refrigerator") return "Маршрут / транспортное средство / гос. номер";
   if (type === "thermal-container") return "Место подготовки и эксплуатации термоконтейнера";
   if (type === "chamber") return "Склад / здание / помещение";
+  if (type === "warehouse") return "Адрес аптеки / помещение (зона) хранения";
   if (isWarehouseLike(type)) return "Здание / помещение / номер зоны хранения";
   return "Здание / помещение / номер кабинета";
 }
@@ -344,6 +346,13 @@ export const WAREHOUSE_MAPPING_METHOD_NOTE =
   "Для складов, помещений с контролируемой средой, зон приёмки и экспедиции продолжительность испытания установлена " +
   "не менее 7 суток подряд (168 часов), с учётом оценки рисков, режима работы объекта и репрезентативности периода наблюдения. " +
   "Для холодильных/морозильных камер в помещении с контролируемой средой допускается период 24–72 часа и более, если это обосновано протоколом.";
+
+export const PHARMACY_STORAGE_MAPPING_METHOD_NOTE =
+  "Руководство по проведению температурного картирования зон хранения лекарственных средств, " +
+  "утверждённое Рекомендацией Коллегии ЕЭК № 8, носит рекомендательный характер. " +
+  "Настоящий протокол адаптирован к его структуре и методическим подходам. " +
+  "Для помещения (зоны) хранения аптеки продолжительность испытания установлена " +
+  "не менее 7 суток подряд (168 часов), с учётом оценки рисков, режима работы аптеки и репрезентативности периода наблюдения.";
 
 export const WAREHOUSE_SEASONS = [
   { id: "summer", label: "Летнее (тёплый период)" },

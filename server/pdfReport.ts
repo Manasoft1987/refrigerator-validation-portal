@@ -37,6 +37,7 @@ import {
   normalizeWarehouseChecklistQuestion,
   normalizeSensorAccuracyC,
   WAREHOUSE_MAPPING_METHOD_NOTE,
+  PHARMACY_STORAGE_MAPPING_METHOD_NOTE,
 } from "../shared/validation";
 import type { OperationalMetrics } from "./operationalMetrics";
 
@@ -435,14 +436,14 @@ const EQUIPMENT_LABEL: Record<string, string> = {
   "thermal-container": "Термоконтейнер",
   freezer: "Морозильник",
   chamber: "Холодильная камера",
-  warehouse: "Помещение (зона) хранения", // Note: use getEquipmentName() for proper display
+  warehouse: "Помещение (зона) хранения аптеки", // Note: use getEquipmentName() for proper display
   "warehouse-kg": "Помещение (зона) хранения Кыргызстана",
   "warehouse-expert": "Помещение (зона) хранения",
   other: "Оборудование",
 };
 
 const WAREHOUSE_STUDY_LABEL: Record<string, string> = {
-  warehouse: "Помещение хранения",
+  warehouse: "Помещение (зона) хранения аптеки",
   controlled_env: "Помещение с контролируемой средой",
   reception: "Зона приёмки",
   expedition: "Зона экспедиции",
@@ -473,7 +474,7 @@ function enRu(input: ReportInput | undefined, en: string, ru: string): string {
 }
 
 const WAREHOUSE_STUDY_LABEL_EN: Record<string, string> = {
-  warehouse: "Storage room / storage area",
+  warehouse: "Pharmacy storage room / area",
   controlled_env: "Controlled environment room",
   reception: "Receiving area",
   expedition: "Dispatch area",
@@ -596,11 +597,11 @@ function getEquipmentName(input: ReportInput): string {
   if (type === "other" && input.protocol?.customEquipmentName) {
     return input.protocol.customEquipmentName;
   }
-  // For warehouse, always use "помещение (зона) хранения" instead of "авторефрижератор"
+  // For storage protocols, use the selected pharmacy/warehouse object name instead of equipment terminology.
   if (isWarehouseLike(type)) {
-    if (isEnglishWarehouse(input)) return "storage room / storage area";
+    if (isEnglishWarehouse(input)) return type === "warehouse" ? "pharmacy storage room / area" : "storage room / storage area";
     if (isKyrgyzstanWarehouse(type)) return "помещение (зона) хранения Кыргызстана";
-    return "помещение (зона) хранения";
+    return type === "warehouse" ? "помещение (зона) хранения аптеки" : "помещение (зона) хранения";
   }
   return EQUIPMENT_LABEL[type || ""] || "Оборудование";
 }
@@ -628,6 +629,15 @@ function getEquipmentNameWithCase(input: ReportInput, gramCase: "nominative" | "
         case "instrumental": return "помещением (зоной) хранения Кыргызстана";
         case "nominative":
         default: return "Помещение (зона) хранения Кыргызстана";
+      }
+    }
+    if (type === "warehouse") {
+      switch (gramCase) {
+        case "genitive": return "помещения (зоны) хранения аптеки";
+        case "accusative": return "помещение (зону) хранения аптеки";
+        case "instrumental": return "помещением (зоной) хранения аптеки";
+        case "nominative":
+        default: return "помещение (зона) хранения аптеки";
       }
     }
     switch (gramCase) {
@@ -1543,8 +1553,8 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
       Author: input.org.name,
       Subject: isWarehouseLike(getReportEquipmentType(input))
         ? (isEnglishWarehouse(input)
-            ? "Storage area temperature mapping protocol and report"
-            : "Температурное картирование зоны хранения лекарственных средств")
+            ? "Pharmacy storage room / area temperature mapping protocol and report"
+            : "Температурное картирование помещения (зоны) хранения лекарственных средств")
         : isEnglishWarehouse(input)
         ? "Storage area temperature mapping qualification protocol and report"
         : "Протокол квалификации/валидации холодильного оборудования",
@@ -1965,7 +1975,7 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
     align: "center",
   }) + (isWarehouseDocument ? 14 : 12);
   const equipmentTypeLabel = en && isWarehouseLike(eqType)
-    ? "Storage Room / Storage Area"
+    ? (eqType === "warehouse" ? "Pharmacy Storage Room / Area" : "Storage Room / Storage Area")
     : eqType === "chamber"
     ? "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430"
     : eqType === "thermal-container"
@@ -3744,8 +3754,8 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
     const suitabilityWord = getReportEquipmentType(input) === "chamber" ? "пригодной" : "пригодным";
     const isWarehouseConclusion = isWarehouseLike(getReportEquipmentType(input));
     text = en
-      ? `Based on IQ, OQ and PQ/PV results, the commission recognizes the storage room / storage area as suitable for storage of medicinal products within the temperature regime ${pvTemperatureModeLabel(input.pv, input)}${isWarehouseConclusion ? "." : " in accordance with GDP / GPP requirements."} The HVAC/heating system provides stable temperature distribution throughout the room volume. Validation has been completed with a positive conclusion.${excNote}`
-      : "На основании результатов IQ, OQ и PQ/PV комиссия признаёт " + (isWarehouseLike(getReportEquipmentType(input)) ? "помещение (зону) хранения" : reeferConclusionObject(input)) + " " +
+      ? `Based on IQ, OQ and PQ/PV results, the commission recognizes ${getReportEquipmentType(input) === "warehouse" ? "the pharmacy storage room / area" : "the storage room / storage area"} as suitable for storage of medicinal products within the temperature regime ${pvTemperatureModeLabel(input.pv, input)}${isWarehouseConclusion ? "." : " in accordance with GDP / GPP requirements."} The HVAC/heating system provides stable temperature distribution throughout the room volume. Validation has been completed with a positive conclusion.${excNote}`
+      : "На основании результатов IQ, OQ и PQ/PV комиссия признаёт " + (getReportEquipmentType(input) === "warehouse" ? "помещение (зону) хранения аптеки" : isWarehouseLike(getReportEquipmentType(input)) ? "помещение (зону) хранения" : reeferConclusionObject(input)) + " " +
         `${suitabilityWord} для хранения лекарственных средств ` +
         `в температурном режиме ${pvTemperatureModeLabel(input.pv, input)}${isWarehouseConclusion ? ". " : " в соответствии с требованиями GDP / GPP. "}` +
         (isWarehouseLike(getReportEquipmentType(input))
@@ -6318,7 +6328,7 @@ function drawWarehouseAnnex2(doc: PDFKit.PDFDocument, input: ReportInput) {
   drawSectionTitle(doc, "Приложение №2. Сводная таблица показаний регистраторов");
   doc.fillColor(MUTED).font("body").fontSize(9)
     .text(
-      `Сводные результаты температурного картирования зоны хранения за период ` +
+      `Сводные результаты температурного картирования ${getReportEquipmentType(input) === "warehouse" ? "помещения (зоны) хранения аптеки" : "зоны хранения"} за период ` +
       `${formatDateRange(input.pv.startAt, input.pv.endAt)}; режим ` +
       `${input.pv.rangeMin.toFixed(1)} … ${input.pv.rangeMax.toFixed(1)} °C.`,
       { align: "justify" },
@@ -6501,9 +6511,6 @@ const WAREHOUSE_DEFAULT_SECTIONS: Record<string, string> = {
   "1.1": `ЕАЭС — Евразийский экономический союз
 ЕЭК — Евразийская экономическая комиссия
 ЛС — лекарственные средства
-GDP (Good Distribution Practice) — Правила надлежащей дистрибьюторской практики
-GPP (Good Pharmacy Practice) — Правила надлежащей аптечной практики
-GMP (Good Manufacturing Practice) — Правила надлежащей производственной практики
 СОП — стандартная операционная процедура
 IQ (Installation Qualification) — квалификация монтажа
 OQ (Operational Qualification) — квалификация функционирования
@@ -6511,38 +6518,38 @@ PQ/PV (Performance Qualification / Process Validation) — эксплуатац�
 Т — температура
 MKT (Mean Kinetic Temperature) — среднекинетическая температура`,
 
-  "1.2": `Температурное картирование — систематическое измерение и документирование температурного распределения внутри помещения или зоны хранения с целью выявления «горячих» и «холодных» точек, оценки однородности температурного поля и определения оптимальных мест размещения датчиков системы мониторинга.
+  "1.2": `Температурное картирование — систематическое измерение и документирование температурного распределения внутри помещения (зоны) хранения аптеки с целью выявления «горячих» и «холодных» точек, оценки однородности температурного поля и определения оптимальных мест размещения датчиков системы мониторинга.
 
 Регистратор данных (логгер) — автономное устройство, непрерывно фиксирующее значения температуры (и, при необходимости, относительной влажности) с заданным интервалом и сохраняющее результаты во внутренней памяти.
 
 Критерий приемлемости — заранее установленный предел, с которым сравниваются результаты измерений для принятия решения о соответствии / несоответствии.
 
-Зона хранения — выделенная часть склада или помещения, предназначенная для хранения лекарственных средств в определённых температурных условиях.`,
+Помещение (зона) хранения аптеки — помещение или выделенная часть помещения аптеки, предназначенная для хранения лекарственных средств в определённых температурных условиях.`,
 
-  "2.1": `Объект картирования: помещение (зона) хранения лекарственных средств.
+  "2.1": `Объект картирования: помещение (зона) хранения аптеки для лекарственных средств.
 Адрес: [указать адрес объекта]
 Назначение: хранение лекарственных средств в условиях контролируемой температурной среды.`,
 
   "2.2.1": `Настоящее температурное картирование проводится в соответствии с:
 • Рекомендацией Коллегии ЕЭК от 20.04.2026 № 8 «О Руководстве по проведению температурного картирования зон хранения лекарственных средств»;
-• Требованиями GDP/GPP/GMP в части обеспечения условий хранения лекарственных средств;
-• Внутренними стандартными операционными процедурами организации.`,
+• Приказом и.о. МЗ РК от 04.02.2021 г. № ҚР ДСМ-15 «Об утверждении надлежащих фармацевтических практик»;
+• Внутренними стандартными операционными процедурами аптеки.`,
 
   "2.2.2": `Конкретные основания для проведения данного исследования:
 • Первичное картирование перед вводом помещения в эксплуатацию / после ремонта;
 • Плановое периодическое картирование (ежегодное / сезонное);
 • Картирование после существенных изменений в помещении или системах кондиционирования.`,
 
-  "3": `Настоящий протокол распространяется на помещение (зону) хранения лекарственных средств, указанное в разделе 2.1. Результаты картирования применяются для:
+  "3": `Настоящий протокол распространяется на помещение (зону) хранения аптеки, указанное в разделе 2.1. Результаты картирования применяются для:
 • подтверждения соответствия температурных условий установленным требованиям;
 • определения мест размещения датчиков системы мониторинга;
 • разработки рекомендаций по безопасному хранению лекарственных средств.`,
 
   "4": `Цели температурного картирования:
-а) подтверждение того, что температурные условия в помещении хранения соответствуют установленным требованиям на протяжении всего периода исследования;
-б) выявление «горячих» и «холодных» точек, а также зон с нестабильным температурным режимом;
+а) подтверждение того, что температурные условия в помещении (зоне) хранения аптеки соответствуют установленным требованиям на протяжении всего периода исследования;
+б) выявление «горячих» и «холодных» точек, а также участков помещения с нестабильным температурным режимом;
 в) документальная фиксация зарегистрированных колебаний температуры;
-г) составление рекомендаций по организации безопасного хранения лекарственных средств;
+г) составление рекомендаций по безопасному размещению лекарственных средств в помещении (зоне) хранения аптеки;
 д) определение (уточнение) мест размещения датчиков мониторинга температуры.`,
 
   "6.1": `Тип регистраторов данных: [указать марку/модель]
@@ -6564,20 +6571,20 @@ MKT (Mean Kinetic Temperature) — среднекинетическая темп
 • MKT каждого регистратора не должна превышать верхний предел режима хранения.
 • Допустимые кратковременные отклонения: не более [указать] °C в течение не более [указать] минут.`,
 
-  "6.5": `Количество и расположение точек размещения регистраторов определено в соответствии с п. 16д Рекомендации ЕЭК № 8 с учётом объёма помещения. Расчёт приведён в разделе «Общие сведения».`,
+  "6.5": `Количество и расположение точек размещения регистраторов определено в соответствии с п. 16д Рекомендации ЕЭК № 8 с учётом объёма помещения (зоны) хранения аптеки. Расчёт приведён в разделе «Общие сведения».`,
 
   "6.6": `Точки размещения регистраторов зафиксированы на схеме помещения (Приложение № 1). Каждой точке присвоен уникальный идентификатор.`,
 
   "6.7": `Все регистраторы запрограммированы на одинаковый интервал записи. Дата и время синхронизированы перед началом исследования. Маркировка нанесена на корпус каждого регистратора.`,
 
-  "6.8": `Регистраторы размещены в соответствии со схемой (Приложение № 1). Размещение выполнено до начала периода регистрации. Персонал, работающий в зоне хранения, информируется о проведении температурного картирования во избежание случайного нарушения работы, отключения, утраты регистраторов данных или собранных данных.`,
+  "6.8": `Регистраторы размещены в помещении (зоне) хранения аптеки в соответствии со схемой (Приложение № 1). Размещение выполнено до начала периода регистрации. Персонал, работающий в помещении, информируется о проведении температурного картирования во избежание случайного нарушения работы, отключения, утраты регистраторов данных или собранных данных.`,
 
-  "6.9": `Температурное картирование проводится в условиях штатной эксплуатации помещения хранения. В период исследования двери/ворота открываются в обычном рабочем режиме, связанном с движением персонала, приемкой, размещением, комплектованием и отпуском продукции. Специальное испытание с регламентированным открыванием дверей/ворот не проводится, если иное не указано в протоколе.
+  "6.9": `Температурное картирование проводится в условиях штатной эксплуатации помещения (зоны) хранения аптеки. В период исследования двери открываются в обычном рабочем режиме, связанном с движением персонала и выполнением повседневных операций аптеки. Специальное испытание с регламентированным открыванием дверей не проводится, если иное не указано в протоколе.
 
 В течение всего периода исследования:
-— регистраторы данных не перемещаются и не извлекаются из зоны хранения;
-— условия эксплуатации зоны хранения поддерживаются в штатном режиме;
-— длительные или нештатные открытия дверей/ворот, отключение электропитания, ремонтные работы и иные события, способные повлиять на температурный режим, фиксируются с указанием даты, времени, продолжительности и причины.
+— регистраторы данных не перемещаются и не извлекаются из помещения;
+— условия эксплуатации помещения поддерживаются в штатном режиме;
+— длительные или нештатные открытия дверей, отключение электропитания, ремонтные работы и иные события, способные повлиять на температурный режим, фиксируются с указанием даты, времени, продолжительности и причины.
 
 По завершении периода исследования данные регистраторов извлекаются. Выполняется повторная сверка серийных номеров регистраторов данных и мест их размещения с утверждённой схемой и таблицей размещения.`,
 
@@ -6588,9 +6595,6 @@ const WAREHOUSE_DEFAULT_SECTIONS_EN: Record<string, string> = {
   "1.1": `EAEU — Eurasian Economic Union
 EEC — Eurasian Economic Commission
 Medicinal products — medicinal products stored under controlled conditions
-GDP (Good Distribution Practice)
-GPP (Good Pharmacy Practice)
-GMP (Good Manufacturing Practice)
 SOP — Standard Operating Procedure
 IQ (Installation Qualification)
 OQ (Operational Qualification)
@@ -6598,35 +6602,35 @@ PQ/PV (Performance Qualification / Process Validation)
 T — Temperature
 MKT (Mean Kinetic Temperature)`,
 
-  "1.2": `Temperature mapping — a documented study of temperature distribution within a storage room or storage area, performed to identify hot and cold points, evaluate temperature uniformity and define appropriate positions for routine monitoring sensors.
+  "1.2": `Temperature mapping — a documented study of temperature distribution within a pharmacy storage room / area, performed to identify hot and cold points, evaluate temperature uniformity and define appropriate positions for routine monitoring sensors.
 
 Data logger — an autonomous measuring device that continuously records temperature values, and where applicable relative humidity, at a defined interval and stores the results in internal memory.
 
 Acceptance criterion — a predefined limit against which test results are evaluated to determine compliance or non-compliance.
 
-Storage area — a defined part of a warehouse, pharmacy room or other premises intended for storage of medicinal products under specified temperature conditions.`,
+Pharmacy storage room / area — a room or designated part of a pharmacy intended for storage of medicinal products under specified temperature conditions.`,
 
-  "2.1": `Mapping object: storage room / storage area for medicinal products.
+  "2.1": `Mapping object: pharmacy storage room / area for medicinal products.
 Address: [specify object address]
 Purpose: storage of medicinal products under controlled temperature conditions.`,
 
   "2.2.1": `This temperature mapping study is performed with consideration of:
 • EEC Board Recommendation No. 8 dated 20.04.2026 on the Guide for temperature mapping of medicinal product storage areas;
-• GDP / GPP / GMP requirements related to maintaining storage conditions for medicinal products;
-• Internal standard operating procedures of the organization.`,
+• applicable pharmaceutical storage requirements;
+• Internal standard operating procedures of the pharmacy.`,
 
   "2.2.2": `Study-specific rationale may include:
-• Initial mapping before commissioning of the storage area / after renovation;
+• Initial mapping before commissioning of the pharmacy storage room / area or after renovation;
 • Scheduled periodic mapping (annual and/or seasonal);
 • Mapping after significant changes to the room layout, HVAC/heating system or operating conditions.`,
 
-  "3": `This protocol applies to the storage room / storage area specified in Section 2.1. The mapping results are used to:
+  "3": `This protocol applies to the pharmacy storage room / area specified in Section 2.1. The mapping results are used to:
 • confirm compliance of temperature conditions with defined requirements;
 • define appropriate locations for routine monitoring sensors;
 • develop recommendations for safe storage of medicinal products.`,
 
   "4": `The objectives of temperature mapping are:
-a) to confirm that temperature conditions in the storage area remain within the specified limits during the study period;
+a) to confirm that temperature conditions in the pharmacy storage room / area remain within the specified limits during the study period;
 b) to identify hot and cold points and areas with unstable temperature behaviour;
 c) to document recorded temperature fluctuations;
 d) to provide recommendations for safe storage of medicinal products;
@@ -6657,8 +6661,113 @@ Responsible personnel have the necessary training and are familiar with this pro
 
   "6.7": `All data loggers are programmed with the same recording interval. Date and time are synchronized before the start of the study. Each logger is marked with its identifier.`,
 
-  "6.8": `Data loggers are placed according to the approved room plan before the start of the recording period. Personnel working in the storage area are informed about the temperature mapping study to prevent accidental disturbance, deactivation, loss of data loggers or collected data.`,
+  "6.8": `Data loggers are placed according to the approved pharmacy room plan before the start of the recording period. Personnel working in the room are informed about the temperature mapping study to prevent accidental disturbance, deactivation, loss of data loggers or collected data.`,
 
+  "6.9": `Temperature mapping is performed under routine operation of the pharmacy storage room / area. During the study, doors are opened in the normal operating mode related to personnel movement and routine pharmacy activities. A dedicated test with controlled door opening is not performed unless specified in the protocol.
+
+During the study period:
+— data loggers are not moved or removed from the room;
+— operating conditions of the room are maintained in routine mode;
+— prolonged or abnormal door openings, power failure, maintenance work and other events that may affect the temperature profile are recorded with date, time, duration and reason.
+
+After completion of the study period, data loggers are retrieved. Serial numbers of data loggers and their placement locations are re-checked against the approved layout and placement table.`,
+
+  "6.10": `Data from each logger are downloaded using appropriate software. Data files are combined for joint analysis. Source files are retained in the archive.`,
+};
+
+// Keep the existing broader templates for the other storage variants. The
+// pharmacy type is the only one that uses the pharmacy-specific defaults above.
+const GENERIC_WAREHOUSE_DEFAULT_SECTIONS: Record<string, string> = {
+  ...WAREHOUSE_DEFAULT_SECTIONS,
+  "1.1": `ЕАЭС — Евразийский экономический союз
+ЕЭК — Евразийская экономическая комиссия
+ЛС — лекарственные средства
+GDP (Good Distribution Practice) — Правила надлежащей дистрибьюторской практики
+GPP (Good Pharmacy Practice) — Правила надлежащей аптечной практики
+GMP (Good Manufacturing Practice) — Правила надлежащей производственной практики
+СОП — стандартная операционная процедура
+IQ (Installation Qualification) — квалификация монтажа
+OQ (Operational Qualification) — квалификация функционирования
+PQ/PV (Performance Qualification / Process Validation) — эксплуатационная квалификация / валидация
+Т — температура
+MKT (Mean Kinetic Temperature) — среднекинетическая температура`,
+  "1.2": `Температурное картирование — систематическое измерение и документирование температурного распределения внутри помещения или зоны хранения с целью выявления «горячих» и «холодных» точек, оценки однородности температурного поля и определения оптимальных мест размещения датчиков системы мониторинга.
+
+Регистратор данных (логгер) — автономное устройство, непрерывно фиксирующее значения температуры (и, при необходимости, относительной влажности) с заданным интервалом и сохраняющее результаты во внутренней памяти.
+
+Критерий приемлемости — заранее установленный предел, с которым сравниваются результаты измерений для принятия решения о соответствии / несоответствии.
+
+Зона хранения — выделенная часть склада или помещения, предназначенная для хранения лекарственных средств в определённых температурных условиях.`,
+  "2.1": `Объект картирования: помещение (зона) хранения лекарственных средств.
+Адрес: [указать адрес объекта]
+Назначение: хранение лекарственных средств в условиях контролируемой температурной среды.`,
+  "2.2.1": `Настоящее температурное картирование проводится в соответствии с:
+• Рекомендацией Коллегии ЕЭК от 20.04.2026 № 8 «О Руководстве по проведению температурного картирования зон хранения лекарственных средств»;
+• Требованиями GDP/GPP/GMP в части обеспечения условий хранения лекарственных средств;
+• Внутренними стандартными операционными процедурами организации.`,
+  "3": `Настоящий протокол распространяется на помещение (зону) хранения лекарственных средств, указанное в разделе 2.1. Результаты картирования применяются для:
+• подтверждения соответствия температурных условий установленным требованиям;
+• определения мест размещения датчиков системы мониторинга;
+• разработки рекомендаций по безопасному хранению лекарственных средств.`,
+  "4": `Цели температурного картирования:
+а) подтверждение того, что температурные условия в помещении хранения соответствуют установленным требованиям на протяжении всего периода исследования;
+б) выявление «горячих» и «холодных» точек, а также зон с нестабильным температурным режимом;
+в) документальная фиксация зарегистрированных колебаний температуры;
+г) составление рекомендаций по организации безопасного хранения лекарственных средств;
+д) определение (уточнение) мест размещения датчиков мониторинга температуры.`,
+  "6.5": `Количество и расположение точек размещения регистраторов определено в соответствии с п. 16д Рекомендации ЕЭК № 8 с учётом объёма помещения. Расчёт приведён в разделе «Общие сведения».`,
+  "6.8": `Регистраторы размещены в соответствии со схемой (Приложение № 1). Размещение выполнено до начала периода регистрации. Персонал, работающий в зоне хранения, информируется о проведении температурного картирования во избежание случайного нарушения работы, отключения, утраты регистраторов данных или собранных данных.`,
+  "6.9": `Температурное картирование проводится в условиях штатной эксплуатации помещения хранения. В период исследования двери/ворота открываются в обычном рабочем режиме, связанном с движением персонала, приемкой, размещением, комплектованием и отпуском продукции. Специальное испытание с регламентированным открыванием дверей/ворот не проводится, если иное не указано в протоколе.
+
+В течение всего периода исследования:
+— регистраторы данных не перемещаются и не извлекаются из зоны хранения;
+— условия эксплуатации зоны хранения поддерживаются в штатном режиме;
+— длительные или нештатные открытия дверей/ворот, отключение электропитания, ремонтные работы и иные события, способные повлиять на температурный режим, фиксируются с указанием даты, времени, продолжительности и причины.
+
+По завершении периода исследования данные регистраторов извлекаются. Выполняется повторная сверка серийных номеров регистраторов данных и мест их размещения с утверждённой схемой и таблицей размещения.`,
+  "6.10": `Данные с каждого регистратора выгружены с помощью [указать ПО]. Файлы данных объединены для совместного анализа. Исходные файлы сохранены в архиве.`,
+};
+
+const GENERIC_WAREHOUSE_DEFAULT_SECTIONS_EN: Record<string, string> = {
+  ...WAREHOUSE_DEFAULT_SECTIONS_EN,
+  "1.1": `EAEU — Eurasian Economic Union
+EEC — Eurasian Economic Commission
+Medicinal products — medicinal products stored under controlled conditions
+GDP (Good Distribution Practice)
+GPP (Good Pharmacy Practice)
+GMP (Good Manufacturing Practice)
+SOP — Standard Operating Procedure
+IQ (Installation Qualification)
+OQ (Operational Qualification)
+PQ/PV (Performance Qualification / Process Validation)
+T — Temperature
+MKT (Mean Kinetic Temperature)`,
+  "1.2": `Temperature mapping — a documented study of temperature distribution within a storage room or storage area, performed to identify hot and cold points, evaluate temperature uniformity and define appropriate positions for routine monitoring sensors.
+
+Data logger — an autonomous measuring device that continuously records temperature values, and where applicable relative humidity, at a defined interval and stores the results in internal memory.
+
+Acceptance criterion — a predefined limit against which test results are evaluated to determine compliance or non-compliance.
+
+Storage area — a defined part of a warehouse, pharmacy room or other premises intended for storage of medicinal products under specified temperature conditions.`,
+  "2.1": `Mapping object: storage room / storage area for medicinal products.
+Address: [specify object address]
+Purpose: storage of medicinal products under controlled temperature conditions.`,
+  "2.2.1": `This temperature mapping study is performed with consideration of:
+• EEC Board Recommendation No. 8 dated 20.04.2026 on the Guide for temperature mapping of medicinal product storage areas;
+• GDP / GPP / GMP requirements related to maintaining storage conditions for medicinal products;
+• Internal standard operating procedures of the organization.`,
+  "3": `This protocol applies to the storage room / storage area specified in Section 2.1. The mapping results are used to:
+• confirm compliance of temperature conditions with defined requirements;
+• define appropriate locations for routine monitoring sensors;
+• develop recommendations for safe storage of medicinal products.`,
+  "4": `The objectives of temperature mapping are:
+a) to confirm that temperature conditions in the storage area remain within the specified limits during the study period;
+b) to identify hot and cold points and areas with unstable temperature behaviour;
+c) to document recorded temperature fluctuations;
+d) to provide recommendations for safe storage of medicinal products;
+e) to define or confirm monitoring sensor placement points.`,
+  "6.5": `The number and arrangement of logger placement points is defined with consideration of EEC Recommendation No. 8, the room dimensions, risk points and contact with the external environment. The calculation is provided in the General Information section.`,
+  "6.8": `Data loggers are placed according to the approved room plan before the start of the recording period. Personnel working in the storage area are informed about the temperature mapping study to prevent accidental disturbance, deactivation, loss of data loggers or collected data.`,
   "6.9": `Temperature mapping is performed under routine operation of the storage area. During the study, doors/gates are opened in the normal operating mode related to personnel movement, receipt, placement, picking and release of products. A dedicated test with controlled door/gate opening is not performed unless specified in the protocol.
 
 During the study period:
@@ -6667,11 +6776,11 @@ During the study period:
 — prolonged or abnormal door/gate openings, power failure, maintenance work and other events that may affect the temperature profile are recorded with date, time, duration and reason.
 
 After completion of the study period, data loggers are retrieved. Serial numbers of data loggers and their placement locations are re-checked against the approved layout and placement table.`,
-
   "6.10": `Data from each logger are downloaded using appropriate software. Data files are combined for joint analysis. Source files are retained in the archive.`,
 };
 
 function warehouseDefaultSectionText(key: string, input: ReportInput, en: boolean): string {
+  const pharmacy = getReportEquipmentType(input) === "warehouse";
   if (isKyrgyzstanWarehouse(getReportEquipmentType(input))) {
     if (en && key === "2.2.1") {
       return `This temperature mapping study is performed with consideration of:
@@ -6689,8 +6798,8 @@ function warehouseDefaultSectionText(key: string, input: ReportInput, en: boolea
     }
   }
   return en
-    ? (WAREHOUSE_DEFAULT_SECTIONS_EN[key] ?? WAREHOUSE_DEFAULT_SECTIONS[key] ?? "")
-    : (WAREHOUSE_DEFAULT_SECTIONS[key] ?? "");
+    ? ((pharmacy ? WAREHOUSE_DEFAULT_SECTIONS_EN : GENERIC_WAREHOUSE_DEFAULT_SECTIONS_EN)[key] ?? "")
+    : ((pharmacy ? WAREHOUSE_DEFAULT_SECTIONS : GENERIC_WAREHOUSE_DEFAULT_SECTIONS)[key] ?? "");
 }
 
 const WAREHOUSE_MAPPING_METHOD_NOTE_EN =
@@ -6699,12 +6808,21 @@ const WAREHOUSE_MAPPING_METHOD_NOTE_EN =
   "the study duration is established as not less than 7 consecutive days (168 hours), considering risk assessment, operating mode of the storage area " +
   "and representativeness of the observation period. For refrigerated/freezer chambers within a controlled-environment room, a period of 24–72 hours or longer may be used when justified by the protocol.";
 
+const PHARMACY_STORAGE_MAPPING_METHOD_NOTE_EN =
+  "The guide for temperature mapping of medicinal product storage areas approved by EEC Board Recommendation No. 8 is used as a methodological reference. " +
+  "This protocol is adapted to its structure and approach. For a pharmacy storage room / area, " +
+  "the study duration is established as not less than 7 consecutive days (168 hours), considering risk assessment, operating mode of the room " +
+  "and representativeness of the observation period.";
+
 function drawWarehouseEquipmentList(doc: PDFKit.PDFDocument, input: ReportInput, prefix = "5.1."): void {
   const en = isEnglishWarehouse(input);
   const eqList = input.warehouseEquipment ?? [];
   if (eqList.length === 0) return;
 
-  drawSubTitle(doc, en ? `${prefix} Equipment Installed in the Storage Area` : `${prefix} Перечень оборудования зоны хранения`);
+    const pharmacy = getReportEquipmentType(input) === "warehouse";
+    drawSubTitle(doc, en
+      ? `${prefix} Equipment Installed in the ${pharmacy ? "Pharmacy Storage Room / Area" : "Storage Area"}`
+      : `${prefix} Перечень оборудования ${pharmacy ? "помещения (зоны) хранения аптеки" : "зоны хранения"}`);
   eqList.forEach((eq, idx) => {
     ensureSpace(doc, 60);
     doc.font("bold").fontSize(10).fillColor(ACCENT)
@@ -6763,6 +6881,28 @@ function normalizeWarehouseSectionText(key: string, text: string, en: boolean): 
   return out;
 }
 
+/** Keeps pharmacy-storage PDFs free of legacy warehouse/distribution wording. */
+function normalizePharmacySectionText(text: string, en: boolean): string {
+  if (en) {
+    return text
+      .split("\n")
+      .filter(line => !/\bGDP\b|\bGPP\b|\bGMP\b|warehouse|receiv(?:e|ing)|dispatch|picking/i.test(line))
+      .join("\n")
+      .replace(/storage area/gi, "pharmacy storage room / area")
+      .replace(/storage room(?! \/ area)/gi, "pharmacy storage room")
+      .replace(/routine pharmacy activities[^.]*receipt[^.]*/gi, "routine pharmacy activities");
+  }
+  return text
+    .split("\n")
+    .filter(line => !/\bGDP\b|\bGPP\b|\bGMP\b|склад|дистрибьютор|производственн/i.test(line))
+    .join("\n")
+    .replace(/помещение\/зона хранения/gi, "помещение (зона) хранения аптеки")
+    .replace(/(?<!\()зоны хранения/gi, "помещения (зоны) хранения аптеки")
+    .replace(/(?<!\()зона хранения/gi, "помещение (зона) хранения аптеки")
+    .replace(/приемкой, размещением, комплектованием и отпуском продукции/gi, "движением персонала и выполнением повседневных операций аптеки")
+    .replace(/GxP/gi, "утверждённым порядком документооборота");
+}
+
 /**
  * Renders warehouse protocol Part I with sections 1–7 per EEC Rec. #8.
  */
@@ -6771,10 +6911,12 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
   const sec = (key: string): string => {
     const custom = input.warehouseSections?.[key];
     if (custom !== undefined && custom.trim() !== "" && (!en || !hasCyrillic(custom))) {
-      return normalizeWarehouseSectionText(key, custom, en);
+      const normalized = normalizeWarehouseSectionText(key, custom, en);
+      return getReportEquipmentType(input) === "warehouse" ? normalizePharmacySectionText(normalized, en) : normalized;
     }
     const fallback = warehouseDefaultSectionText(key, input, en);
-    return normalizeWarehouseSectionText(key, fallback, en);
+    const normalized = normalizeWarehouseSectionText(key, fallback, en);
+    return getReportEquipmentType(input) === "warehouse" ? normalizePharmacySectionText(normalized, en) : normalized;
   };
 
   // ── Section 1: Сокращения и определения ─────────────────────────────────
@@ -6807,7 +6949,9 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
   drawSubTitle2(doc, en ? "2.2.1. Regulatory Basis" : "2.2.1. Нормативные основания");
   renderTextBlock(doc, sec("2.2.1"));
   drawSubTitle2(doc, en ? "Methodological Approach" : "Принятый методологический подход");
-  renderTextBlock(doc, en ? WAREHOUSE_MAPPING_METHOD_NOTE_EN : WAREHOUSE_MAPPING_METHOD_NOTE);
+  renderTextBlock(doc, en
+    ? (getReportEquipmentType(input) === "warehouse" ? PHARMACY_STORAGE_MAPPING_METHOD_NOTE_EN : WAREHOUSE_MAPPING_METHOD_NOTE_EN)
+    : (getReportEquipmentType(input) === "warehouse" ? PHARMACY_STORAGE_MAPPING_METHOD_NOTE : WAREHOUSE_MAPPING_METHOD_NOTE));
   drawSubTitle2(doc, en ? "2.2.2. Study-Specific Rationale" : "2.2.2. Конкретные основания для проведения исследования");
   renderTextBlock(doc, sec("2.2.2"));
 

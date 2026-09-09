@@ -37,7 +37,7 @@ const EQUIPMENT_OPTIONS: { value: EquipmentType; label: string }[] = [
   { value: "auto-refrigerator-kg", label: "Авторефрижератор Кыргызстана" },
   { value: "chamber", label: "Холодильная камера" },
   { value: "thermal-container", label: "Термоконтейнер" },
-  { value: "warehouse", label: "Помещение / зона хранения" },
+  { value: "warehouse", label: "Помещение (зона) хранения аптеки" },
   { value: "warehouse-kg", label: "Помещение / зона хранения Кыргызстана" },
   { value: "warehouse-expert", label: "Помещение / зона хранения (экспертное)" },
   { value: "other", label: "Другое оборудование" },
