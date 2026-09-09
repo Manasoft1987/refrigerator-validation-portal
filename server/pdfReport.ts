@@ -6533,16 +6533,15 @@ MKT (Mean Kinetic Temperature) — среднекинетическая темп
   "2.2.1": `Настоящее температурное картирование проводится в соответствии с:
 • Рекомендацией Коллегии ЕЭК от 20.04.2026 № 8 «О Руководстве по проведению температурного картирования зон хранения лекарственных средств»;
 • Приказом и.о. МЗ РК от 04.02.2021 г. № ҚР ДСМ-15 «Об утверждении надлежащих фармацевтических практик»;
+• Приказом МЗ РК от 16.02.2021 г. № ҚР ДСМ-19 «Об утверждении правил хранения и транспортировки лекарственных средств и медицинских изделий»;
 • Внутренними стандартными операционными процедурами аптеки.`,
 
   "2.2.2": `Конкретные основания для проведения данного исследования:
-• Первичное картирование перед вводом помещения в эксплуатацию / после ремонта;
-• Плановое периодическое картирование (ежегодное / сезонное);
-• Картирование после существенных изменений в помещении или системах кондиционирования.`,
+• Первичное картирование.`,
 
   "3": `Настоящий протокол распространяется на помещение (зону) хранения аптеки, указанное в разделе 2.1. Результаты картирования применяются для:
 • подтверждения соответствия температурных условий установленным требованиям;
-• определения мест размещения датчиков системы мониторинга;
+• определения мест размещения средств измерения для мониторинга условий хранения лекарственных средств;
 • разработки рекомендаций по безопасному хранению лекарственных средств.`,
 
   "4": `Цели температурного картирования:
@@ -6550,7 +6549,7 @@ MKT (Mean Kinetic Temperature) — среднекинетическая темп
 б) выявление «горячих» и «холодных» точек, а также участков помещения с нестабильным температурным режимом;
 в) документальная фиксация зарегистрированных колебаний температуры;
 г) составление рекомендаций по безопасному размещению лекарственных средств в помещении (зоне) хранения аптеки;
-д) определение (уточнение) мест размещения датчиков мониторинга температуры.`,
+д) определение (выявление) мест размещения приборов мониторинга температуры.`,
 
   "6.1": `Тип регистраторов данных: [указать марку/модель]
 Диапазон измерений: [указать]
@@ -6616,7 +6615,8 @@ Purpose: storage of medicinal products under controlled temperature conditions.`
 
   "2.2.1": `This temperature mapping study is performed with consideration of:
 • EEC Board Recommendation No. 8 dated 20.04.2026 on the Guide for temperature mapping of medicinal product storage areas;
-• applicable pharmaceutical storage requirements;
+• Order No. ҚР ДСМ-15 dated 04.02.2021 approving Good Pharmaceutical Practices;
+• Order of the Ministry of Health of the Republic of Kazakhstan No. ҚР ДСМ-19 dated 16.02.2021 approving the rules for storage and transportation of medicinal products and medical devices;
 • Internal standard operating procedures of the pharmacy.`,
 
   "2.2.2": `Study-specific rationale may include:
@@ -6626,7 +6626,7 @@ Purpose: storage of medicinal products under controlled temperature conditions.`
 
   "3": `This protocol applies to the pharmacy storage room / area specified in Section 2.1. The mapping results are used to:
 • confirm compliance of temperature conditions with defined requirements;
-• define appropriate locations for routine monitoring sensors;
+• define locations for measuring instruments used to monitor medicinal product storage conditions;
 • develop recommendations for safe storage of medicinal products.`,
 
   "4": `The objectives of temperature mapping are:
@@ -6634,7 +6634,7 @@ a) to confirm that temperature conditions in the pharmacy storage room / area re
 b) to identify hot and cold points and areas with unstable temperature behaviour;
 c) to document recorded temperature fluctuations;
 d) to provide recommendations for safe storage of medicinal products;
-e) to define or confirm monitoring sensor placement points.`,
+e) to identify locations for temperature monitoring instruments.`,
 
   "6.1": `Data logger type: [specify make/model]
 Measurement range: [specify]
@@ -6705,6 +6705,10 @@ MKT (Mean Kinetic Temperature) — среднекинетическая темп
 • Рекомендацией Коллегии ЕЭК от 20.04.2026 № 8 «О Руководстве по проведению температурного картирования зон хранения лекарственных средств»;
 • Требованиями GDP/GPP/GMP в части обеспечения условий хранения лекарственных средств;
 • Внутренними стандартными операционными процедурами организации.`,
+  "2.2.2": `Конкретные основания для проведения данного исследования:
+• Первичное картирование перед вводом помещения в эксплуатацию / после ремонта;
+• Плановое периодическое картирование (ежегодное / сезонное);
+• Картирование после существенных изменений в помещении или системах кондиционирования.`,
   "3": `Настоящий протокол распространяется на помещение (зону) хранения лекарственных средств, указанное в разделе 2.1. Результаты картирования применяются для:
 • подтверждения соответствия температурных условий установленным требованиям;
 • определения мест размещения датчиков системы мониторинга;
@@ -6756,6 +6760,10 @@ Purpose: storage of medicinal products under controlled temperature conditions.`
 • EEC Board Recommendation No. 8 dated 20.04.2026 on the Guide for temperature mapping of medicinal product storage areas;
 • GDP / GPP / GMP requirements related to maintaining storage conditions for medicinal products;
 • Internal standard operating procedures of the organization.`,
+  "2.2.2": `Study-specific rationale may include:
+• Initial mapping before commissioning of the storage area / after renovation;
+• Scheduled periodic mapping (annual and/or seasonal);
+• Mapping after significant changes to the room layout, HVAC/heating system or operating conditions.`,
   "3": `This protocol applies to the storage room / storage area specified in Section 2.1. The mapping results are used to:
 • confirm compliance of temperature conditions with defined requirements;
 • define appropriate locations for routine monitoring sensors;
@@ -6778,6 +6786,39 @@ During the study period:
 After completion of the study period, data loggers are retrieved. Serial numbers of data loggers and their placement locations are re-checked against the approved layout and placement table.`,
   "6.10": `Data from each logger are downloaded using appropriate software. Data files are combined for joint analysis. Source files are retained in the archive.`,
 };
+
+function pharmacyAutoSectionText(key: string, input: ReportInput, en: boolean): string | null {
+  const gi = input.generalInfo;
+  const value = (raw: unknown, fallback = "—") => {
+    const text = String(raw ?? "").trim();
+    return text || fallback;
+  };
+  if (key === "2.1") {
+    const location = value(gi?.location);
+    const purpose = value(gi?.purpose, en ? "Storage of medicinal products" : "Хранение лекарственных средств");
+    const tempMode = value(gi?.tempMode);
+    return en
+      ? `Mapping object: pharmacy storage room / area for medicinal products.\nAddress: ${location}\nPurpose: ${purpose}${tempMode !== "—" ? `\nTemperature regime: ${tempMode}.` : "."}`
+      : `Объект картирования: помещение (зона) хранения аптеки.\nАдрес: ${location}\nНазначение: ${purpose}${tempMode !== "—" ? `\nТемпературный режим: ${tempMode}.` : "."}`;
+  }
+  if (key === "2.2.2") {
+    const type = gi?.qualificationType || gi?.basis;
+    const label = type === "primary"
+      ? (en ? "Initial" : "Первичное")
+      : (en ? "Repeat" : "Повторное");
+    return en
+      ? `Study-specific rationale:\n• ${label} mapping.`
+      : `Конкретные основания для проведения данного исследования:\n• ${label} картирование.`;
+  }
+  return null;
+}
+
+function isDefaultPharmacySection(key: string, text: string): boolean {
+  const value = text.trim();
+  if (key === "2.1") return !value || value.startsWith("Настоящий протокол описывает") || value.startsWith("Объект картирования:") || value.startsWith("Mapping object:") || value.includes("[указать адрес") || value.includes("[specify object address]");
+  if (key === "2.2.2") return !value || value.startsWith("Проведение настоящего исследования обусловлено") || value.startsWith("Конкретные основания для проведения данного исследования:") || value.startsWith("Study-specific rationale");
+  return false;
+}
 
 function warehouseDefaultSectionText(key: string, input: ReportInput, en: boolean): string {
   const pharmacy = getReportEquipmentType(input) === "warehouse";
@@ -6810,8 +6851,8 @@ const WAREHOUSE_MAPPING_METHOD_NOTE_EN =
 
 const PHARMACY_STORAGE_MAPPING_METHOD_NOTE_EN =
   "The guide for temperature mapping of medicinal product storage areas approved by EEC Board Recommendation No. 8 is used as a methodological reference. " +
-  "This protocol is adapted to its structure and approach. For a pharmacy storage room / area, " +
-  "the study duration is established as not less than 7 consecutive days (168 hours), considering risk assessment, operating mode of the room " +
+  "This protocol is adapted to its structure and approach. For controlled-environment rooms, " +
+  "the study duration is established as not less than 7 consecutive days (168 hours), considering risk assessment, operating mode of the object " +
   "and representativeness of the observation period.";
 
 function drawWarehouseEquipmentList(doc: PDFKit.PDFDocument, input: ReportInput, prefix = "5.1."): void {
@@ -6910,6 +6951,11 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
   const en = isEnglishWarehouse(input);
   const sec = (key: string): string => {
     const custom = input.warehouseSections?.[key];
+    if (getReportEquipmentType(input) === "warehouse" && (key === "2.1" || key === "2.2.2")) {
+      const current = custom?.trim() || "";
+      const autoText = pharmacyAutoSectionText(key, input, en);
+      if (autoText && isDefaultPharmacySection(key, current)) return autoText;
+    }
     if (custom !== undefined && custom.trim() !== "" && (!en || !hasCyrillic(custom))) {
       const normalized = normalizeWarehouseSectionText(key, custom, en);
       return getReportEquipmentType(input) === "warehouse" ? normalizePharmacySectionText(normalized, en) : normalized;
