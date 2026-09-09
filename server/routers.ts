@@ -509,19 +509,26 @@ function defaultQuestionsFor(stage: "iq" | "oq", equipmentType?: string | null):
   return stage === "iq" ? DEFAULT_IQ_QUESTIONS : DEFAULT_OQ_QUESTIONS;
 }
 
-async function templateQuestionsForReport(stage: "iq" | "oq", equipmentType?: string | null): Promise<string[]> {
+type TemplateQuestionSource = {
+  questions: string[];
+  fromDbTemplate: boolean;
+};
+
+async function templateQuestionSourceForReport(stage: "iq" | "oq", equipmentType?: string | null): Promise<TemplateQuestionSource> {
   if (equipmentType === "chamber" || equipmentType === "thermal-container") {
     await ensureChamberQuestionsReady();
   }
   if (!equipmentType) {
     const dbTemplates = await listQuestionTemplates(stage);
     return dbTemplates.length > 0
-      ? dbTemplates.map(template => template.text)
-      : defaultQuestionsFor(stage, equipmentType);
+      ? { questions: dbTemplates.map(template => template.text), fromDbTemplate: true }
+      : { questions: defaultQuestionsFor(stage, equipmentType), fromDbTemplate: false };
   }
 
   const typedTemplates = await listQuestionTemplates(stage, equipmentType);
-  if (typedTemplates.length > 0) return typedTemplates.map(template => template.text);
+  if (typedTemplates.length > 0) {
+    return { questions: typedTemplates.map(template => template.text), fromDbTemplate: true };
+  }
 
   if (
     isWarehouseLike(equipmentType) ||
@@ -529,13 +536,17 @@ async function templateQuestionsForReport(stage: "iq" | "oq", equipmentType?: st
     equipmentType === "chamber" ||
     equipmentType === "thermal-container"
   ) {
-    return defaultQuestionsFor(stage, equipmentType);
+    return { questions: defaultQuestionsFor(stage, equipmentType), fromDbTemplate: false };
   }
 
   const genericTemplates = await listQuestionTemplates(stage);
   return genericTemplates.length > 0
-    ? genericTemplates.map(template => template.text)
-    : defaultQuestionsFor(stage, equipmentType);
+    ? { questions: genericTemplates.map(template => template.text), fromDbTemplate: true }
+    : { questions: defaultQuestionsFor(stage, equipmentType), fromDbTemplate: false };
+}
+
+async function templateQuestionsForReport(stage: "iq" | "oq", equipmentType?: string | null): Promise<string[]> {
+  return (await templateQuestionSourceForReport(stage, equipmentType)).questions;
 }
 
 function activeWarehouseChecklistForReport<T extends {
@@ -547,6 +558,7 @@ function activeWarehouseChecklistForReport<T extends {
 }>(
   savedItems: T[],
   activeQuestions: string[],
+  options: { activeQuestionsAreTemplate?: boolean } = {},
 ): T[] {
   const cleanSaved = savedItems
     .slice()
@@ -561,6 +573,25 @@ function activeWarehouseChecklistForReport<T extends {
       answer: "unset" as const,
       comment: null,
     } as T));
+  }
+
+  if (options.activeQuestionsAreTemplate && cleanQuestions.length > 0) {
+    const usedIndexes = new Set<number>();
+    return cleanQuestions.map((questionText, questionIndex) => {
+      const matched = findWarehouseChecklistQuestionMatch(cleanSaved, questionText, usedIndexes);
+      if (matched) {
+        usedIndexes.add(matched.index);
+      }
+      const samePosition = !usedIndexes.has(questionIndex) ? cleanSaved[questionIndex] : null;
+      const saved = matched?.item ?? samePosition ?? null;
+      return {
+        questionIndex,
+        questionText,
+        answer: saved?.answer ?? "unset",
+        comment: saved?.comment ?? null,
+        updatedAt: saved?.updatedAt ?? null,
+      } as T;
+    });
   }
 
   const normalizedSaved = cleanSaved.map(item => normalizeWarehouseChecklistQuestion(item.questionText));
@@ -2141,16 +2172,24 @@ export const appRouter = router({
               : isThermalContainerProtocol
                 ? THERMAL_CONTAINER_STAGE_TEMPLATES
                 : STAGE_TEMPLATES;
-        const iqItems = isWarehouseProtocol && !isEnglishWarehouseReport
+        const iqQuestionSource = isWarehouseProtocol && !isEnglishWarehouseReport
+          ? await templateQuestionSourceForReport("iq", effectiveEquipmentType)
+          : null;
+        const oqQuestionSource = isWarehouseProtocol && !isEnglishWarehouseReport
+          ? await templateQuestionSourceForReport("oq", effectiveEquipmentType)
+          : null;
+        const iqItems = iqQuestionSource
           ? activeWarehouseChecklistForReport(
               rawIqItems,
-              await templateQuestionsForReport("iq", effectiveEquipmentType),
+              iqQuestionSource.questions,
+              { activeQuestionsAreTemplate: iqQuestionSource.fromDbTemplate },
             )
           : rawIqItems;
-        const oqItems = isWarehouseProtocol && !isEnglishWarehouseReport
+        const oqItems = oqQuestionSource
           ? activeWarehouseChecklistForReport(
               rawOqItems,
-              await templateQuestionsForReport("oq", effectiveEquipmentType),
+              oqQuestionSource.questions,
+              { activeQuestionsAreTemplate: oqQuestionSource.fromDbTemplate },
             )
           : rawOqItems;
         if (hasPVData) {

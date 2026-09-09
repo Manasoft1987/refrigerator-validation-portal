@@ -490,7 +490,10 @@ function pharmacyAutoSectionText(key: string, generalInfo: any): string | null {
 function isDefaultPharmacySection(key: string, value: string): boolean {
   const text = value.trim();
   if (key === "2.1") return !text || text.startsWith("Настоящий протокол описывает") || text.startsWith("Объект картирования:") || text.includes("[указать адрес");
+  if (key === "2.2.1") return !text || text.startsWith("Настоящее температурное картирование проводится") || /\bGDP\b|\bGPP\b|\bGMP\b|склад/i.test(text);
   if (key === "2.2.2") return !text || text.startsWith("Проведение настоящего исследования обусловлено") || text.startsWith("Конкретные основания для проведения данного исследования:");
+  if (key === "3") return !text || text.startsWith("Настоящий протокол распространяется");
+  if (key === "4") return !text || text.startsWith("Цели температурного картирования");
   return false;
 }
 
@@ -524,6 +527,9 @@ export default function WarehouseProtocolStep({ protocolId, onDone, onBack }: Pr
       for (const key of ["2.1", "2.2.2"]) {
         const autoText = pharmacyAutoSectionText(key, giData);
         if (autoText && isDefaultPharmacySection(key, merged[key] || "")) merged[key] = autoText;
+      }
+      for (const key of ["2.2.1", "3", "4"]) {
+        if (isDefaultPharmacySection(key, merged[key] || "")) merged[key] = defaultSections[key] ?? merged[key];
       }
     }
     // Auto-fill 6.2 from commission if it still has the default placeholder text

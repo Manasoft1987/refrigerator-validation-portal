@@ -6816,7 +6816,10 @@ function pharmacyAutoSectionText(key: string, input: ReportInput, en: boolean): 
 function isDefaultPharmacySection(key: string, text: string): boolean {
   const value = text.trim();
   if (key === "2.1") return !value || value.startsWith("Настоящий протокол описывает") || value.startsWith("Объект картирования:") || value.startsWith("Mapping object:") || value.includes("[указать адрес") || value.includes("[specify object address]");
+  if (key === "2.2.1") return !value || value.startsWith("Настоящее температурное картирование проводится") || value.startsWith("This temperature mapping study is performed") || /\bGDP\b|\bGPP\b|\bGMP\b|склад|warehouse/i.test(value);
   if (key === "2.2.2") return !value || value.startsWith("Проведение настоящего исследования обусловлено") || value.startsWith("Конкретные основания для проведения данного исследования:") || value.startsWith("Study-specific rationale");
+  if (key === "3") return !value || value.startsWith("Настоящий протокол распространяется") || value.startsWith("This protocol applies to");
+  if (key === "4") return !value || value.startsWith("Цели температурного картирования") || value.startsWith("The objectives of temperature mapping");
   return false;
 }
 
@@ -6955,6 +6958,9 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
       const current = custom?.trim() || "";
       const autoText = pharmacyAutoSectionText(key, input, en);
       if (autoText && isDefaultPharmacySection(key, current)) return autoText;
+    }
+    if (getReportEquipmentType(input) === "warehouse" && custom !== undefined && isDefaultPharmacySection(key, custom)) {
+      return normalizePharmacySectionText(warehouseDefaultSectionText(key, input, en), en);
     }
     if (custom !== undefined && custom.trim() !== "" && (!en || !hasCyrillic(custom))) {
       const normalized = normalizeWarehouseSectionText(key, custom, en);

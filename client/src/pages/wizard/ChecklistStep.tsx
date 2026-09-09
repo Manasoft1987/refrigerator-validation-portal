@@ -83,10 +83,11 @@ export default function ChecklistStep({
             .filter((q: string) => q.trim().length > 0)
             .map((q: string, index: number) => {
               const matched = findWarehouseChecklistQuestionMatch(savedItems, q, usedIndexes);
-              const saved = matched?.item;
               if (matched) {
                 usedIndexes.add(matched.index);
               }
+              const samePosition = !usedIndexes.has(index) ? savedItems[index] : null;
+              const saved = matched?.item ?? samePosition;
               return {
                 questionIndex: index,
                 questionText: q,
