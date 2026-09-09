@@ -3578,7 +3578,7 @@ function drawFinalConclusion(doc: PDFKit.PDFDocument, input: ReportInput) {
         (isWarehouseLike(getReportEquipmentType(input))
           ? `Система кондиционирования/отопления обеспечивает стабильное распределение температуры по всему объёму помещения. ` 
           : "") +
-        `Валидация завершена с положительным заключением.${excNote}`;
+        `${isWarehouseConclusion ? "Испытание завершено" : "Валидация завершена"} с положительным заключением.${excNote}`;
   } else if (anyFail) {
     bg = "#fef2f2";
     bd = "#fecaca";
