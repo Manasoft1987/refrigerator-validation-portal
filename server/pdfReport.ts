@@ -1207,39 +1207,44 @@ function drawWarehouseTemperatureOverlay(
   doc: PDFKit.PDFDocument,
   plan: WarehouseMarkerBox,
   points: Array<{ x: number; y: number; avg: number }>,
-  opacity = 0.24,
+  opacity = 0.64,
 ): { lo: number; hi: number } | null {
-  const range = warehouseTemperatureOverlayRange(points.map(point => point.avg));
+  const finitePoints = points.filter(point =>
+    Number.isFinite(point.x) &&
+    Number.isFinite(point.y) &&
+    Number.isFinite(point.avg),
+  );
+  const range = warehouseTemperatureOverlayRange(finitePoints.map(point => point.avg));
   if (!range) return null;
-  const cols = 44;
-  const rows = Math.max(18, Math.round(cols * (plan.h / Math.max(1, plan.w))));
-  const cellW = plan.w / cols;
-  const cellH = plan.h / rows;
-  const minD2 = Math.pow(Math.max(plan.w, plan.h) * 0.055, 2);
+  const minSide = Math.min(plan.w, plan.h);
+  const baseRadius = Math.max(44, Math.min(112, minSide * 0.23));
+  const rings = 24;
+  const midTemp = range.lo + (range.hi - range.lo) / 2;
 
   doc.save();
   doc.rect(plan.x, plan.y, plan.w, plan.h).clip();
-  doc.opacity(opacity);
-  for (let row = 0; row < rows; row += 1) {
-    for (let col = 0; col < cols; col += 1) {
-      const x = plan.x + (col + 0.5) * cellW;
-      const y = plan.y + (row + 0.5) * cellH;
-      let numerator = 0;
-      let denominator = 0;
-      for (const point of points) {
-        const dx = x - point.x;
-        const dy = y - point.y;
-        const d2 = Math.max(minD2, dx * dx + dy * dy);
-        const weight = 1 / Math.pow(d2, 1.08);
-        numerator += point.avg * weight;
-        denominator += weight;
-      }
-      const interpolated = denominator > 0 ? numerator / denominator : points[0]?.avg ?? range.lo;
-      doc
-        .fillColor(warehouseTemperatureColor(interpolated, range.lo, range.hi))
-        .rect(plan.x + col * cellW, plan.y + row * cellH, cellW + 0.8, cellH + 0.8)
-        .fill();
+
+  // A very light neutral wash keeps the color map readable without making the
+  // whole rectangular canvas look like a measured hot/cold zone.
+  doc.opacity(0.08).fillColor(warehouseTemperatureColor(midTemp, range.lo, range.hi))
+    .rect(plan.x, plan.y, plan.w, plan.h)
+    .fill();
+
+  // Draw local radial temperature fields around the actual measurement points.
+  // This prevents a high/low corner from appearing in empty space when the
+  // label bubble is offset from the true point by a leader arrow.
+  const orderedPoints = [...finitePoints].sort((a, b) => Math.abs(a.avg - midTemp) - Math.abs(b.avg - midTemp));
+  for (const point of orderedPoints) {
+    const color = warehouseTemperatureColor(point.avg, range.lo, range.hi);
+    for (let ring = rings; ring >= 1; ring -= 1) {
+      const k = ring / rings;
+      const radius = baseRadius * k;
+      const ringOpacity = opacity * (0.008 + Math.pow(1 - k, 1.75) * 0.075);
+      doc.opacity(ringOpacity).fillColor(color).circle(point.x, point.y, radius).fill();
     }
+    doc.opacity(Math.min(0.62, opacity * 0.70)).fillColor(color)
+      .circle(point.x, point.y, Math.max(5.5, baseRadius * 0.075))
+      .fill();
   }
   doc.restore();
   return range;
@@ -5338,19 +5343,21 @@ function drawWarehousePlanDiagram(
         typeof sp.leaderEndYPct === "number" &&
         Number.isFinite(sp.leaderEndXPct) &&
         Number.isFinite(sp.leaderEndYPct);
+      const leaderXPct = hasLeader ? warehouseClamp01((sp.leaderEndXPct as number) / 100) : null;
+      const leaderYPct = hasLeader ? warehouseClamp01((sp.leaderEndYPct as number) / 100) : null;
       return [{
-        x: hasLeader
-          ? planX + ((sp.leaderEndXPct as number) / 100) * drawW
+        x: leaderXPct !== null
+          ? planX + leaderXPct * drawW
           : planX + ((sp.xPct + sp.widthPct / 2) / 100) * drawW,
-        y: hasLeader
-          ? planY + ((sp.leaderEndYPct as number) / 100) * drawH
+        y: leaderYPct !== null
+          ? planY + leaderYPct * drawH
           : planY + ((sp.yPct + sp.heightPct / 2) / 100) * drawH,
         avg,
       }];
     })
     : [];
   const heatmapRange = heatmapPoints.length > 0
-    ? drawWarehouseTemperatureOverlay(doc, markerPlanBox, heatmapPoints, embeddedPlanBackground ? 0.34 : 0.38)
+    ? drawWarehouseTemperatureOverlay(doc, markerPlanBox, heatmapPoints, embeddedPlanBackground ? 0.78 : 0.84)
     : null;
   if (heatmapRange) {
     doc.save();
@@ -5541,10 +5548,10 @@ function drawWarehousePlanDiagram(
     const isCriticalHot = floorSensorPointMatchesTokens(sp, criticalSensorTokens.hot);
     const isCriticalCold = floorSensorPointMatchesTokens(sp, criticalSensorTokens.cold);
     doc.save();
-    let labelFont = Math.max(4.4, Math.min(8.4, r * 0.52));
+    let labelFont = Math.max(5.0, Math.min(9.2, r * 0.58));
     doc.font("bold").fontSize(labelFont);
-    const maxLabelW = r * 1.86;
-    while (labelFont > 3.8 && doc.widthOfString(label) > maxLabelW) {
+    const maxLabelW = r * 1.96;
+    while (labelFont > 4.3 && doc.widthOfString(label) > maxLabelW) {
       labelFont -= 0.2;
       doc.font("bold").fontSize(labelFont);
     }
@@ -5589,10 +5596,10 @@ function drawWarehousePlanDiagram(
     }
     if (avgLabel) {
       const avgText = `(${avgLabel})`;
-      const avgFont = Math.max(5.2, Math.min(7.4, r * 0.58));
+      const avgFont = Math.max(5.8, Math.min(8.2, r * 0.64));
       doc.font("bold").fontSize(avgFont);
       const avgW = Math.max(r * 2.35, doc.widthOfString(avgText) + 4);
-      const avgH = avgFont + 3.2;
+      const avgH = avgFont + 4.0;
       const avgX = Math.max(markerPlanBox.x + 1, Math.min(markerPlanBox.x + markerPlanBox.w - avgW - 1, spX - avgW / 2));
       const preferredAvgY = spY + r + 1.2;
       const avgY = preferredAvgY + avgH <= markerPlanBox.y + markerPlanBox.h - 1
