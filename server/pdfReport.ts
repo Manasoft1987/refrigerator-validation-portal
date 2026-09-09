@@ -1593,6 +1593,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
       drawWarehousePlanDiagram(doc, input, false, isEnglishWarehouse(input) ? "Diagram 2. Logger placement on the storage area plan (logger IDs)" : "Схема 2. Расстановка регистраторов на плане помещения (номера логгеров)", {
         showCriticalMarkers: false,
         showAverageLabels: false,
+        showHeightLabels: true,
         showPlacementTable: false,
         showLoggerPlacementTable: true,
       });
