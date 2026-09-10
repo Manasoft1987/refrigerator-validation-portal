@@ -7351,14 +7351,7 @@ function warehouseCalibrationSummary(input: ReportInput): string {
 function warehouseMethodologySectionText(key: string, input: ReportInput): string | null {
   if (!isPharmacyStorageReport(input) || isEnglishWarehouse(input)) return null;
   const gi = input.generalInfo;
-  const metrics = warehouseRoomMetrics(input);
   const counts = warehouseLoggerCounts(input);
-  const calc = computeWarehouseSensorCount({
-    lengthM: metrics.lengthM,
-    widthM: metrics.widthM,
-    heightM: metrics.heightM,
-    externalEnv: !!gi?.whExternalEnv,
-  });
   const tempMode = pvTemperatureModeLabel(input.pv, input);
   const accuracyText =
     input.pv.sensorAccuracy === undefined || input.pv.sensorAccuracy === null
@@ -7394,11 +7387,10 @@ function warehouseMethodologySectionText(key: string, input: ReportInput): strin
   }
 
   if (key === "6.5") {
-    const calculatedText = calc.total > 0
-      ? `Расчет по геометрии помещения: длина ${warehouseMetricValue(metrics.lengthM)} м - ${calc.nL} точки; ширина ${warehouseMetricValue(metrics.widthM)} м - ${calc.nW} точки; высота ${warehouseMetricValue(metrics.heightM)} м - ${calc.nV} уровня; расчетная база ${calc.nL} x ${calc.nW} x ${calc.nV} = ${calc.base}. ${calc.external ? "Дополнительно предусмотрен 1 внешний регистратор для контроля температуры окружающей среды." : ""}`.trim()
-      : "Количество точек размещения задано специалистом на плане помещения, так как расчетная геометрия помещения заполнена не полностью.";
     return [
-      calculatedText,
+      `Количество регистраторов определяется по методическому расчету исходя из протяженности помещения по длине и ширине, а также количества уровней размещения по высоте. По каждой горизонтальной оси предусматривается: при размере до 10 м включительно - 2 точки; свыше 10 до 40 м включительно - 3 точки; свыше 40 до 60 м включительно - 4 точки; свыше 60 м - 5 точек.`,
+      `По высоте предусматривается: при высоте до 1,5 м включительно - 1 уровень; свыше 1,5 м и менее 5 м - 2 уровня; 5 м и более - 3 уровня. Расчетная база определяется как произведение количества точек по длине, ширине и высоте: N = Nдлины x Nширины x Nвысоты.`,
+      `При наличии контакта помещения с внешней средой дополнительно предусматривается 1 внешний регистратор, установленный на улице для мониторинга температуры окружающей среды.`,
       `Фактически на схеме размещено: внутренних регистраторов ${counts.internal}, внешних регистраторов ${counts.external}, всего ${counts.total}.`,
       `При выборе точек учтены длина, ширина и высота помещения, расположение дверей, окон, стеллажей, кондиционера/отопления и участков возможного контакта с внешней средой.`,
       `Такой подход позволяет выявить температурные градиенты по объему помещения, зоны локального нагрева/охлаждения и места, пригодные для последующего размещения приборов мониторинга температуры.`,

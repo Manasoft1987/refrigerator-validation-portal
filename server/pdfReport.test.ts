@@ -503,6 +503,9 @@ describe("warehouse methodology logger table", () => {
     expect(text).toContain("Геометрические размеры: 4.20 x 3.10 x 2.50 м");
     expect(text).toContain("сезон исследования: Тёплый период");
     expect(text).toContain("6.5. Сведения об определении точек размещения");
+    expect(text).toContain("Количество регистраторов определяется по методическому расчету исходя из протяженности помещения");
+    expect(text).toContain("N = Nдлины x Nширины x Nвысоты");
+    expect(text).not.toContain("Расчет по геометрии помещения");
     expect(text).toContain("Фактически на схеме размещено: внутренних регистраторов 1, внешних регистраторов 1");
     expect(text).toContain("Схема 1. Планируемые точки размещения регистраторов на плане помещения");
     expect(text).toContain("0.3 м");
