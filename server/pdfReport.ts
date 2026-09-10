@@ -5557,7 +5557,7 @@ function drawWarehousePlanDiagram(
   const hasStructuredPlanData =
     hasRoomDimensions ||
     (input.floorPlanObjects?.length ?? 0) > 0 ||
-    (input.pvLoggers?.length ?? 0) > 0;
+    !!input.planBackgroundImageUrl;
 
   // ── If we have a saved PNG screenshot, embed it directly ──
   // Prefer structured coordinates: screenshots can contain editor controls,
@@ -7471,6 +7471,15 @@ function findWarehouseSensorPointForLogger(input: ReportInput, logger: Warehouse
     }) ?? null;
 }
 
+function hasWarehousePlannedPlacementDiagram(input: ReportInput): boolean {
+  const hasPlanObjects = (input.floorPlanObjects ?? []).length > 0;
+  const hasAssignedLoggers = (input.pvLoggers ?? []).some(logger => {
+    const position = String(logger.position ?? "").trim();
+    return position.length > 0 && position !== "unset";
+  });
+  return Boolean(input.planBackgroundImageUrl || input.planImageUrl || hasPlanObjects || hasAssignedLoggers);
+}
+
 function warehouseLoggerFullId(logger: WarehouseLoggerSelectionEntry): string {
   return warehouseValue(logger.label || logger.customName || logger.id);
 }
@@ -7681,6 +7690,26 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput,
       drawWarehousePersonnelTable(doc, input);
     } else {
       renderTextBlock(doc, warehouseMethodologySectionText(key, input) ?? sec(key));
+      const hasPlacementPlan = key === "6.5" && hasWarehousePlannedPlacementDiagram(input);
+      if (hasPlacementPlan) {
+        drawWarehousePlanDiagram(
+          doc,
+          input,
+          false,
+          en
+            ? "Diagram 1. Planned logger placement points on the room plan"
+            : "Схема 1. Планируемые точки размещения регистраторов на плане помещения",
+          {
+            showCriticalMarkers: false,
+            showAverageLabels: false,
+            showSensorLabels: false,
+            showHeightLabels: true,
+            showPlacementTable: false,
+            showLoggerPlacementTable: false,
+            showCaption: false,
+          },
+        );
+      }
     }
   });
 

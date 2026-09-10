@@ -455,6 +455,38 @@ describe("warehouse methodology logger table", () => {
           coldIdx: 0,
           extIndices: [1],
         },
+        pvLoggers: [
+          { id: 1, label: "230804STS0019282", customName: null, role: "internal", position: "sensor-9282" },
+          { id: 2, label: "240903STS0042037", customName: null, role: "external", position: "sensor-2037" },
+        ],
+        floorPlanObjects: [
+          {
+            id: "sensor-9282",
+            type: "sensor_point",
+            xPct: 20,
+            yPct: 40,
+            widthPct: 5,
+            heightPct: 5,
+            heightM: 0.3,
+            rotation: 0,
+            label: "9282",
+            leaderEndXPct: 18,
+            leaderEndYPct: 38,
+          },
+          {
+            id: "sensor-2037",
+            type: "sensor_point",
+            xPct: 8,
+            yPct: 18,
+            widthPct: 5,
+            heightPct: 5,
+            heightM: 2.2,
+            rotation: 0,
+            label: "2037",
+            leaderEndXPct: 6,
+            leaderEndYPct: 16,
+          },
+        ],
       } as any);
     } finally {
       textSpy.mockRestore();
@@ -472,6 +504,9 @@ describe("warehouse methodology logger table", () => {
     expect(text).toContain("сезон исследования: Тёплый период");
     expect(text).toContain("6.5. Сведения об определении точек размещения");
     expect(text).toContain("Фактически на схеме размещено: внутренних регистраторов 1, внешних регистраторов 1");
+    expect(text).toContain("Схема 1. Планируемые точки размещения регистраторов на плане помещения");
+    expect(text).toContain("0.3 м");
+    expect(text).toContain("2.2 м");
     expect(text).toContain("6.10. Сведения о загрузке и объединении данных");
     expect(text).toContain("интервал регистрации: 10 мин");
     expect(text).toContain("6.10.1. Методика обработки данных и расчета показателей");
