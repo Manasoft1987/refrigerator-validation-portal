@@ -468,6 +468,10 @@ describe("warehouse methodology logger table", () => {
     expect(text).toContain("Фактически на схеме размещено: внутренних регистраторов 1, внешних регистраторов 1");
     expect(text).toContain("6.10. Сведения о загрузке и объединении данных");
     expect(text).toContain("интервал регистрации: 10 мин");
+    expect(text).toContain("6.10.1. Методика обработки данных и расчета показателей");
+    expect(text).toContain("Методика расчета показателей PQ/PV");
+    expect(text).toContain("MKT = -dH/R / ln((1/n) x sum(exp(-dH/(R x Tk_i)))) - 273,15");
+    expect(text).toContain("Критические точки выбираются по риск-вектору");
     expect(text).not.toContain("GDP");
     expect(text).not.toContain("GPP");
     expect(text).not.toContain("GMP");

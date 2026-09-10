@@ -1786,6 +1786,9 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     }
   }
 
+  ensureSpace(doc, 220);
+  drawPVCalculationMethodSection(doc, input, { compact: true });
+
   ensureSpace(doc, 50 + 24 + input.pv.loggers.length * 26);
   drawSubTitle(doc, isEnglishWarehouse(input) ? "Sensor Summary Statistics" : "Сводная статистика по датчикам");
   const statsCritical = calculateCriticalLoggerIndices(input.pv.loggers);
@@ -2905,6 +2908,59 @@ function drawPVCriticalInterpretationSummary(doc: PDFKit.PDFDocument, input: Rep
   if (!supportsExpertPvSummary(input)) return;
   drawPVCriticalPointsSummary(doc, input);
   drawPVResultInterpretation(doc, input);
+}
+
+function drawPVCalculationMethodSection(
+  doc: PDFKit.PDFDocument,
+  input: ReportInput,
+  options: { title?: string; compact?: boolean } = {},
+) {
+  if (!supportsExpertPvSummary(input)) return;
+  const en = isEnglishWarehouse(input);
+  const compact = options.compact ?? false;
+  drawSubTitle(doc, options.title ?? (en ? "PQ/PV Calculation Method" : "Методика расчета показателей PQ/PV"));
+
+  drawPVInfoBox(
+    doc,
+    en
+      ? "Calculation is performed for each internal data logger over the approved PQ/PV time window. External loggers are used to interpret ambient influence and are not included in the main acceptance calculation or critical-point ranking."
+      : "Расчет выполняется для каждого внутреннего регистратора данных за утвержденный интервал PQ/PV. Внешние регистраторы используются для оценки влияния окружающей среды и не включаются в основной расчет критериев приемлемости и выбор критических точек.",
+    { bg: "#f8fafc", border: BORDER, color: ACCENT },
+  );
+
+  const formulaRows = en
+    ? [
+        ["Min", "Tmin = min(T1...Tn)", "Lowest measured temperature in the selected PQ/PV interval."],
+        ["Max", "Tmax = max(T1...Tn)", "Highest measured temperature in the selected PQ/PV interval."],
+        ["Avg", "Tavg = (T1 + T2 + ... + Tn) / n", "Arithmetic mean temperature for the logger."],
+        ["Std", "Std = sqrt(sum((Ti - Tavg)^2) / n)", "Temperature variation around the mean value."],
+        ["MKT", "MKT = -dH/R / ln((1/n) x sum(exp(-dH/(R x Tk_i)))) - 273.15", "Mean kinetic temperature; Tk_i = Ti + 273.15 K, dH = 83144 J/mol, R = 8.314 J/(mol x K)."],
+        ["Deviation duration", "D = sum(delta t outside limits)", "Total time when values are below the lower limit or above the upper limit."],
+      ]
+    : [
+        ["Min", "Tmin = min(T1...Tn)", "Минимальная измеренная температура в выбранном интервале PQ/PV."],
+        ["Max", "Tmax = max(T1...Tn)", "Максимальная измеренная температура в выбранном интервале PQ/PV."],
+        ["Avg", "Tavg = (T1 + T2 + ... + Tn) / n", "Среднее арифметическое значение температуры по регистратору."],
+        ["Std", "Std = sqrt(sum((Ti - Tavg)^2) / n)", "Оценка разброса температурных значений относительно среднего."],
+        ["MKT", "MKT = -dH/R / ln((1/n) x sum(exp(-dH/(R x Tk_i)))) - 273,15", "Среднекинетическая температура; Tk_i = Ti + 273,15 K, dH = 83144 Дж/моль, R = 8,314 Дж/(моль x K)."],
+        ["Длительность отклонений", "D = sum(delta t вне границ)", "Суммарное время значений ниже нижней границы или выше верхней границы режима."],
+      ];
+
+  drawSimpleTable(
+    doc,
+    en ? ["Indicator", "Formula", "Meaning"] : ["Показатель", "Формула", "Что подтверждает"],
+    formulaRows,
+    [0.16, 0.38, 0.46],
+    { fontSize: compact ? 7.8 : 8.2, headerFontSize: 8.4, padding: 5, headerHeight: 24, headerLineBreak: true },
+  );
+
+  drawPVInfoBox(
+    doc,
+    en
+      ? "Critical points are selected by a risk vector, not by a single isolated value. Hot point vector: [high excursion present, total high-excursion duration, worst high excursion, Max, MKT, Avg]. Cold point vector: [low excursion present, total low-excursion duration, worst low excursion, Min, Avg]. Loggers are compared factor by factor in this order; the first material difference substantiates the selected critical point."
+      : "Критические точки выбираются по риск-вектору, а не по одному изолированному значению. Для горячей точки применяется вектор: [наличие превышений, суммарная длительность превышений, наиболее выраженное превышение, Max, MKT, Avg]. Для холодной точки применяется вектор: [наличие понижений, суммарная длительность понижений, наиболее выраженное понижение, Min, Avg]. Регистраторы сравниваются последовательно по указанным факторам; первое существенное отличие является доказательством выбора критической точки.",
+    { bg: "#ecfdf5", border: "#a7f3d0", color: "#065f46" },
+  );
 }
 
 const CRITICAL_SCORE_LABELS: Record<"hot" | "cold", string[]> = {
@@ -7464,6 +7520,13 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
       renderTextBlock(doc, warehouseMethodologySectionText(key, input) ?? sec(key));
     }
   });
+
+  ensureSpace(doc, 260);
+  drawPVCalculationMethodSection(
+    doc,
+    input,
+    { title: en ? "6.10.1. Data Processing and Calculation Method" : "6.10.1. Методика обработки данных и расчета показателей" },
+  );
 
   // 6.11 IQ readiness check plan
   ensureSpace(doc, 260);
