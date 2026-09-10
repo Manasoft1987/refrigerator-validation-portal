@@ -3716,7 +3716,7 @@ function drawSensorPlacementAnalysis(
   }
 
   // Analyze internal sensor placement
-  if (internals.length >= 2) {
+  if (internals.length > 0) {
     let hasTop = internals.some(s => s.position === "top");
     let hasMiddle = internals.some(s => s.position === "middle");
     let hasBottom = internals.some(s => s.position === "bottom");
@@ -7701,6 +7701,7 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput,
             showCaption: false,
           },
         );
+        drawSensorPlacementAnalysis(doc, (input.pvLoggers ?? []) as DiagramSensor[], input);
       }
     }
   });
