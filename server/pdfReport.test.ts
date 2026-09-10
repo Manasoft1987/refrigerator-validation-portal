@@ -461,6 +461,12 @@ describe("warehouse methodology logger table", () => {
     }
 
     const text = capturedText.join("\n");
+    expect(text).toContain("Содержание");
+    expect(text).toContain("ЧАСТЬ I. Протокол");
+    expect(text).toContain("ЧАСТЬ II. Отчёт");
+    expect(text).toContain("Приложение №1. Сведения о размещении регистраторов данных");
+    expect(text).toContain("Приложение №2. Сводная таблица показаний регистраторов");
+    expect(text).not.toContain("Приложение №3");
     expect(text).toContain("6.3. Сведения об объекте исследования");
     expect(text).toContain("Геометрические размеры: 4.20 x 3.10 x 2.50 м");
     expect(text).toContain("сезон исследования: Тёплый период");

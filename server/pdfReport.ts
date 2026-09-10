@@ -60,6 +60,12 @@ const WAREHOUSE_MAPPING_REPORT_TITLE_RU =
 const WAREHOUSE_MAPPING_REPORT_TITLE_EN =
   "Storage Room / Area Temperature Mapping Report";
 
+type TableOfContentsEntry = {
+  title: string;
+  page: number;
+  level?: number;
+};
+
 type ChecklistItem = {
   questionIndex: number;
   questionText: string;
@@ -1585,11 +1591,25 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   /* ============================================================ */
   /* ЧАСТЬ I — ПРОТОКОЛ КВАЛИФИКАЦИИ (ПЛАН)            */
   /* ============================================================ */
-  drawPartCover(doc, input, "part1");
   const isWarehouseDoc = isWarehouseLike(getReportEquipmentType(input));
+  const tocEntries: TableOfContentsEntry[] = [];
+  let tableOfContentsPageIndex: number | null = null;
+  const currentPageNumber = () => {
+    const range = doc.bufferedPageRange();
+    return range.start + range.count;
+  };
+  const recordToc = (title: string, level = 0) => {
+    if (!isWarehouseDoc) return;
+    tocEntries.push({ title, page: currentPageNumber(), level });
+  };
+
+  drawPartCover(doc, input, "part1");
   if (isWarehouseDoc) {
+    recordToc(isEnglishWarehouse(input) ? "PART I. Protocol" : "ЧАСТЬ I. Протокол");
+    doc.addPage();
+    tableOfContentsPageIndex = doc.bufferedPageRange().start + doc.bufferedPageRange().count - 1;
     // ── WAREHOUSE PART I: sections 1–7 per EEC Rec. #8 ───────────────────────
-    drawWarehouseProtocolPart1(doc, input);
+    drawWarehouseProtocolPart1(doc, input, recordToc);
   } else {
     // ── STANDARD PART I ──────────────────────────────────────────────────────
     doc.addPage();
@@ -1638,13 +1658,25 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   /* ЧАСТЬ II — ОТЧЁТ О КВАЛИФИКАЦИИ (РЕЗУЛЬТАТЫ)        */
   /* ============================================================ */
   doc.addPage();
+  recordToc(isEnglishWarehouse(input) ? "PART II. Report" : "ЧАСТЬ II. Отчёт");
   drawPartCover(doc, input, "part2");
 
   doc.addPage();
+  recordToc(isEnglishWarehouse(input) ? "6. Test Period" : "6. Период проведения испытаний", 1);
   drawSectionTitle(doc, isEnglishWarehouse(input) ? "6. Test Period" : "6. Период проведения испытаний");
   drawTestPeriod(doc, input);
 
   doc.addPage();
+  recordToc(
+    isWarehouseLike(getReportEquipmentType(input))
+      ? (isEnglishWarehouse(input)
+          ? "7. IQ Results - Installation Qualification"
+          : "7. Результаты IQ — квалификация монтажа")
+      : isEnglishWarehouse(input)
+        ? "7. IQ Results - Installation Qualification"
+        : "7. Результаты IQ — Квалификация монтажа",
+    1,
+  );
   drawSectionTitle(
     doc,
     isWarehouseLike(getReportEquipmentType(input))
@@ -1661,6 +1693,16 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   drawStageVerdict(doc, "IQ", input.iq.verdict, iqItems, input);
 
   doc.addPage();
+  recordToc(
+    isWarehouseLike(getReportEquipmentType(input))
+      ? (isEnglishWarehouse(input)
+          ? "8. OQ Results - Operational Qualification"
+          : "8. Результаты OQ — квалификация функционирования")
+      : isEnglishWarehouse(input)
+        ? "8. OQ Results - Operational Qualification"
+        : "8. Результаты OQ — Квалификация функционирования",
+    1,
+  );
   drawSectionTitle(
     doc,
     isWarehouseLike(getReportEquipmentType(input))
@@ -1677,19 +1719,29 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   drawStageVerdict(doc, "OQ", input.oq.verdict, oqItems, input);
 
   doc.addPage();
-    drawSectionTitle(
-      doc,
-      isWarehouseLike(getReportEquipmentType(input))
-        ? (isEnglishWarehouse(input)
-            ? "9. PQ/PV Results - Temperature Mapping"
-            : "9. Результаты PQ/PV — температурное картирование")
-        : isEnglishWarehouse(input)
-          ? "9. PQ/PV Results - Performance Qualification / Validation"
-          : "9. Результаты PQ/PV — Эксплуатационная квалификация / валидация",
-    );
-    if (getReportEquipmentType(input) === "thermal-container") {
-      drawThermalTrialsSummary(doc, input);
-    }
+  recordToc(
+    isWarehouseLike(getReportEquipmentType(input))
+      ? (isEnglishWarehouse(input)
+          ? "9. PQ/PV Results - Temperature Mapping"
+          : "9. Результаты PQ/PV — температурное картирование")
+      : isEnglishWarehouse(input)
+        ? "9. PQ/PV Results - Performance Qualification / Validation"
+        : "9. Результаты PQ/PV — Эксплуатационная квалификация / валидация",
+    1,
+  );
+  drawSectionTitle(
+    doc,
+    isWarehouseLike(getReportEquipmentType(input))
+      ? (isEnglishWarehouse(input)
+          ? "9. PQ/PV Results - Temperature Mapping"
+          : "9. Результаты PQ/PV — температурное картирование")
+      : isEnglishWarehouse(input)
+        ? "9. PQ/PV Results - Performance Qualification / Validation"
+        : "9. Результаты PQ/PV — Эксплуатационная квалификация / валидация",
+  );
+  if (getReportEquipmentType(input) === "thermal-container") {
+    drawThermalTrialsSummary(doc, input);
+  }
   drawStageDataEntryTable(doc, input, "PV");
   drawPVParams(doc, input.pv, input);
   drawPVPassportSummary(doc, input);
@@ -1814,8 +1866,8 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   drawWarehouseOperationalEventsSection(doc, input);
 
   if (isWarehouseEaeu(getReportEquipmentType(input))) {
-    drawWarehouseAnnex1(doc, input);
-    drawWarehouseAnnex2(doc, input);
+    drawWarehouseAnnex1(doc, input, recordToc);
+    drawWarehouseAnnex2(doc, input, recordToc);
   }
 
   doc.addPage();
@@ -1832,6 +1884,16 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   }
 
   doc.addPage();
+  recordToc(
+    isWarehouseLike(getReportEquipmentType(input))
+      ? (isEnglishWarehouse(input)
+          ? `${input.excursion?.enabled ? "11" : "10"}. Temperature Mapping Report`
+          : `${input.excursion?.enabled ? "11" : "10"}. Отчёт о температурном картировании`)
+      : isEnglishWarehouse(input)
+        ? (input.excursion?.enabled ? "11. Qualification Report" : "10. Qualification Report")
+        : (input.excursion?.enabled ? "11. Отчёт о квалификации" : "10. Отчёт о квалификации"),
+    1,
+  );
   drawSectionTitle(
     doc,
     isWarehouseLike(getReportEquipmentType(input))
@@ -1845,13 +1907,16 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   drawFinalConclusion(doc, input);
 
   doc.addPage();
+  recordToc(isEnglishWarehouse(input) ? (input.excursion?.enabled ? "12. Deviations from the Protocol Plan" : "11. Deviations from the Protocol Plan") : (input.excursion?.enabled ? "12. Отклонения от плана протокола" : "11. Отклонения от плана протокола"), 1);
   drawSectionTitle(doc, isEnglishWarehouse(input) ? (input.excursion?.enabled ? "12. Deviations from the Protocol Plan" : "11. Deviations from the Protocol Plan") : (input.excursion?.enabled ? "12. Отклонения от плана протокола" : "11. Отклонения от плана протокола"));
   drawPlanDeviationsSection(doc, input);
 
+  recordToc(isEnglishWarehouse(input) ? (input.excursion?.enabled ? "13. Recommendations" : "12. Recommendations") : (input.excursion?.enabled ? "13. Рекомендации" : "12. Рекомендации"), 1);
   drawSectionTitle(doc, isEnglishWarehouse(input) ? (input.excursion?.enabled ? "13. Recommendations" : "12. Recommendations") : (input.excursion?.enabled ? "13. Рекомендации" : "12. Рекомендации"));
   drawRecommendationsSection(doc, input);
 
   doc.addPage();
+  recordToc(isEnglishWarehouse(input) ? (input.excursion?.enabled ? "14. Report Signatures" : "13. Report Signatures") : (input.excursion?.enabled ? "14. Подписи к Отчёту" : "13. Подписи к Отчёту"), 1);
   drawSectionTitle(doc, isEnglishWarehouse(input) ? (input.excursion?.enabled ? "14. Report Signatures" : "13. Report Signatures") : (input.excursion?.enabled ? "14. Подписи к Отчёту" : "13. Подписи к Отчёту"));
   drawSignaturesBlock(
     doc,
@@ -1868,6 +1933,12 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
 
   const mappingPeriodicitySectionNumber = input.excursion?.enabled ? 15 : 14;
   doc.addPage();
+  recordToc(
+    isEnglishWarehouse(input)
+      ? `${mappingPeriodicitySectionNumber}. Mapping Frequency and Conditions`
+      : `${mappingPeriodicitySectionNumber}. Периодичность и условия картирования`,
+    1,
+  );
   drawSectionTitle(
     doc,
     isEnglishWarehouse(input)
@@ -1880,6 +1951,12 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   let nextSectionNumber = mappingPeriodicitySectionNumber + 1;
   if (!skipValiditySection) {
     doc.addPage();
+    recordToc(
+      isEnglishWarehouse(input)
+        ? `${nextSectionNumber}. Document Validity Period`
+        : `${nextSectionNumber}. Срок действия документа`,
+      1,
+    );
     drawSectionTitle(
       doc,
       isEnglishWarehouse(input)
@@ -1893,6 +1970,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   if (input.attachments?.some(item => item.includeInPdf !== false && item.includeInPdf !== 0)) {
     doc.addPage();
     const annexSectionNumber = nextSectionNumber;
+    recordToc(isEnglishWarehouse(input) ? `${annexSectionNumber}. Annexes` : `${annexSectionNumber}. Приложения`, 1);
     drawSectionTitle(doc, isEnglishWarehouse(input) ? `${annexSectionNumber}. Annexes` : `${annexSectionNumber}. Приложения`);
     drawAttachmentsSection(doc, input);
     nextSectionNumber += 1;
@@ -1900,9 +1978,13 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
 
   doc.addPage();
   const metrologySectionNumber = nextSectionNumber;
+  recordToc(isEnglishWarehouse(input) ? `${metrologySectionNumber}. Metrological Verification of Measuring Instruments` : `${metrologySectionNumber}. Поверка средств измерений`, 1);
   drawCalibrationPage(doc, isEnglishWarehouse(input) ? `${metrologySectionNumber}. Metrological Verification of Measuring Instruments` : `${metrologySectionNumber}. Поверка средств измерений`);
 
   /* ---------------- Footer / pagination ---------------- */
+  if (tableOfContentsPageIndex !== null) {
+    drawWarehouseTableOfContentsPage(doc, input, tableOfContentsPageIndex, tocEntries);
+  }
   addHeadersAndFooters(doc, input);
 
   doc.end();
@@ -5279,6 +5361,79 @@ function fitTextToLines(doc: PDFKit.PDFDocument, text: string, maxWidth: number,
   return normalized.slice(0, best).trimEnd() + suffix;
 }
 
+function drawWarehouseTableOfContentsPage(
+  doc: PDFKit.PDFDocument,
+  input: ReportInput,
+  pageIndex: number,
+  entries: TableOfContentsEntry[],
+) {
+  if (!entries.length) return;
+  const range = doc.bufferedPageRange();
+  doc.switchToPage(pageIndex);
+
+  const en = isEnglishWarehouse(input);
+  const left = PAGE_MARGIN;
+  const right = doc.page.width - PAGE_MARGIN;
+  const width = right - left;
+
+  doc.x = left;
+  doc.y = 92;
+  doc.fillColor(ACCENT).font("bold").fontSize(22)
+    .text(en ? "Contents" : "Содержание", left, doc.y, { width });
+  doc.moveDown(1.0);
+
+  const rowH = 24;
+  const pageColW = 34;
+  const titleMaxW = width - pageColW - 12;
+  entries.forEach(entry => {
+    if (doc.y + rowH > doc.page.height - 56) return;
+    const y = doc.y;
+    const level = entry.level ?? 0;
+    const titleX = left + level * 16;
+    const titleW = titleMaxW - level * 16;
+    const title = fitTextToWidth(doc, entry.title, titleW);
+    const pageText = String(entry.page);
+    const isPart = level === 0;
+
+    doc.fillColor(isPart ? ACCENT : "#334155")
+      .font(isPart ? "bold" : "body")
+      .fontSize(isPart ? 11 : 10)
+      .text(title, titleX, y, { width: titleW, lineBreak: false });
+
+    const titleEndX = titleX + Math.min(doc.widthOfString(title), titleW);
+    const pageX = right - pageColW;
+    const dotsStart = Math.max(titleEndX + 8, titleX + 40);
+    const dotsEnd = pageX - 8;
+    if (dotsEnd > dotsStart) {
+      doc.save();
+      doc.strokeColor("#cbd5e1").lineWidth(0.5).dash(1, { space: 3 })
+        .moveTo(dotsStart, y + 12)
+        .lineTo(dotsEnd, y + 12)
+        .stroke()
+        .undash();
+      doc.restore();
+    }
+
+    doc.fillColor(isPart ? ACCENT : "#334155")
+      .font(isPart ? "bold" : "body")
+      .fontSize(isPart ? 11 : 10)
+      .text(pageText, pageX, y, { width: pageColW, align: "right", lineBreak: false });
+    doc.y = y + rowH;
+  });
+
+  doc.fillColor(MUTED).font("body").fontSize(8)
+    .text(
+      en
+        ? "The contents are generated automatically from the protocol and report structure."
+        : "Содержание сформировано автоматически по структуре протокола и отчёта.",
+      left,
+      doc.page.height - 78,
+      { width },
+    );
+
+  doc.switchToPage(range.start + range.count - 1);
+}
+
 export function addHeadersAndFooters(doc: PDFKit.PDFDocument, input: ReportInput) {
   const range = doc.bufferedPageRange();
   const total = range.count;
@@ -6203,7 +6358,7 @@ function drawWarehousePlanDiagram(
  * Таблица посадочных мест с координатами строки/колонки/яруса и серийными
  * номерами регистраторов.
  */
-function drawWarehouseAnnex1(doc: PDFKit.PDFDocument, input: ReportInput) {
+function drawWarehouseAnnex1(doc: PDFKit.PDFDocument, input: ReportInput, recordToc?: (title: string, level?: number) => void) {
   const gi = input.generalInfo;
   // Prefer pvSession room dims (same as drawWarehousePlanDiagram)
   const lengthM = input.pvRoomLengthM ?? (gi?.whLengthM ? Number(gi.whLengthM) : null);
@@ -6220,6 +6375,7 @@ function drawWarehouseAnnex1(doc: PDFKit.PDFDocument, input: ReportInput) {
   if (!calc.total && !hasLoggers) return;
 
   doc.addPage();
+  recordToc?.("Приложение №1. Сведения о размещении регистраторов данных", 1);
 
   // Official header block (top-right corner)
   const left = PAGE_MARGIN;
@@ -6283,9 +6439,10 @@ function drawWarehouseAnnex1(doc: PDFKit.PDFDocument, input: ReportInput) {
  * Annex №2 — «Сводная таблица показаний регистраторов» (минимум/максимум/среднее
  * по каждой точке + соответствие критериям приемлемости).
  */
-function drawWarehouseAnnex2(doc: PDFKit.PDFDocument, input: ReportInput) {
+function drawWarehouseAnnex2(doc: PDFKit.PDFDocument, input: ReportInput, recordToc?: (title: string, level?: number) => void) {
   if (!input.pv?.loggers?.length) return;
   doc.addPage();
+  recordToc?.("Приложение №2. Сводная таблица показаний регистраторов", 1);
   drawSectionTitle(doc, "Приложение №2. Сводная таблица показаний регистраторов");
   doc.fillColor(MUTED).font("body").fontSize(9)
     .text(
@@ -7412,7 +7569,7 @@ function normalizePharmacySectionText(text: string, en: boolean): string {
 /**
  * Renders warehouse protocol Part I with sections 1–7 per EEC Rec. #8.
  */
-function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput): void {
+function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput, recordToc?: (title: string, level?: number) => void): void {
   const en = isEnglishWarehouse(input);
   const sec = (key: string): string => {
     const custom = input.warehouseSections?.[key];
@@ -7437,6 +7594,7 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
 
   // ── Section 1: Сокращения и определения ─────────────────────────────────
   doc.addPage();
+  recordToc?.(en ? "1. Abbreviations and Definitions" : "1. Сокращения и определения", 1);
   drawSectionTitle(doc, en ? "1. Abbreviations and Definitions" : "1. Сокращения и определения");
 
   drawSubTitle(doc, en ? "1.1. Abbreviations" : "1.1. Сокращения");
@@ -7456,6 +7614,7 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
 
   // ── Section 2: Описание и обоснование ───────────────────────────────────
   doc.addPage();
+  recordToc?.(en ? "2. Description and Rationale" : "2. Описание и обоснование", 1);
   drawSectionTitle(doc, en ? "2. Description and Rationale" : "2. Описание и обоснование");
 
   drawSubTitle(doc, en ? "2.1. Mapping Object Description" : "2.1. Описание объекта картирования");
@@ -7473,15 +7632,18 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
 
   // ── Section 3: Область применения ───────────────────────────────────────
   doc.addPage();
+  recordToc?.(en ? "3. Scope" : "3. Область применения", 1);
   drawSectionTitle(doc, en ? "3. Scope" : "3. Область применения");
   renderTextBlock(doc, sec("3"));
 
   // ── Section 4: Цели и задачи ─────────────────────────────────────────────
+  recordToc?.(en ? "4. Temperature Mapping Objectives" : "4. Цели и задачи температурного картирования", 1);
   drawSectionTitle(doc, en ? "4. Temperature Mapping Objectives" : "4. Цели и задачи температурного картирования");
   renderTextBlock(doc, sec("4"));
 
   // ── Section 5: Общие сведения об объекте / оборудовании ────────────────────
   doc.addPage();
+  recordToc?.(en ? "5. General Information on the Mapping Object" : "5. Общие сведения об объекте температурного картирования", 1);
   drawSectionTitle(doc, en ? "5. General Information on the Mapping Object" : "5. Общие сведения об объекте температурного картирования");
   drawGeneralInfoTable(doc, input);
   drawRevisionHistorySection(doc, input);
@@ -7495,6 +7657,7 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
 
   // ── Section 6: Методология ───────────────────────────────────────────────
   doc.addPage();
+  recordToc?.(en ? "6. Temperature Mapping Methodology" : "6. Методология проведения температурного картирования", 1);
   drawSectionTitle(doc, en ? "6. Temperature Mapping Methodology" : "6. Методология проведения температурного картирования");
 
   const methodSubs: Array<[string, string]> = [
@@ -7548,6 +7711,7 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput)
 
   // ── Section 7: Подписи к Протоколу ──────────────────────────────────────
   doc.addPage();
+  recordToc?.(en ? "7. Protocol Signatures" : "7. Подписи к Протоколу", 1);
   drawSectionTitle(doc, en ? "7. Protocol Signatures" : "7. Подписи к Протоколу");
   drawSignaturesBlock(
     doc,
