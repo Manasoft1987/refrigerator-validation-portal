@@ -1998,13 +1998,16 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
     : isWarehouseLike(eqType)
         ? getEquipmentName(input)
         : "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0435 \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435";
-  doc
-    .fillColor(ACCENT)
-    .font("bold")
-    .fontSize(16)
-    .text(equipmentTypeLabel, left, y, { align: "center" });
-
-  y += 50;
+  if (!isWarehouseDocument) {
+    doc
+      .fillColor(ACCENT)
+      .font("bold")
+      .fontSize(16)
+      .text(equipmentTypeLabel, left, y, { align: "center" });
+    y += 50;
+  } else {
+    y += 18;
+  }
 
   // Card with key metadata
   const cardX = left + 24;
@@ -2020,7 +2023,9 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
   const temperatureModeText = selectedThermalModes.length > 0
     ? selectedThermalModes.map(mode => TEMP_MODE_LABEL[mode] || mode).join(", ")
     : temperatureModeLabel(gi?.tempMode, gi?.customMin, gi?.customMax, input);
-  const seasonLabels = en ? SEASON_LABEL_EN : SEASON_LABEL_RU;
+  const seasonLabels = en
+    ? SEASON_LABEL_EN
+    : { ...SEASON_LABEL_RU, warm: "Тёплый период" };
   const qualificationLabels = en ? QUALIFICATION_LABEL_EN : QUALIFICATION_LABEL_RU;
   const baseRows: Array<[string, string]> = [
     [en ? "Protocol No." : "Номер протокола", input.protocol.number],

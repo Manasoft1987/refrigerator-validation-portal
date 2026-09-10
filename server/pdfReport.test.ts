@@ -474,6 +474,86 @@ describe("warehouse methodology logger table", () => {
     expect(text).not.toContain("склад");
   });
 
+  it("does not duplicate the pharmacy storage object type above the cover metadata card", async () => {
+    const capturedText: string[] = [];
+    const originalText = PDFDocument.prototype.text;
+    const textSpy = vi.spyOn(PDFDocument.prototype, "text").mockImplementation(function (
+      this: PDFKit.PDFDocument,
+      ...args: Parameters<PDFKit.PDFDocument["text"]>
+    ) {
+      if (typeof args[0] === "string") capturedText.push(args[0]);
+      return originalText.apply(this, args);
+    });
+
+    try {
+      const now = Date.UTC(2024, 6, 15, 9, 0, 0);
+      const series = mkSeries(now, 168, 20);
+      await generateProtocolPdf({
+        org: BASE_ORG,
+        protocol: { number: "VAL-STR-COVER", createdAt: new Date(now), equipmentType: "warehouse" },
+        generalInfo: {
+          ...BASE_GI,
+          equipmentType: "warehouse",
+          tempMode: "15-25",
+          location: "г. Алматы, помещение хранения аптеки",
+          purpose: "Хранение лекарственных средств",
+          validationDate: "2024-07-15",
+          basis: "primary",
+          season: "warm",
+        },
+        iq: { purpose: "", description: "", criteria: "", items: [], verdict: "pass" },
+        oq: { purpose: "", description: "", criteria: "", items: [], verdict: "pass" },
+        pv: {
+          purpose: "",
+          description: "",
+          criteria: "",
+          tempMode: "15-25",
+          rangeMin: 15,
+          rangeMax: 25,
+          startAt: now,
+          endAt: now + 168 * 3600_000,
+          minDurationHours: 168,
+          minSensorCount: 1,
+          loggers: [
+            {
+              id: 1,
+              label: "230804STS0019282",
+              customName: null,
+              role: "internal",
+              pointCount: series.temp.length,
+              min: 19.2,
+              max: 20.4,
+              avg: 19.8,
+              std: 0.1,
+              mkt: 19.9,
+              series,
+              deviations: [],
+            },
+          ],
+          verdict: "pass",
+          failureReasons: [],
+          hotIdx: 0,
+          coldIdx: 0,
+          extIndices: [],
+        },
+      } as any);
+    } finally {
+      textSpy.mockRestore();
+    }
+
+    const subtitleIndex = capturedText.findIndex(value => value.includes("План картирования"));
+    const objectCardLabelIndex = capturedText.findIndex((value, index) =>
+      index > subtitleIndex && value.includes("ОБЪЕКТ ТЕМПЕРАТУРНОГО КАРТИРОВАНИЯ"),
+    );
+    const firstObjectValueIndex = capturedText.findIndex((value, index) =>
+      index > subtitleIndex && value === "помещение (зона) хранения аптеки",
+    );
+
+    expect(subtitleIndex).toBeGreaterThanOrEqual(0);
+    expect(objectCardLabelIndex).toBeGreaterThan(subtitleIndex);
+    expect(firstObjectValueIndex).toBeGreaterThan(objectCardLabelIndex);
+  });
+
   it("renders Annex 1 from the same floor-plan placement data", async () => {
     const capturedText: string[] = [];
     const originalText = PDFDocument.prototype.text;
