@@ -535,6 +535,11 @@ function drawGroupedBarChart(
 /* Public API — drawXxxChart(doc, ...)                                 */
 /* ------------------------------------------------------------------ */
 
+/** Per-logger trace used by the dedicated EEC chamber report. */
+export function drawChamberLoggerChart(doc: any, s: Series, rangeMin: number, rangeMax: number): void {
+  drawLineChart(doc, { title: `Регистратор ${s.name}`, series: [s], rangeMin, rangeMax, height: 210 });
+}
+
 export function drawOverviewChart(
   doc: any,
   series: Series[],

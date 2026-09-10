@@ -14,6 +14,7 @@
  */
 
 import { trpc } from "@/lib/trpc";
+import ChamberDiagram3D from "./ChamberDiagram3D";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Logger = {
@@ -155,7 +156,12 @@ function defaultDoorPos(): DragPos {
   return { x: cx, y: cy };
 }
 
-export default function ReeferTruckDiagram3D({
+export default function ReeferTruckDiagram3D(props: Props) {
+  if (props.objectType === "chamber") return <ChamberDiagram3D loggers={props.loggers} protocolId={props.protocolId} readOnly={props.readOnly} />;
+  return <LegacyReeferTruckDiagram3D {...props} />;
+}
+
+function LegacyReeferTruckDiagram3D({
   loggers,
   protocolId,
   readOnly = false,

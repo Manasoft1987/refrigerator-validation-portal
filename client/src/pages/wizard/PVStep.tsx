@@ -67,7 +67,7 @@ export default function PVStep({
   const utils = trpc.useUtils();
   const giQ = trpc.generalInfo.get.useQuery({ protocolId });
   const protocolQ = trpc.protocols.get.useQuery({ id: protocolId });
-  const equipmentType = giQ.data?.equipmentType || protocolQ.data?.equipmentType || "refrigerator";
+  const equipmentType = giQ.data?.equipmentType || (protocolQ.data?.customEquipmentName === "__equipmentType:chamber" ? "chamber" : protocolQ.data?.equipmentType) || "refrigerator";
   const isWarehouse = isWarehouseLike(equipmentType);
   const isWarehouseByEaeu = isWarehouseEaeu(equipmentType);
   const isChamber = equipmentType === "chamber";
@@ -112,7 +112,7 @@ export default function PVStep({
           : isChamber
             ? Math.max(24, initialMinDurationHours)
           : initialMinDurationHours,
-        minSensorCount: session.minSensorCount || 9,
+        minSensorCount: isChamber ? Math.max(15, session.minSensorCount || 15) : session.minSensorCount || 9,
         samplingStepMinutes: session.samplingStepMinutes ? String(session.samplingStepMinutes) : "0",
         customMin: session.customMin ?? (giQ.data as any)?.customMin ?? "",
         customMax: session.customMax ?? (giQ.data as any)?.customMax ?? "",
@@ -383,11 +383,12 @@ export default function PVStep({
             </Field>
             <Field
               label="Мин. внутренних датчиков"
-              hint="Порог задаётся для внутренних датчиков и не увеличивается из-за внешних. Для исследования с 9 внутренними датчиками укажите 9 и сохраните параметры."
+              hint={isChamber ? "План ISPE: не менее 15 внутренних регистраторов и 1 внешний. Полнота расстановки проверяется по 15 точкам схемы." : "Порог задаётся для внутренних датчиков и не увеличивается из-за внешних. Для исследования с 9 внутренними датчиками укажите 9 и сохраните параметры."}
             >
               <Input
                 type="number"
                 value={form.minSensorCount}
+                min={isChamber ? 15 : 1}
                 onChange={e => setForm({ ...form, minSensorCount: e.target.value })}
               />
             </Field>

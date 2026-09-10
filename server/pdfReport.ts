@@ -4,12 +4,14 @@
 import PDFDocument from "pdfkit";
 import path from "path";
 import fs from "fs";
+import { buildChamberScene, CHAMBER_POSITIONS, CHAMBER_VIEW, chamberPlacementIssues, chamberMetrologyIssues, chamberFeatures, type ChamberLogger, type ChamberMode } from "../shared/chamberMapping";
 import { fileURLToPath } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import {
   drawColdChart,
+  drawChamberLoggerChart,
   drawExcursionChart,
   drawExternalChart,
   drawHeatmapChart,
@@ -465,6 +467,7 @@ const WAREHOUSE_SEASON_LABEL: Record<string, string> = {
 };
 
 function getReportEquipmentType(input?: ReportInput): string | null {
+  if (input?.protocol?.customEquipmentName === "__equipmentType:chamber" || input?.generalInfo?.equipmentType === "chamber") return "chamber";
   return input?.protocol?.equipmentType || input?.generalInfo?.equipmentType || null;
 }
 
@@ -1591,6 +1594,12 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   /* ============================================================ */
   /* ЧАСТЬ I — ПРОТОКОЛ КВАЛИФИКАЦИИ (ПЛАН)            */
   /* ============================================================ */
+  if (getReportEquipmentType(input) === "chamber") {
+    drawChamberMappingReport(doc, input);
+    addHeadersAndFooters(doc, input);
+    doc.end();
+    return done;
+  }
   const isWarehouseDoc = isWarehouseLike(getReportEquipmentType(input));
   const tocEntries: TableOfContentsEntry[] = [];
   let tableOfContentsPageIndex: number | null = null;
@@ -2026,7 +2035,9 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
   const eqType = getReportEquipmentType(input) || "";
   const isWarehouseDocument = isWarehouseLike(eqType);
   const partLabel = part === "part1" ? (en ? "PART I" : "ЧАСТЬ I") : (en ? "PART II" : "ЧАСТЬ II");
-  const partTitle = isWarehouseDocument
+  const partTitle = eqType === "chamber"
+    ? `${part === "part1" ? "Протокол" : "Отчёт"} температурного картирования холодильной камеры для хранения лекарственных средств`
+    : isWarehouseDocument
     ? (part === "part1"
         ? (en ? WAREHOUSE_MAPPING_PROTOCOL_TITLE_EN : WAREHOUSE_MAPPING_PROTOCOL_TITLE_RU)
         : (en ? WAREHOUSE_MAPPING_REPORT_TITLE_EN : WAREHOUSE_MAPPING_REPORT_TITLE_RU))
@@ -2051,7 +2062,7 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
   doc
     .fillColor(ACCENT)
     .font("bold")
-    .fontSize(isWarehouseDocument ? 19 : 26)
+    .fontSize(isWarehouseDocument || eqType === "chamber" ? 19 : 26)
     .text(partTitle, left, y, { align: "center", width: right - left });
 
   y += doc.heightOfString(partTitle, {
@@ -2083,7 +2094,7 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
     : isWarehouseLike(eqType)
         ? getEquipmentName(input)
         : "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0435 \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435";
-  if (!isWarehouseDocument) {
+  if (!isWarehouseDocument && eqType !== "chamber") {
     doc
       .fillColor(ACCENT)
       .font("bold")
@@ -2120,7 +2131,7 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
     [
       en
         ? (isWarehouseDocument ? "Mapping object" : "Qualification object")
-        : (isWarehouseDocument ? "Объект температурного картирования" : "Объект квалификации"),
+        : (isWarehouseDocument || eqType === "chamber" ? "Объект температурного картирования" : "Объект квалификации"),
       objectLabel,
     ],
     ...(isReeferLike(eqType)
@@ -2233,7 +2244,8 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
       .font("body")
       .fontSize(8)
       .text(
-        isWarehouseDocument
+        eqType === "chamber" ? "Методическая основа: Рекомендация ЕЭК №8. Размещение регистраторов: ISPE, 15+1."
+          : isWarehouseDocument
           ? (en
               ? "The document was generated with EEC Board Recommendation No. 8 used as the methodological basis."
               : "Документ сформирован с учётом Рекомендации Коллегии ЕЭК № 8 как методической основы.")
@@ -2861,7 +2873,7 @@ function drawPVParams(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Re
 
 function supportsExpertPvSummary(input?: ReportInput): boolean {
   const eqType = getReportEquipmentType(input) || "";
-  return isWarehouseLike(eqType) || isAutoRefrigeratorLike(eqType) || eqType === "refrigerator" || eqType === "freezer";
+  return isWarehouseLike(eqType) || isAutoRefrigeratorLike(eqType) || eqType === "refrigerator" || eqType === "freezer" || eqType === "chamber";
 }
 
 function finiteNumberOrNull(value: unknown): number | null {
@@ -4634,6 +4646,7 @@ function drawExcursionSection(
   rangeMin: number,
   rangeMax: number,
   sensorAccuracy?: number,
+  sectionNumber = "10",
 ) {
   const left = PAGE_MARGIN;
   const right = doc.page.width - PAGE_MARGIN;
@@ -4645,7 +4658,7 @@ function drawExcursionSection(
     independent: "Независимо",
   };
 
-  drawSectionTitle(doc, "10. Испытания на температурное отклонение (Temperature Excursion Study)");
+  drawSectionTitle(doc, `${sectionNumber}. Испытания на температурное отклонение (Temperature Excursion Study)`);
 
   // General parameters table — only show enabled tests
   const enabledTests: string[] = [];
@@ -7744,6 +7757,202 @@ function drawWarehouseProtocolPart1(doc: PDFKit.PDFDocument, input: ReportInput,
 }
 
 /** Render a multi-line text block with proper spacing */
+function chamberReportLoggers(input: ReportInput): ChamberLogger[] {
+  // Statistics from the current analysis take precedence over saved diagram values.
+  const placed = input.pvLoggers ?? [];
+  return input.pv.loggers.map(l => {
+    const location = placed.find(p => p.id === l.id || p.label === l.label);
+    return { ...l, position: location?.position, avg: l.pointCount > 0 ? l.avg : null };
+  });
+}
+
+function chamberHeight(input: ReportInput, z: number): string {
+  const key = z === 0 ? "lower" : z === 1 ? "upper" : "middle";
+  const obj = input.floorPlanObjects?.find(o => o.id === `chamber-${key}`);
+  return obj?.heightM != null && Number.isFinite(obj.heightM) ? `${obj.heightM.toFixed(2)} м` : "не указана";
+}
+
+function drawChamberDiagram(doc: PDFKit.PDFDocument, input: ReportInput, mode: ChamberMode) {
+  ensureSpace(doc,mode === "temperature" ? 670 : 610);
+  drawSectionTitle(doc, mode === "plan"
+    ? "Схема 1. Планируемое размещение регистраторов"
+    : mode === "actual" ? "Схема 2. Фактическое размещение регистраторов"
+    : "Схема 3. Средние температуры и пространственное распределение PQ/PV");
+  const loggers = chamberReportLoggers(input);
+  const critical = calculateCriticalLoggerIndices(input.pv.loggers);
+  const scene = buildChamberScene(loggers, mode,
+    critical.hotIdx == null ? null : input.pv.loggers[critical.hotIdx]?.label,
+    critical.coldIdx == null ? null : input.pv.loggers[critical.coldIdx]?.label,
+    Object.fromEntries([0,.5,1].map(z=>[String(z),chamberHeight(input,z)==="не указана" ? "h: —" : chamberHeight(input,z)])),chamberFeatures(input.floorPlanObjects));
+  const y = doc.y + 8, s = (doc.page.width - 2 * PAGE_MARGIN) / CHAMBER_VIEW.width;
+  for (const p of scene) {
+    doc.save();
+    if (p.kind === "text") {
+      doc.font(p.bold ? "bold" : "body").fontSize(p.size * s).fillColor(p.color)
+        .text(p.text, PAGE_MARGIN + (p.x - 300) * s, y + p.y * s, { width: 600 * s, align: "center", lineBreak: false });
+    } else if (p.kind === "circle") {
+      doc.lineWidth((p.width ?? 1) * s).fillColor(p.fill).strokeColor(p.stroke)
+        .circle(PAGE_MARGIN + p.x * s, y + p.y * s, p.r * s).fillAndStroke();
+    } else {
+      doc.moveTo(PAGE_MARGIN + p.points[0][0] * s, y + p.points[0][1] * s);
+      p.points.slice(1).forEach(point => doc.lineTo(PAGE_MARGIN + point[0] * s, y + point[1] * s));
+      if (p.kind === "poly") {
+        doc.closePath().fillOpacity(p.opacity ?? 1).fillColor(p.fill);
+        if (p.stroke) doc.strokeColor(p.stroke).lineWidth(s).fillAndStroke(); else doc.fill();
+      } else {
+        doc.strokeColor(p.stroke).lineWidth((p.width ?? 1) * s);
+        if (p.dash) doc.dash(5 * s, { space: 3 * s });
+        doc.stroke();
+      }
+    }
+    doc.restore();
+  }
+  doc.x = PAGE_MARGIN; doc.y = y + CHAMBER_VIEW.height * s + 12;
+  renderTextBlock(doc, `Высоты от пола: нижний уровень — ${chamberHeight(input, 0)}; средний — ${chamberHeight(input, .5)}; верхний — ${chamberHeight(input, 1)}. Обозначения C/W/V идентифицируют места установки. Изометрия условная; границы показывают рабочий объём хранения.`);
+  if (mode === "temperature") renderTextBlock(doc,
+    "Цветовая шкала соответствует диапазону средних температур внутренних регистраторов. Показаны три сечения единого поля; интерполяция выполнена по расстояниям в нормированных координатах рабочего объёма с весами 1/d⁴. Линии соединяют подписи с точками измерения. Внешний регистратор исключён. Цвет между точками является оценкой, а не измерением; пригодность зоны подтверждают исходные данные и оценка рисков. Критические точки Г/Х по временным рядам могут отличаться от точек с крайними средними значениями.");
+}
+
+function drawChamberPlacementTable(doc: PDFKit.PDFDocument, input: ReportInput) {
+  const loggers = chamberReportLoggers(input);
+  const rows = CHAMBER_POSITIONS.map(p => {
+    const matches = loggers.filter(l => l.role === "internal" && l.position === p.id);
+    return [p.id, matches.map(l=>l.label).join("; ") || "Не назначен", p.name, chamberHeight(input,p.z)];
+  });
+  loggers.filter(l=>l.role==="external").forEach(l=>rows.push(["EXT",l.label,"Вне камеры; контроль окружающей среды","По месту"]));
+  loggers.filter(l=>l.role==="internal"&&!CHAMBER_POSITIONS.some(p=>p.id===l.position)).forEach(l=>rows.push(["—",l.label,"Позиция не подтверждена","—"]));
+  drawSimpleTable(doc,["ID точки","Серийный номер","Место размещения","Высота"],rows,[.12,.30,.42,.16],{fontSize:8.5,headerFontSize:8.5,padding:5,headerHeight:32,headerLineBreak:true});
+}
+
+function drawChamberMappingReport(doc: PDFKit.PDFDocument, source: ReportInput) {
+  // Do not mutate the caller or allow legacy 8/9-sensor settings to certify a
+  // new 15+1 study. Preserve the existing raw data, questions and answers.
+  const loggers = chamberReportLoggers(source);
+  const completeness = chamberPlacementIssues(loggers);
+  const duration = source.pv.startAt != null && source.pv.endAt != null ? (source.pv.endAt-source.pv.startAt)/3600000 : 0;
+  if(duration < Math.max(24,source.pv.minDurationHours || 72)) completeness.push("Продолжительность записи меньше утверждённого периода исследования.");
+  for (const logger of source.pv.loggers) {
+    if (!logger.pointCount || !logger.series.ts.length || logger.series.ts.length!==logger.series.temp.length || logger.series.temp.some(t=>!Number.isFinite(t))) {
+      completeness.push(`Регистратор ${logger.label}: нет полного сопоставимого ряда измерений.`);
+    } else if (logger.role === "internal" && (logger.min < source.pv.rangeMin || logger.max > source.pv.rangeMax)) {
+      completeness.push(`Регистратор ${logger.label}: экстремумы выходят за установленные критерии приемлемости.`);
+    }
+  }
+  completeness.push(...chamberMetrologyIssues(loggers,source.protocolSensors ?? [],source.generalInfo?.validationDate || source.protocol.createdAt,source.pv.sensorAccuracy));
+  const critical = calculateCriticalLoggerIndices(source.pv.loggers);
+  const input: ReportInput = { ...source, pv: { ...source.pv,
+    minSensorCount: Math.max(15,source.pv.minSensorCount || 15),
+    minDurationHours: Math.max(24,source.pv.minDurationHours || 72),
+    hotIdx: critical.hotIdx, coldIdx: critical.coldIdx,
+    extIndices: source.pv.loggers.flatMap((l,i)=>l.role==="external"?[i]:[]),
+    failureReasons: [...source.pv.failureReasons,...completeness],
+    verdict: completeness.length && source.pv.verdict === "pass" ? "fail" : source.pv.verdict,
+  }};
+  doc.info.Title = `Протокол и отчёт температурного картирования холодильной камеры ${input.protocol.number}`;
+  doc.info.Subject = "Температурное картирование холодильной камеры; ЕЭК №8; размещение 15+1";
+  const toc: TableOfContentsEntry[] = [];
+  const mark = (title: string, level=1) => toc.push({title,page:doc.bufferedPageRange().count,level});
+  const section = (title: string) => {doc.addPage();mark(title);drawSectionTitle(doc,title);};
+  const sub = (title: string, text: string) => {ensureSpace(doc,100);drawSubTitle(doc,title);renderTextBlock(doc,text);};
+  const gi = input.generalInfo;
+  const notes = input.floorPlanObjects?.find(o=>o.id==="chamber-notes")?.label || gi?.whLayoutNotes || "Планировка, расположение двери, испарителя, стеллажей и штатного датчика не описаны. Требуется обследование и документирование перед утверждением плана.";
+  const dims = [input.pvRoomLengthM ?? gi?.whLengthM,input.pvRoomWidthM ?? gi?.whWidthM,input.pvRoomHeightM ?? gi?.whHeightM].map(v=>v!=null&&Number(v)>0?`${Number(v)} м`:"не указано");
+  drawPartCover(doc,input,"part1");mark("ЧАСТЬ I. Протокол температурного картирования",0);
+  doc.addPage(); const tocPage = doc.bufferedPageRange().count-1;
+  section("1. Сокращения и определения");
+  renderTextBlock(doc,"ЕЭК — Евразийская экономическая комиссия. GDP — надлежащая дистрибьюторская практика. ISPE — International Society for Pharmaceutical Engineering. IQ — подготовительная проверка монтажа; OQ — подготовительная проверка функционирования; PQ/PV — температурное картирование в эксплуатационных условиях. MKT — средняя кинетическая температура.");
+  renderTextBlock(doc,"Температурное картирование — документированное изучение распределения температуры в рабочей зоне хранения. По Руководству ЕЭК холодная и горячая точки характеризуют наименьшие и наибольшие температуры в допустимом диапазоне; выходы за его пределы отражаются как отклонения. Критическими также являются места наиболее значительных колебаний температуры. Регистратор данных сохраняет временной ряд измерений с возможностью передачи в информационную систему. Рабочий объём — пространство фактического или предполагаемого хранения лекарственных средств, а не весь объём ограждающей конструкции.");
+  section("2. Описание и обоснование");
+  sub("2.1. Описание объекта",`Объект: холодильная камера для хранения лекарственных средств. Организация: ${input.org.name}. Адрес / место установки: ${gi?.location || input.org.addressFact || "не указано"}. Идентификация камеры: ${[gi?.manufacturer,gi?.model,gi?.serial].filter(Boolean).join(" / ") || "не указана"}. Назначение: ${gi?.purpose || "хранение лекарственных средств в установленном температурном режиме"}.`);
+  sub("2.2. Нормативные и методические основания","Структура и процедура картирования адаптированы к Руководству, утверждённому Рекомендацией Коллегии ЕЭК от 20.04.2026 №8 (разделы V–VI, пункты 10–20). Рекомендация имеет рекомендательный характер. Правила GDP ЕАЭС по Решению Совета ЕЭК от 03.11.2016 №80 применяются в соответствующей области деятельности. Размещение 15 внутренних регистраторов основано на международной практике ISPE и документированной оценке рисков; 1 внешний регистратор предназначен для оценки влияния окружающей среды.");
+  sub("2.3. Основание данного исследования",`Основание: ${gi?.basis === "primary" ? "Первичное картирование" : gi?.basis === "repeat" || gi?.basis === "periodic" ? "Повторное картирование" : gi?.basis || "не указано"}. Исследуется состояние загрузки: ${gi?.fillStatus==="empty"?"пустая камера":gi?.fillStatus==="loaded"?"загруженная камера":"не указано"}; загрузка: ${gi?.loadPercent ?? "не указана"}${gi?.loadPercent!=null?"%":""}. Период: ${gi?.season ? (SEASON_LABEL_RU[gi.season] || gi.season) : "не указан"}. Результаты относятся к документированной конфигурации камеры и условиям испытания.`);
+  section("3. Область применения");
+  renderTextBlock(doc,"Настоящий протокол применяется к стационарной холодильной камере для хранения лекарственных средств. Он охватывает проверку готовности камеры и регистратора данных, исследование рабочего объёма, выявление неоднородности температуры и выбор мест постоянного мониторинга. Испытания с открыванием двери, отключением питания, переключением агрегатов и оттайкой оцениваются по утверждённой программе. Применимость результатов к иной загрузке или конфигурации требует оценки рисков.");
+  sub("4. Цели и задачи температурного картирования","Подтвердить поддержание заданного диапазона температуры в зоне размещения продукции; оценить стабильность и колебания; выявить холодные, горячие и иные критические точки; определить участки с ограничениями хранения; установить места средств измерения для постоянного мониторинга и необходимые корректирующие действия.");mark("4. Цели и задачи температурного картирования");
+  section("5. Общие сведения о холодильной камере");drawGeneralInfoTable(doc,input);drawRevisionHistorySection(doc,input);
+  section("6. Методология проведения температурного картирования");
+  sub("6.1. Выбор регистраторов данных","Используются электронные регистраторы с подходящим диапазоном, достаточной памятью и автономностью, единым временем и возможностью выгрузки исходных данных. Абсолютная погрешность в исследуемом диапазоне — не более ±0,5 °C. Метрологическая пригодность подтверждается на дату испытания действующей поверкой или калибровкой, когда она допускается применимыми требованиями. Предпочтительны регистраторы одного типа. Номер свидетельства и подтверждающий документ сохраняются в материалах исследования.");
+  drawWarehouseLoggerSelectionTable(doc,input);
+  sub("6.2. Исполнители","Ответственные лица и организации берутся из данных протокола. Руководитель исследования проверяет подготовку исполнителей, утверждение программы и сохранность исходных файлов.");drawWarehousePersonnelTable(doc,input);
+  sub("6.3. Сведения об объекте исследования",`Габариты камеры (длина × ширина × высота): ${dims.join(" × ")}. Нижний уровень хранения: ${chamberHeight(input,0)}; средний: ${chamberHeight(input,.5)}; верхний: ${chamberHeight(input,1)}.\n${notes}`);
+  sub("6.4. Критерии приемлемости",`Температурный режим хранения: ${pvTemperatureModeLabel(input.pv,input)}. Оценка внутренних регистраторов проводится по границам ${input.pv.rangeMin}...${input.pv.rangeMax} °C с принятой в протоколе метрологической поправкой / защитным интервалом. Требуются не менее ${input.pv.minSensorCount} внутренних регистраторов и 1 внешний, прослеживаемые позиции и непрерывные сопоставимые записи за утверждённый период. MKT — дополнительный показатель, не заменяющий оценку экстремумов, длительности отклонений и риска замораживания. Выходы за пределы не компенсируются приемлемым средним или MKT. Недостаточность данных не считается соответствием.`);
+  sub("6.5. Определение точек размещения и оценка рисков","План 15+1: 8 углов рабочего объёма (C1–C8), 4 центра боковых граней (W1–W4), центры нижней и верхней граней (V1, V3) и центр объёма (V2). Такая расстановка охватывает длину, ширину и высоту хранения и позволяет сравнивать периферийные и центральные зоны. Риск-ориентированный подход допускается пунктом 16д Руководства ЕЭК. Число 15 не является универсальной гарантией покрытия: для больших камер, отдельных отсеков, плотных стеллажей или нескольких испарителей обосновывают дополнительные точки и отдельные зоны исследования. Типовая схема ISPE для объёма до приблизительно 20 м³ не должна автоматически переноситься на любой объём.");
+  renderTextBlock(doc,"При обследовании оценивают приток тепла через дверь, зоны подачи холодного воздуха и риска локального переохлаждения, застойные зоны за стеллажами, верхние и нижние уровни хранения, расположение штатного датчика. Датчики фиксируют без прямого контакта с металлом, стенами и продукцией, не мешая рутинным операциям. Внешний регистратор располагают вне камеры в среде, которая воздействует на неё (например, в смежном помещении у двери); место документируют. Он исключён из внутренней статистики, определения критических точек и цветового поля.");
+  drawChamberDiagram(doc,input,"plan");
+  sub("6.6. Регистрация расположения","Каждой точке присвоен постоянный ID C/W/V или EXT. После установки серийные номера и высоты связываются с этими ID в приложении 1 непосредственно после схемы 2. Перемещения во время исследования регистрируются как отклонения от плана с указанием времени и причины.");
+  sub("6.7. Маркировка и программирование",`Регистраторы маркируют, синхронизируют часы и время первого измерения с учётом времени монтажа. Интервал записи: ${input.pv.samplingStepMinutes ? `${input.pv.samplingStepMinutes} мин` : "по исходным записям; подтвердить одинаковый интервал перед запуском"}. Обычно выбирают интервал 1–15 минут с учётом скорости процессов. До начала проверяют запуск, память и питание каждого прибора.`);
+  sub("6.8. Установка и проверка перед запуском","После размещения сверяют серийный номер, ID, высоту, крепление и рабочее состояние всех регистраторов. Фиксируют конфигурацию загрузки и ограничения хранения. Персонал информируют об исследовании. Протокол утверждают до начала измерений; изменения оформляют с обоснованием и согласованием.");
+  sub("6.9. Продолжительность и проведение исследования",`Установленная минимальная продолжительность: ${input.pv.minDurationHours} ч. Согласно пункту 16и Руководства ЕЭК период 24–72 ч или более применим к холодильному оборудованию с контролируемой средой, не подверженному критическому влиянию суточных и сезонных колебаний. Это условие подтверждают обследованием и внешними измерениями. При его неподтверждении предусматривают репрезентативный период не менее 7 суток подряд и сезонную оценку по рискам. Регистрируют циклы охлаждения и оттайки, обычные открытия двери, переключения основного/резервного агрегата и изменения загрузки. Специальные испытания открывания двери и отключения питания проводят только по согласованным параметрам; отсутствие таких испытаний прямо отражают в отчёте.`);
+  sub("6.10. Извлечение, объединение и анализ данных","По окончании повторно сверяют серийные номера и места установки, выгружают исходные файлы без изменения и сохраняют их с записями исследования. Проверяют полноту временного покрытия, единицы, часовой пояс, интервалы записи и пропуски. Статистику рассчитывают в едином окне PQ/PV; любые исключения документируют. Анализ включает минимум, максимум, среднее, разброс, динамику отклонений, влияние двери и оттайки, стабильность зон и сопоставление с внешними условиями.");
+  drawPVCalculationMethodSection(doc,input,{title:"6.10.1. Формулы и методика расчёта"});
+  ensureSpace(doc,150);drawSubTitle(doc,"6.11. Подготовительная проверка IQ");drawStageBlocks(doc,input.iq,input);drawChecklistPlan(doc,checklistItemsForReport(input,"iq"),input);
+  ensureSpace(doc,150);drawSubTitle(doc,"6.12. Подготовительная проверка OQ");drawStageBlocks(doc,input.oq,input);drawChecklistPlan(doc,checklistItemsForReport(input,"oq"),input);
+  sub("6.13. Программа PQ/PV",input.pv.description);drawPVPlan(doc,input.pv,input);
+  section("7. Утверждение протокола");drawSignaturesBlock(doc,getSignatoriesPart1(input),"Протокол температурного картирования рассмотрен и утверждён:",input);
+  doc.addPage();drawPartCover(doc,input,"part2");mark("ЧАСТЬ II. Отчёт температурного картирования",0);
+  section("8. Условия исследования и подготовительные проверки");drawTestPeriod(doc,input);
+  drawSubTitle(doc,"8.1. Результаты IQ");drawStageDataEntryTable(doc,input,"IQ");drawChecklistTable(doc,checklistItemsForReport(input,"iq"),input);drawStageVerdict(doc,"IQ",input.iq.verdict,checklistItemsForReport(input,"iq"),input);
+  drawSubTitle(doc,"8.2. Результаты OQ");drawStageDataEntryTable(doc,input,"OQ");drawChecklistTable(doc,checklistItemsForReport(input,"oq"),input);drawStageVerdict(doc,"OQ",input.oq.verdict,checklistItemsForReport(input,"oq"),input);
+  section("9. Результаты температурного картирования PQ/PV");drawStageDataEntryTable(doc,input,"PV");drawPVPassportSummary(doc,input);
+  drawChamberDiagram(doc,input,"actual");
+  doc.addPage();mark("Приложение 1. Расположение регистраторов");drawSectionTitle(doc,"Приложение 1. Расположение регистраторов данных");
+  renderTextBlock(doc,"Сведения по пункту 16е и приложению №1 Руководства ЕЭК. ID обозначает точку схемы; серийный номер указан полностью для прослеживаемости.");drawChamberPlacementTable(doc,input);
+  if(completeness.length) drawPVInfoBox(doc,completeness.join("\n"),{bg:"#fff7ed",border:"#fed7aa",color:"#9a3412"});
+  section("9.1. Сводная статистика по регистраторам");
+  drawStatsTable(doc,input.pv.loggers,critical.hotIdx,critical.coldIdx,input.pv.extIndices,input);
+  ensureSpace(doc,500);
+  drawPVCriticalInterpretationSummary(doc,input);
+  const valid = input.pv.loggers.filter(l=>l.role==="internal"&&l.pointCount>0&&Number.isFinite(l.min)&&Number.isFinite(l.max));
+  if(valid.length) {
+    const unstable = [...valid].sort((a,b)=>(b.max-b.min)-(a.max-a.min))[0];
+    sub("Оценка колебаний и областей хранения",`Наибольший размах температуры зарегистрирован логгером ${unstable.label}: ${fmtTempMetric(unstable.max-unstable.min)} (минимум ${fmtTempMetric(unstable.min)}, максимум ${fmtTempMetric(unstable.max)}). Эта точка дополнительно рассматривается как критическая по нестабильности согласно пункту 19 Руководства ЕЭК. Пространственные ограничения устанавливают по совокупности отклонений и планировки, а не по цветовой интерполяции.`);
+  }
+  drawChamberDiagram(doc,input,"temperature");
+  section("9.2. Графики и исходные результаты");drawCharts(doc,input.pv,input);
+  for (const logger of input.pv.loggers) {
+    ensureSpace(doc,270);
+    drawChamberLoggerChart(doc,{name:logger.label,ts:logger.series.ts,temp:logger.series.temp},input.pv.rangeMin,input.pv.rangeMax);
+  }
+  drawDeviationsSection(doc,input.pv,input);
+  sub("9.3. Эксплуатационные события и дополнительные испытания",input.planDeviations?.trim() || "Отдельный журнал эксплуатационных событий не заполнен. Наличие или отсутствие открываний двери, оттаек, отключений питания и переключений агрегатов следует подтвердить записями исследования; отсутствие записей не доказывает отсутствие событий.");
+  if(input.excursion?.enabled) {doc.addPage();drawExcursionSection(doc,input.excursion,input.pv.rangeMin,input.pv.rangeMax,input.pv.sensorAccuracy,"9.3.1");} else renderTextBlock(doc,"Специальные испытания с открыванием двери и отключением питания в данных протокола не включены. Время восстановления и автономного сохранения режима по обычному картированию не устанавливается.");
+  section("10. Выводы о пригодности холодильной камеры");
+  const passed = input.iq.verdict==="pass"&&input.oq.verdict==="pass"&&input.pv.verdict==="pass";
+  renderTextBlock(doc,passed ? `На основании результатов подготовительных проверок IQ/OQ и температурного картирования PQ/PV холодильная камера признана пригодной для хранения лекарственных средств в температурном режиме ${pvTemperatureModeLabel(input.pv,input)} в исследованном рабочем объёме, при документированной загрузке и условиях эксплуатации. Испытание завершено с положительным заключением.` : "Пригодность холодильной камеры по совокупности IQ/OQ и PQ/PV не подтверждена. Требуется завершить проверки, оценить недостаточность данных и устранить зафиксированные несоответствия; при необходимости выполнить повторное картирование.");
+  if(input.pv.failureReasons.length) renderTextBlock(doc,input.pv.failureReasons.join("\n"));
+  section("11. Отклонения и корректирующие действия");renderTextBlock(doc,input.planDeviations?.trim() || "Записи об отклонениях от плана и корректирующих действиях не внесены. Перед утверждением отчёта подтвердить полноту журнала исследования.");
+  sub("12. Рекомендации и последующее картирование","Установить или перенести средства постоянного мониторинга температуры в подтверждённые критические точки рабочего объёма; при необходимости контролировать зоны наибольших колебаний. Участки с отклонениями исключить из хранения до устранения причин и подтверждения эффективности мер. Задать уставки сигнализации с учётом метрологических характеристик и допустимых условий продукции. Повторное картирование предусматривается после значимых изменений камеры, загрузки, стеллажей, агрегатов или необъяснённых отклонений мониторинга. Периодичность и необходимость сезонного исследования устанавливаются на основании документированной оценки рисков.");mark("12. Рекомендации и последующее картирование");
+  if(input.recommendations?.trim()) renderTextBlock(doc,input.recommendations);
+  section("13. Утверждение отчёта");drawSignaturesBlock(doc,getSignatoriesPart2(input),"Отчёт о температурном картировании рассмотрен и утверждён:",input);
+  section("14. Литература и нормативные источники");
+  renderTextBlock(doc,"1. Рекомендация Коллегии Евразийской экономической комиссии от 20 апреля 2026 г. №8 «О Руководстве по проведению температурного картирования зон хранения лекарственных средств». Основной методический источник; пункты 9–20 и приложения №1 и №2.\n2. Решение Совета Евразийской экономической комиссии от 3 ноября 2016 г. №80 «Об утверждении Правил надлежащей дистрибьюторской практики в рамках Евразийского экономического союза». GDP ЕАЭС; в применимой области деятельности.\n3. ISPE. Controlled Temperature Chamber Mapping. Pharmaceutical Engineering, 2012. Раздел 4, рисунок 4.1: размещение измерительных точек и оценка рисков. https://ispe.org/pharmaceutical-engineering/white-papers/controlled-temperature-chamber-mapping\n4. ISPE Good Practice Guide: Controlled Temperature Chambers — Commissioning and Qualification, Mapping and Monitoring. Second Edition, December 2021. Международное руководство по надлежащей практике; не нормативный акт ЕАЭС. https://ispe.org/publications/guidance-documents/ispe-good-practice-guide-controlled-temperature-chambers-2nd-edition");
+  section("Приложение 2. Информация о распределении температуры");
+  drawSimpleTable(doc,["ID / точка","Серийный номер","Min, °C","Max, °C","Avg, °C","В диапазоне"],input.pv.loggers.map(l=>[
+    l.role==="external"?"EXT":loggers.find(p=>p.id===l.id)?.position || "не указан", l.label,
+    l.pointCount?l.min.toFixed(2):"—",l.pointCount?l.max.toFixed(2):"—",l.pointCount?l.avg.toFixed(2):"—",
+    l.role==="external"?"Не оценивается":!l.pointCount?"Нет данных":l.min>=input.pv.rangeMin&&l.max<=input.pv.rangeMax?"Да":"Нет",
+  ]),[.12,.25,.12,.12,.12,.27],{fontSize:8,headerFontSize:8,padding:4,headerHeight:32,headerLineBreak:true});
+  renderTextBlock(doc,"Исходные показания, выгруженные файлы и метрологические документы составляют материалы исследования. При прореживании таблицы для печати исходные файлы сохраняются полностью; статистика относится к выбранному окну и настройкам обработки.");
+  drawMeasurementTable(doc,input.pv.loggers,input.pv.samplingStepMinutes,input);
+  if(input.attachments?.some(a=>a.includeInPdf!==false&&a.includeInPdf!==0)) {section("Материалы исследования и метрологические документы");drawAttachmentsSection(doc,input);}
+  drawChamberContents(doc,tocPage,toc);
+}
+
+function drawChamberContents(doc: PDFKit.PDFDocument, page: number, entries: TableOfContentsEntry[]) {
+  const last = doc.bufferedPageRange().count-1;
+  doc.switchToPage(page);doc.x=PAGE_MARGIN;doc.y=80;
+  drawSectionTitle(doc,"Содержание");
+  entries.forEach(entry=>{
+    const x=PAGE_MARGIN+(entry.level ? 10 : 0),width=doc.page.width-PAGE_MARGIN-x-32;
+    doc.font(entry.level ? "body" : "bold").fontSize(9.3).fillColor(ACCENT);
+    const height=Math.max(24,doc.heightOfString(entry.title,{width})+7),y=doc.y;
+    doc.text(entry.title,x,y,{width});
+    doc.text(String(entry.page),doc.page.width-PAGE_MARGIN-28,y,{width:28,align:"right"});
+    doc.y=y+height;
+  });
+  doc.switchToPage(last);doc.x=PAGE_MARGIN;
+}
+
 function renderTextBlock(doc: PDFKit.PDFDocument, text: string): void {
   if (!text || !text.trim()) {
     doc.font("body").fontSize(10).fillColor(MUTED).text("(не заполнено)");

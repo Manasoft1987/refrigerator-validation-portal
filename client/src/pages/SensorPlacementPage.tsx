@@ -891,7 +891,7 @@ export default function SensorPlacementPage() {
 
       {/* ── AUTO-REFRIGERATOR / CHAMBER: reference diagram + 3D assignment ── */}
       {!isWarehouse && isAutoRefrigerator && (
-      <Tabs defaultValue="positions" className="w-full">
+      <Tabs defaultValue={isChamber ? "assignment" : "positions"} className="w-full">
         <TabsList className="grid w-full grid-cols-2 max-w-md">
           <TabsTrigger value="positions">{isChamber ? "Эталонные позиции камеры" : "Схема позиций ISPE"}</TabsTrigger>
           <TabsTrigger value="assignment">Расстановка датчиков</TabsTrigger>
@@ -976,12 +976,12 @@ export default function SensorPlacementPage() {
                 <div>
                   <CardTitle className="text-base">Расстановка датчиков</CardTitle>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Интерактивная схема — перетащите датчики на нужные позиции.
+                    {isChamber ? "Выберите точку на 3D-схеме и назначьте регистратор. Назначения сохраняются автоматически." : "Интерактивная схема — перетащите датчики на нужные позиции."}
                   </p>
                 </div>
-                <Button size="sm" onClick={handleSave} disabled={saveSession.isPending}>
+                {!isChamber && <Button size="sm" onClick={handleSave} disabled={saveSession.isPending}>
                   <Save className="h-4 w-4 mr-1" /> Сохранить
-                </Button>
+                </Button>}
               </div>
             </CardHeader>
             <CardContent>

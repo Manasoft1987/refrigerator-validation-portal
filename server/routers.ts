@@ -1,4 +1,5 @@
 import { COOKIE_NAME } from "@shared/const";
+import { chamberPlacementIssues, chamberMetrologyIssues } from "@shared/chamberMapping";
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import {
   DEFAULT_IQ_QUESTIONS,
@@ -1341,6 +1342,11 @@ export const appRouter = router({
           }, trialKey);
         }
         const loggers = await listLoggers(input.protocolId, trialKey);
+        const chamberProtocol = await ownProtocol(ctx.user.id, input.protocolId);
+        const chamberInfo = await getGeneralInfo(input.protocolId);
+        if (session && (chamberProtocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || chamberInfo?.equipmentType === "chamber")) {
+          session = { ...session, minSensorCount: Math.max(15, session.minSensorCount) };
+        }
         const sessions = await listPVSessions(input.protocolId);
         // Strip series payload to keep response small. Series is reloaded in detail view if needed.
         // Compute earliest sensor recording start time across all loggers
@@ -1418,6 +1424,10 @@ export const appRouter = router({
         const trialKey = input.trialKey ?? "default";
         const patch: any = { ...rest };
         delete patch.trialKey;
+        const chamberInfo = await getGeneralInfo(input.protocolId);
+        if (patch.minSensorCount !== undefined && (protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || chamberInfo?.equipmentType === "chamber")) {
+          patch.minSensorCount = Math.max(15, patch.minSensorCount ?? 15);
+        }
         if (patch.minDurationHours !== undefined) {
           const gi = await getGeneralInfo(input.protocolId);
           const effectiveEquipmentType =
@@ -1804,9 +1814,15 @@ export const appRouter = router({
           );
         }
         // Sensor count
-        if (internals.length < session.minSensorCount) {
+        const requiredSensorCount = isChamberProtocolForAnalysis ? Math.max(15, session.minSensorCount) : session.minSensorCount;
+        if (isChamberProtocolForAnalysis) {
+          failureReasons.push(...chamberPlacementIssues(updated));
+          failureReasons.push(...chamberMetrologyIssues(updated,await getProtocolSensors(input.protocolId),gi1?.validationDate || protocol.createdAt));
+          for (const logger of updated) if(!logger.pointCount) failureReasons.push(`Регистратор ${logger.label}: нет данных в выбранном периоде.`);
+        }
+        if (internals.length < requiredSensorCount) {
           failureReasons.push(
-            `Использовано ${internals.length} внутренних датчиков, требуется не менее ${session.minSensorCount}.`,
+            `Использовано ${internals.length} внутренних датчиков, требуется не менее ${requiredSensorCount}.`,
           );
         }
 
@@ -2224,7 +2240,12 @@ export const appRouter = router({
             ? (session.endAt - session.startAt) / 3600000
             : 0;
           const minDurationHours = reportMinDurationHours;
-          const minSensorCount = session?.minSensorCount ?? (isWarehouseProtocol ? 8 : 9);
+          const minSensorCount = isChamberProtocol ? Math.max(15, session?.minSensorCount ?? 15) : session?.minSensorCount ?? (isWarehouseProtocol ? 8 : 9);
+          if (isChamberProtocol) {
+            reportFailureReasons.push(...chamberPlacementIssues(preparedLoggers.map(item => item.logger)));
+            reportFailureReasons.push(...chamberMetrologyIssues(preparedLoggers.map(item=>item.logger),linkedProtocolSensors,gi?.validationDate || protocol.createdAt));
+            for (const item of preparedLoggers) if(!item.series.temp.length) reportFailureReasons.push(`Регистратор ${item.logger.label}: нет данных в выбранном периоде.`);
+          }
           if (durationHours < minDurationHours) {
             reportFailureReasons.push(
               isEnglishWarehouseReport
@@ -2468,7 +2489,7 @@ export const appRouter = router({
             startAt: session?.startAt ?? null,
             endAt: session?.endAt ?? null,
             minDurationHours: reportMinDurationHours,
-            minSensorCount: session?.minSensorCount ?? (isWarehouseProtocol ? 8 : 9),
+            minSensorCount: isChamberProtocol ? Math.max(15, session?.minSensorCount ?? 15) : session?.minSensorCount ?? (isWarehouseProtocol ? 8 : 9),
             loggers: preparedLoggers.map(({ logger: l, series, stats, deviations }) => ({
               id: l.id,
               label: l.label,
