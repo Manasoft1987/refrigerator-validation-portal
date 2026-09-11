@@ -3,6 +3,7 @@
 
 import PDFDocument from "pdfkit";
 import { drawChamberFormulae } from "./chamberFormulae";
+import { CHAMBER_MIN_DURATION_HOURS } from "../shared/validation";
 import path from "path";
 import fs from "fs";
 import { buildChamberScene, CHAMBER_POSITIONS, CHAMBER_VIEW, chamberPlacementIssues, chamberMetrologyIssues, chamberFeatures, type ChamberLogger, type ChamberMode } from "../shared/chamberMapping";
@@ -2834,6 +2835,7 @@ function drawStageVerdict(
 function pvDurationRequirementLabel(pv: ReportInput["pv"], input?: ReportInput, nonWarehousePrefix = false): string {
   const en = isEnglishWarehouse(input);
   const eqType = getReportEquipmentType(input);
+  if (eqType === "chamber") return `не менее ${CHAMBER_MIN_DURATION_HOURS} часов`;
   if (isWarehouseEaeu(eqType)) {
     const whStudyType = (input?.generalInfo as any)?.whStudyType;
     if (whStudyType === "cold_room") {
@@ -7833,7 +7835,7 @@ function drawChamberMappingReport(doc: PDFKit.PDFDocument, source: ReportInput) 
   const loggers = chamberReportLoggers(source);
   const completeness = chamberPlacementIssues(loggers);
   const duration = source.pv.startAt != null && source.pv.endAt != null ? (source.pv.endAt-source.pv.startAt)/3600000 : 0;
-  if(duration < Math.max(24,source.pv.minDurationHours || 72)) completeness.push("Продолжительность записи меньше утверждённого периода исследования.");
+  if(duration < CHAMBER_MIN_DURATION_HOURS) completeness.push("Продолжительность записи меньше требуемого минимума — 24 часов.");
   for (const logger of source.pv.loggers) {
     if (!logger.pointCount || !logger.series.ts.length || logger.series.ts.length!==logger.series.temp.length || logger.series.temp.some(t=>!Number.isFinite(t))) {
       completeness.push(`Регистратор ${logger.label}: нет полного сопоставимого ряда измерений.`);
@@ -7845,7 +7847,7 @@ function drawChamberMappingReport(doc: PDFKit.PDFDocument, source: ReportInput) 
   const critical = calculateCriticalLoggerIndices(source.pv.loggers);
   const input: ReportInput = { ...source, pv: { ...source.pv,
     minSensorCount: Math.max(15,source.pv.minSensorCount || 15),
-    minDurationHours: Math.max(24,source.pv.minDurationHours || 72),
+    minDurationHours: CHAMBER_MIN_DURATION_HOURS,
     hotIdx: critical.hotIdx, coldIdx: critical.coldIdx,
     extIndices: source.pv.loggers.flatMap((l,i)=>l.role==="external"?[i]:[]),
     failureReasons: [...source.pv.failureReasons,...completeness],
@@ -7885,7 +7887,7 @@ function drawChamberMappingReport(doc: PDFKit.PDFDocument, source: ReportInput) 
   sub("6.6. Регистрация расположения","Каждой точке присвоен постоянный ID C/W/V или EXT. После установки серийные номера и высоты связываются с этими ID в приложении 1 непосредственно после схемы 2. Перемещения во время исследования регистрируются как отклонения от плана с указанием времени и причины.");
   sub("6.7. Маркировка и программирование",`Регистраторы маркируют, синхронизируют часы и время первого измерения с учётом времени монтажа. Интервал записи: ${input.pv.samplingStepMinutes ? `${input.pv.samplingStepMinutes} мин` : "по исходным записям; подтвердить одинаковый интервал перед запуском"}. Обычно выбирают интервал 1–15 минут с учётом скорости процессов. До начала проверяют запуск, память и питание каждого прибора.`);
   sub("6.8. Установка и проверка перед запуском","После размещения сверяют серийный номер, ID, высоту, крепление и рабочее состояние всех регистраторов. Фиксируют конфигурацию загрузки и ограничения хранения. Персонал информируют об исследовании. Протокол утверждают до начала измерений; изменения оформляют с обоснованием и согласованием.");
-  sub("6.9. Продолжительность и проведение исследования",`Установленная минимальная продолжительность: ${input.pv.minDurationHours} ч. Согласно пункту 16и Руководства ЕЭК период 24–72 ч или более применим к холодильному оборудованию с контролируемой средой, не подверженному критическому влиянию суточных и сезонных колебаний. Это условие подтверждают обследованием и внешними измерениями. При его неподтверждении предусматривают репрезентативный период не менее 7 суток подряд и сезонную оценку по рискам. Регистрируют циклы охлаждения и оттайки, обычные открытия двери, переключения основного/резервного агрегата и изменения загрузки. Специальные испытания открывания двери и отключения питания проводят только по согласованным параметрам; отсутствие таких испытаний прямо отражают в отчёте.`);
+  sub("6.9. Продолжительность и проведение исследования","Требуемая длительность испытания — не менее 24 часов непрерывно. Программа установлена для холодильной камеры с контролируемой средой, не подверженной критическому воздействию суточных или сезонных колебаний температуры, с учётом пункта 16и Руководства ЕЭК. Условия применимости подтверждают обследованием, оценкой рисков и внешними измерениями. Период должен охватывать репрезентативный суточный цикл работы камеры. Регистрируют циклы охлаждения и оттайки, обычные открытия двери, переключения основного/резервного агрегата и изменения загрузки. Специальные испытания открывания двери и отключения питания проводят только по согласованным параметрам; отсутствие таких испытаний прямо отражают в отчёте.");
   sub("6.10. Извлечение, объединение и анализ данных","По окончании повторно сверяют серийные номера и места установки, выгружают исходные файлы без изменения и сохраняют их с записями исследования. Проверяют полноту временного покрытия, единицы, часовой пояс, интервалы записи и пропуски. Статистику рассчитывают в едином окне PQ/PV; любые исключения документируют. Анализ включает минимум, максимум, среднее, разброс, динамику отклонений, влияние двери и оттайки, стабильность зон и сопоставление с внешними условиями.");
   drawPVCalculationMethodSection(doc,input,{title:"6.10.1. Формулы и методика расчёта"});
   ensureSpace(doc,150);drawSubTitle(doc,"6.11. Подготовительная проверка IQ");drawStageBlocks(doc,input.iq,input);drawChecklistPlan(doc,checklistItemsForReport(input,"iq"),input);

@@ -166,6 +166,11 @@ describe("dedicated chamber EEC report", () => {
       expect(text).not.toContain("sqrt(sum(");
       expect(text).not.toContain("MKT = -dH/R");
       expect(text).not.toContain("Приказом");
+      expect(text).toContain("не менее 24 часов");
+      expect(text).not.toMatch(/24[–−-]72|не менее 72|выбрано 72|не менее 7 суток/);
+      expect(text).toContain("Испытание завершено с положительным заключением.");
+      expect(input.pv.minDurationHours).toBe(72); // Reading must not rewrite legacy data.
+      expect(input.pv.endAt! - input.pv.startAt!).toBe(24 * 3600_000);
       const plan = text.indexOf("Схема 1.");
       const actual = text.indexOf("Схема 2.");
       const stats = text.indexOf("9.1. Сводная");
@@ -195,6 +200,12 @@ describe("dedicated chamber EEC report", () => {
         "Испытание завершено с положительным заключением."
       );
       expect(input.pv.verdict).toBe("pass");
+      seen.length = 0;
+      const short = chamberReportFixture();
+      short.pv.endAt = short.pv.startAt! + 23 * 3600_000;
+      await generateProtocolPdf(short);
+      expect(seen.join("\n")).toContain("Продолжительность записи меньше требуемого минимума — 24 часов.");
+      expect(seen.join("\n")).not.toContain("Испытание завершено с положительным заключением.");
     } finally {
       spy.mockRestore();
     }

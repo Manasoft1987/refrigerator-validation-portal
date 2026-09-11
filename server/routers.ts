@@ -19,6 +19,7 @@ import {
   KYRGYZSTAN_WAREHOUSE_EQUIPMENT_TYPE,
   WAREHOUSE_EXPERT_EQUIPMENT_TYPE,
   CHAMBER_STAGE_TEMPLATES,
+  CHAMBER_MIN_DURATION_HOURS,
   THERMAL_CONTAINER_STAGE_TEMPLATES,
   WAREHOUSE_STAGE_TEMPLATES,
   WAREHOUSE_KG_STAGE_TEMPLATES,
@@ -1344,10 +1345,11 @@ export const appRouter = router({
         const loggers = await listLoggers(input.protocolId, trialKey);
         const chamberProtocol = await ownProtocol(ctx.user.id, input.protocolId);
         const chamberInfo = await getGeneralInfo(input.protocolId);
-        if (session && (chamberProtocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || chamberInfo?.equipmentType === "chamber")) {
-          session = { ...session, minSensorCount: Math.max(15, session.minSensorCount) };
+        const chamberSession = chamberProtocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || chamberInfo?.equipmentType === "chamber";
+        if (session && chamberSession) {
+          session = { ...session, minDurationHours: CHAMBER_MIN_DURATION_HOURS, minSensorCount: Math.max(15, session.minSensorCount) };
         }
-        const sessions = await listPVSessions(input.protocolId);
+        const sessions = (await listPVSessions(input.protocolId)).map(item => chamberSession ? { ...item, minDurationHours: CHAMBER_MIN_DURATION_HOURS } : item);
         // Strip series payload to keep response small. Series is reloaded in detail view if needed.
         // Compute earliest sensor recording start time across all loggers
         const earliestSensorTs = loggers.reduce<number | null>((min, l) => {
@@ -1428,6 +1430,7 @@ export const appRouter = router({
         if (patch.minSensorCount !== undefined && (protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || chamberInfo?.equipmentType === "chamber")) {
           patch.minSensorCount = Math.max(15, patch.minSensorCount ?? 15);
         }
+        if (protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || chamberInfo?.equipmentType === "chamber") patch.minDurationHours = CHAMBER_MIN_DURATION_HOURS;
         if (patch.minDurationHours !== undefined) {
           const gi = await getGeneralInfo(input.protocolId);
           const effectiveEquipmentType =
@@ -1441,7 +1444,7 @@ export const appRouter = router({
               : effectiveEquipmentType === "chamber"
                 ? 24
                 : 0.01;
-          patch.minDurationHours = Math.max(minimumDurationHours, patch.minDurationHours);
+          patch.minDurationHours = effectiveEquipmentType === "chamber" ? CHAMBER_MIN_DURATION_HOURS : Math.max(minimumDurationHours, patch.minDurationHours);
         }
         if (customMin !== undefined) patch.customMin = customMin === null ? null : String(customMin);
         if (customMax !== undefined) patch.customMax = customMax === null ? null : String(customMax);
@@ -1806,7 +1809,7 @@ export const appRouter = router({
         const minDurationHours = isWarehouseEaeu(effectiveAnalysisEquipmentType)
           ? Math.max(warehouseMinDurationHours, session.minDurationHours)
           : isChamberProtocolForAnalysis
-            ? Math.max(24, session.minDurationHours)
+            ? CHAMBER_MIN_DURATION_HOURS
             : session.minDurationHours;
         if (durationHours < minDurationHours) {
           failureReasons.push(
@@ -2176,7 +2179,7 @@ export const appRouter = router({
         const reportMinDurationHours = isWarehouseEaeu(effectiveEquipmentType)
           ? Math.max(warehouseMinDurationHours, session?.minDurationHours ?? warehouseMinDurationHours)
           : isChamberProtocol
-            ? Math.max(24, session?.minDurationHours ?? warehouseMinDurationHours)
+            ? CHAMBER_MIN_DURATION_HOURS
             : (session?.minDurationHours ?? warehouseMinDurationHours);
         const isAutoRefrigeratorProtocol = isAutoRefrigeratorLike(effectiveEquipmentType);
         const isKyrgyzstanAutoRefrigeratorProtocol = isKyrgyzstanAutoRefrigerator(effectiveEquipmentType);

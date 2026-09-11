@@ -57,7 +57,8 @@ describe("cold chamber stage text", () => {
       .join(" ");
     expect(text).not.toMatch(/авторефрижератор|кузов|кабина|транспортное средство|VIN/i);
     expect(text).not.toMatch(/проектной документац/i);
-    expect(text).toMatch(/ЕЭК №8|24–72/);
+    expect(text).toContain("не менее 24 часов");
+    expect(text).not.toMatch(/24[–-]72|не менее 72|не менее 7 суток/);
     expect(text).toContain("ISPE Good Practice Guide");
     expect(text).toContain("холодильная камера");
   });

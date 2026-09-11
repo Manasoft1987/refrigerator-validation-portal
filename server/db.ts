@@ -40,7 +40,7 @@ import {
   type InsertProtocolAttachment,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
-import { DEFAULT_SENSOR_ACCURACY_C, normalizeSensorAccuracyC } from "../shared/validation";
+import { DEFAULT_SENSOR_ACCURACY_C, normalizeSensorAccuracyC, CHAMBER_MIN_DURATION_HOURS } from "../shared/validation";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -752,6 +752,7 @@ export async function nextProtocolNumberForCompany(companyId: number, year: numb
 }
 
 export async function insertProtocol(data: InsertProtocol) {
+  const chamber = data.customEquipmentName === "__equipmentType:chamber" || String(data.equipmentType) === "chamber";
   const db = await getDb();
   if (!db) {
     if (!shouldUseLocalDevDb()) throw new Error("DB unavailable");
@@ -782,7 +783,7 @@ export async function insertProtocol(data: InsertProtocol) {
         tempMode: null,
         startAt: null,
         endAt: null,
-        minDurationHours: 72,
+        minDurationHours: chamber ? CHAMBER_MIN_DURATION_HOURS : 72,
         minSensorCount: 9,
         customMin: null,
         customMax: null,
@@ -827,7 +828,7 @@ export async function insertProtocol(data: InsertProtocol) {
   try {
     await db.insert(pvSessions).values({
       protocolId: row.id,
-      minDurationHours: 72,
+      minDurationHours: chamber ? CHAMBER_MIN_DURATION_HOURS : 72,
       minSensorCount: 9,
     });
   } catch (error) {

@@ -12,6 +12,7 @@ import {
 import { trpc } from "@/lib/trpc";
 import {
   DEFAULT_SENSOR_ACCURACY_C,
+  CHAMBER_MIN_DURATION_HOURS,
   TEMP_MODES,
   applySensorAccuracyGuardBand,
   isWarehouseEaeu,
@@ -67,7 +68,7 @@ export default function PVStep({
   const utils = trpc.useUtils();
   const giQ = trpc.generalInfo.get.useQuery({ protocolId });
   const protocolQ = trpc.protocols.get.useQuery({ id: protocolId });
-  const equipmentType = giQ.data?.equipmentType || (protocolQ.data?.customEquipmentName === "__equipmentType:chamber" ? "chamber" : protocolQ.data?.equipmentType) || "refrigerator";
+  const equipmentType = protocolQ.data?.customEquipmentName === "__equipmentType:chamber" ? "chamber" : giQ.data?.equipmentType || protocolQ.data?.equipmentType || "refrigerator";
   const isWarehouse = isWarehouseLike(equipmentType);
   const isWarehouseByEaeu = isWarehouseEaeu(equipmentType);
   const isChamber = equipmentType === "chamber";
@@ -110,7 +111,7 @@ export default function PVStep({
         minDurationHours: isWarehouseByEaeu
           ? Math.max(warehouseMinDurationHours, initialMinDurationHours)
           : isChamber
-            ? Math.max(24, initialMinDurationHours)
+            ? CHAMBER_MIN_DURATION_HOURS
           : initialMinDurationHours,
         minSensorCount: isChamber ? Math.max(15, session.minSensorCount || 15) : session.minSensorCount || 9,
         samplingStepMinutes: session.samplingStepMinutes ? String(session.samplingStepMinutes) : "0",
@@ -249,7 +250,7 @@ export default function PVStep({
     const parsed = Number(value);
     const fallback = Number.isFinite(parsed) && parsed > 0 ? parsed : warehouseMinDurationHours;
     if (isWarehouseByEaeu) return Math.max(warehouseMinDurationHours, fallback);
-    if (isChamber) return Math.max(24, fallback);
+    if (isChamber) return CHAMBER_MIN_DURATION_HOURS;
     return fallback;
   };
 
@@ -366,13 +367,14 @@ export default function PVStep({
                 warehouseStudyType === "cold_room"
                   ? "Для холодильной/морозильной камеры: 24–72 ч или более по обоснованию."
                   : "Для помещения хранения: не менее 168 ч (7 суток подряд)."
-              ) : isChamber ? "Для холодильной камеры: 24–72 ч или более по обоснованию (Рек. ЕЭК №8)." : undefined}
+              ) : isChamber ? "Для холодильной камеры: не менее 24 часов непрерывно. Фактический период задаётся датами начала и окончания." : undefined}
             >
               <Input
                 type="number"
                 min={isWarehouseByEaeu ? warehouseMinDurationHours : isChamber ? 24 : 0.01}
                 step="0.01"
-                value={form.minDurationHours}
+                value={isChamber ? CHAMBER_MIN_DURATION_HOURS : form.minDurationHours}
+                readOnly={isChamber}
                 onChange={e => setForm({ ...form, minDurationHours: e.target.value })}
                 onBlur={e => {
                   if (isWarehouseByEaeu || isChamber) {

@@ -9,11 +9,11 @@ import type { ReportInput } from "./pdfReport";
 /** Synthetic, non-client data for chamber report regression and visual QA. */
 export function chamberReportFixture(): ReportInput {
   const start = Date.UTC(2026, 8, 1, 0),
-    end = start + 72 * 3600_000;
+    end = start + 24 * 3600_000;
   const loggers = [...CHAMBER_POSITIONS.map(p => p.id), "external"].map(
     (position, i) => {
       const avg = i === 15 ? 22 : 3.1 + i * 0.23;
-      const ts = Array.from({ length: 289 }, (_, j) => start + j * 15 * 60_000);
+      const ts = Array.from({ length: 97 }, (_, j) => start + j * 15 * 60_000);
       const temp = ts.map(
         (_, j) => avg + 0.4 * Math.sin((2 * Math.PI * j) / 96)
       );
@@ -99,7 +99,7 @@ export function chamberReportFixture(): ReportInput {
       sensorAccuracy: 0.2,
       startAt: start,
       endAt: end,
-      minDurationHours: 72,
+      minDurationHours: 72, // Legacy saved setting: the chamber policy must use 24.
       minSensorCount: 15,
       loggers,
       verdict: "pass",
@@ -155,7 +155,7 @@ export function chamberReportFixture(): ReportInput {
         heightPct: 0,
         rotation: 0,
         label:
-          "Демонстрационная конфигурация: дверь на передней стороне, испаритель у задней стенки. Внешний регистратор — в смежном помещении с контролируемой температурой. Период 72 ч охватывает штатные циклы работы.",
+          "Демонстрационная конфигурация: дверь на передней стороне, испаритель у задней стенки. Внешний регистратор — в смежном помещении с контролируемой температурой. Период 24 ч охватывает штатный суточный цикл работы.",
       },
     ],
     reportDate: "2026-09-04",
