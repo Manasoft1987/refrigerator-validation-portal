@@ -165,9 +165,11 @@ export type ChamberPrimitive =
       color: string;
       bold?: boolean;
     };
-export const CHAMBER_VIEW = { width: 900, height: 850 };
+export const CHAMBER_VIEW = { width: 900, height: 930 };
 export function chamberProject(x: number, y: number, z: number): Point {
-  return [420 + 280 * x - 230 * y, 575 - 130 * x - 110 * y - 240 * z];
+  // Enlarged, elongated cutaway rather than a cube. Only the illustration's
+  // projection changes: persisted positions and interpolation remain untouched.
+  return [260 + 520 * x - 130 * y, 650 - 135 * x - 115 * y - 280 * z];
 }
 const palette = [
   [29, 78, 216],
@@ -355,11 +357,11 @@ export function buildChamberScene(
     const face = faces[features[key] || ""];
     if (!face) return;
     const pt = chamberProject(face[0], face[1], key === "door" ? 0.25 : 0.8),
-      cx = 75,
-      cy = 100 + i * 80;
+      cx = 200 + i * 250,
+      cy = 62;
     out.push({
       kind: "line",
-      points: [[cx + 55, cy], pt],
+      points: [[cx, cy + 19], pt],
       stroke: "#6366f1",
       width: 1.5,
       dash: true,
@@ -410,23 +412,23 @@ export function buildChamberScene(
           width: 1.2,
         });
   }
-  text(455, 670, "Открытая передняя сторона · рабочий объём", 17, "#475569");
+  text(455, 740, "Открытая передняя сторона · рабочий объём", 17, "#475569");
   // Label displacements keep IDs/averages readable and leave true locations fixed.
   const offsets: Record<string, Point> = {
-    C1: [-22, 26],
-    C2: [38, 12],
-    C3: [250, 0],
-    C4: [-38, 12],
-    C5: [-205, -10],
-    C6: [35, -4],
-    C7: [16, -14],
-    C8: [-35, -8],
-    W1: [30, 18],
-    W2: [-23, -4],
-    W3: [-35, 5],
-    W4: [40, 5],
-    V1: [0, 22],
-    V2: [15, 25],
+    C1: [-25, 24],
+    C2: [40, 14],
+    C3: [150, -5],
+    C4: [-35, 10],
+    C5: [-65, -10],
+    C6: [38, -4],
+    C7: [15, -10],
+    C8: [-38, -6],
+    W1: [25, 28],
+    W2: [-10, -15],
+    W3: [-30, 0],
+    W4: [35, 0],
+    V1: [0, 32],
+    V2: [0, 20],
     V3: [0, -12],
   };
   const annotations: ChamberPrimitive[] = [];
@@ -575,7 +577,7 @@ export function buildChamberScene(
   const external = loggers.filter(l => l.role === "external");
   text(
     450,
-    710,
+    780,
     mode === "plan"
       ? "EXT · 1 внешний регистратор рядом с камерой"
       : `EXT · ${external.length ? external.map(l => chamberShortId(l.label)).join(", ") : "не назначен"} · среда вокруг камеры`,
@@ -587,18 +589,18 @@ export function buildChamberScene(
       out.push({
         kind: "poly",
         points: [
-          [250 + i * 4, 753],
-          [254 + i * 4, 753],
-          [254 + i * 4, 767],
-          [250 + i * 4, 767],
+          [250 + i * 4, 823],
+          [254 + i * 4, 823],
+          [254 + i * 4, 837],
+          [250 + i * 4, 837],
         ],
         fill: chamberTemperatureColor(i / 99),
       });
-    text(250, 780, `${lo.toFixed(1)} °C`, 15);
-    text(650, 780, `${hi.toFixed(1)} °C`, 15);
+    text(250, 850, `${lo.toFixed(1)} °C`, 15);
+    text(650, 850, `${hi.toFixed(1)} °C`, 15);
     text(
       450,
-      815,
+      885,
       "Цвет — средняя температура; Г / Х — критические точки",
       14,
       "#475569"
@@ -606,7 +608,7 @@ export function buildChamberScene(
   } else
     text(
       450,
-      765,
+      835,
       "C — углы · W — центры стенок · V — центральная вертикаль",
       16,
       "#475569"

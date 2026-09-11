@@ -7,11 +7,36 @@ import {
   chamberInterpolate,
   chamberPlacementIssues,
   chamberMetrologyIssues,
+  chamberProject,
+  CHAMBER_VIEW,
 } from "../shared/chamberMapping";
 import { generateProtocolPdf } from "./pdfReport";
 import { chamberReportFixture } from "./chamberReport.fixture";
 
 describe("chamber placement shared by portal and PDF", () => {
+  it("uses an enlarged rectangular prism without clipping logger annotations", () => {
+    const origin = chamberProject(0, 0, 0);
+    const long = chamberProject(1, 0, 0);
+    const short = chamberProject(0, 1, 0);
+    expect(
+      Math.hypot(long[0] - origin[0], long[1] - origin[1])
+    ).toBeGreaterThan(
+      2 * Math.hypot(short[0] - origin[0], short[1] - origin[1])
+    );
+    expect(long[0] - short[0]).toBeGreaterThanOrEqual(650);
+    for (const mode of ["plan", "actual", "temperature"] as const) {
+      for (const p of buildChamberScene(
+        chamberReportFixture().pvLoggers!,
+        mode
+      )) {
+        if (p.kind !== "circle") continue;
+        expect(p.x - p.r).toBeGreaterThanOrEqual(0);
+        expect(p.x + p.r).toBeLessThanOrEqual(CHAMBER_VIEW.width);
+        expect(p.y - p.r).toBeGreaterThanOrEqual(0);
+        expect(p.y + p.r + 43).toBeLessThanOrEqual(CHAMBER_VIEW.height);
+      }
+    }
+  });
   it("requires valid metrology and accuracy for every logger at the study date", () => {
     const input = chamberReportFixture();
     const loggers = input.pvLoggers!;

@@ -7773,7 +7773,7 @@ function chamberHeight(input: ReportInput, z: number): string {
 }
 
 function drawChamberDiagram(doc: PDFKit.PDFDocument, input: ReportInput, mode: ChamberMode) {
-  ensureSpace(doc,mode === "temperature" ? 670 : 610);
+  ensureSpace(doc,mode === "temperature" ? 720 : 670);
   drawSectionTitle(doc, mode === "plan"
     ? "Схема 1. Планируемое размещение регистраторов"
     : mode === "actual" ? "Схема 2. Фактическое размещение регистраторов"
