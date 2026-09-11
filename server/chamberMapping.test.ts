@@ -168,6 +168,9 @@ describe("dedicated chamber EEC report", () => {
       expect(text).not.toContain("Приказом");
       expect(text).toContain("не менее 24 часов");
       expect(text).not.toMatch(/24[–−-]72|не менее 72|выбрано 72|не менее 7 суток/);
+      expect(text).toContain("Справочная информация.");
+      expect(text).toContain("от 24 до 72 часов или более при необходимости");
+      expect(text).toContain("Критерий длительности настоящего протокола — не менее 24 часов непрерывно.");
       expect(text).toContain("Испытание завершено с положительным заключением.");
       expect(input.pv.minDurationHours).toBe(72); // Reading must not rewrite legacy data.
       expect(input.pv.endAt! - input.pv.startAt!).toBe(24 * 3600_000);
