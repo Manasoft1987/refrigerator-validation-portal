@@ -159,6 +159,12 @@ describe("dedicated chamber EEC report", () => {
       expect(text).toContain("Индивидуальная проверка камеры");
       expect(text).toContain("Индивидуальное обоснование");
       expect(text).not.toContain("GPP");
+      expect(text).toContain("∑");
+      expect(text).toContain("σ");
+      expect(text).toContain("ΔH");
+      expect(text).toContain("Средняя кинетическая температура (MKT)");
+      expect(text).not.toContain("sqrt(sum(");
+      expect(text).not.toContain("MKT = -dH/R");
       expect(text).not.toContain("Приказом");
       const plan = text.indexOf("Схема 1.");
       const actual = text.indexOf("Схема 2.");

@@ -2,6 +2,7 @@
 // Uses pdfkit for full layout control + chartjs-node-canvas for inline charts.
 
 import PDFDocument from "pdfkit";
+import { drawChamberFormulae } from "./chamberFormulae";
 import path from "path";
 import fs from "fs";
 import { buildChamberScene, CHAMBER_POSITIONS, CHAMBER_VIEW, chamberPlacementIssues, chamberMetrologyIssues, chamberFeatures, type ChamberLogger, type ChamberMode } from "../shared/chamberMapping";
@@ -3040,7 +3041,9 @@ function drawPVCalculationMethodSection(
         ["Длительность отклонений", "D = sum(delta t вне границ)", "Суммарное время значений ниже нижней границы или выше верхней границы режима."],
       ];
 
-  drawSimpleTable(
+  if (getReportEquipmentType(input) === "chamber") {
+    drawChamberFormulae(doc, PAGE_MARGIN);
+  } else drawSimpleTable(
     doc,
     en ? ["Indicator", "Formula", "Meaning"] : ["Показатель", "Формула", "Что подтверждает"],
     formulaRows,
