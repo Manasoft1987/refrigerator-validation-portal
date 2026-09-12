@@ -159,6 +159,9 @@ describe("dedicated chamber EEC report", () => {
       expect(text).toContain("Индивидуальная проверка камеры");
       expect(text).toContain("Индивидуальное обоснование");
       expect(text).not.toContain("GPP");
+      expect(text).not.toContain("Ответственные лица и организации берутся из данных протокола");
+      expect(text).not.toContain("Руководитель исследования проверяет подготовку исполнителей");
+      expect(text).not.toContain("Ответственные лица обладают необходимой подготовкой");
       expect(text).toContain("∑");
       expect(text).toContain("σ");
       expect(text).toContain("ΔH");

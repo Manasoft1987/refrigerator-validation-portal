@@ -7210,9 +7210,14 @@ function buildWarehousePersonnelEntries(input: ReportInput): WarehousePersonnelE
   return entries;
 }
 
-function drawWarehousePersonnelTable(doc: PDFKit.PDFDocument, input: ReportInput): void {
+function drawWarehousePersonnelTable(
+  doc: PDFKit.PDFDocument,
+  input: ReportInput,
+  options: { showPreparationNote?: boolean } = {},
+): void {
   const en = isEnglishWarehouse(input);
   const personnel = buildWarehousePersonnelEntries(input);
+  const showPreparationNote = options.showPreparationNote ?? true;
 
   if (personnel.length === 0) {
     renderTextBlock(
@@ -7245,13 +7250,15 @@ function drawWarehousePersonnelTable(doc: PDFKit.PDFDocument, input: ReportInput
     { fontSize: 9, headerFontSize: 9, padding: 6 },
   );
 
-  doc.font("body").fontSize(10).fillColor(ACCENT).text(
-    en
-      ? "The responsible personnel have the required preparation to place and program data loggers, retrieve data and perform the temperature mapping assessment."
-      : "Ответственные лица обладают необходимой подготовкой для размещения и программирования регистраторов данных, считывания данных и выполнения оценки результатов температурного картирования.",
-    { align: "left" },
-  );
-  doc.moveDown(0.8);
+  if (showPreparationNote) {
+    doc.font("body").fontSize(10).fillColor(ACCENT).text(
+      en
+        ? "The responsible personnel have the required preparation to place and program data loggers, retrieve data and perform the temperature mapping assessment."
+        : "Ответственные лица обладают необходимой подготовкой для размещения и программирования регистраторов данных, считывания данных и выполнения оценки результатов температурного картирования.",
+      { align: "left" },
+    );
+    doc.moveDown(0.8);
+  }
 }
 
 function warehouseValue(raw: unknown, fallback = "—"): string {
@@ -7899,7 +7906,7 @@ function drawChamberMappingReport(doc: PDFKit.PDFDocument, source: ReportInput) 
   section("6. Методология проведения температурного картирования");
   sub("6.1. Выбор регистраторов данных","Используются электронные регистраторы с подходящим диапазоном, достаточной памятью и автономностью, единым временем и возможностью выгрузки исходных данных. Абсолютная погрешность в исследуемом диапазоне — не более ±0,5 °C. Метрологическая пригодность подтверждается на дату испытания действующей поверкой или калибровкой, когда она допускается применимыми требованиями. Предпочтительны регистраторы одного типа. Номер свидетельства и подтверждающий документ сохраняются в материалах исследования.");
   drawWarehouseLoggerSelectionTable(doc,input);
-  sub("6.2. Исполнители","Ответственные лица и организации берутся из данных протокола. Руководитель исследования проверяет подготовку исполнителей, утверждение программы и сохранность исходных файлов.");drawWarehousePersonnelTable(doc,input);
+  ensureSpace(doc,150);drawSubTitle(doc,"6.2. Исполнители");drawWarehousePersonnelTable(doc,input,{ showPreparationNote: false });
   sub("6.3. Сведения об объекте исследования",`Габариты камеры (длина × ширина × высота): ${dims.join(" × ")}. Нижний уровень хранения: ${chamberHeight(input,0)}; средний: ${chamberHeight(input,.5)}; верхний: ${chamberHeight(input,1)}.\n${notes}`);
   sub("6.4. Критерии приемлемости",`Температурный режим хранения: ${pvTemperatureModeLabel(input.pv,input)}. Оценка внутренних регистраторов проводится по границам ${input.pv.rangeMin}...${input.pv.rangeMax} °C с принятой в протоколе метрологической поправкой / защитным интервалом. Требуются не менее ${input.pv.minSensorCount} внутренних регистраторов и 1 внешний, прослеживаемые позиции и непрерывные сопоставимые записи за утверждённый период. MKT — дополнительный показатель, не заменяющий оценку экстремумов, длительности отклонений и риска замораживания. Выходы за пределы не компенсируются приемлемым средним или MKT. Недостаточность данных не считается соответствием.`);
   sub("6.5. Определение точек размещения и оценка рисков","План 15+1: 8 углов рабочего объёма (C1–C8), 4 центра боковых граней (W1–W4), центры нижней и верхней граней (V1, V3) и центр объёма (V2). Такая расстановка охватывает длину, ширину и высоту хранения и позволяет сравнивать периферийные и центральные зоны. Риск-ориентированный подход допускается пунктом 16д Руководства ЕЭК. Число 15 не является универсальной гарантией покрытия: для больших камер, отдельных отсеков, плотных стеллажей или нескольких испарителей обосновывают дополнительные точки и отдельные зоны исследования. Типовая схема ISPE для объёма до приблизительно 20 м³ не должна автоматически переноситься на любой объём.");
