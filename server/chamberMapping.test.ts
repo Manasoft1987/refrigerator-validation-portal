@@ -213,4 +213,34 @@ describe("dedicated chamber EEC report", () => {
       spy.mockRestore();
     }
   }, 60000);
+
+  it("uses saved chamber study metadata in section 2.3 even for legacy records", async () => {
+    const seen: string[] = [];
+    const original = PDFDocument.prototype.text;
+    const spy = vi
+      .spyOn(PDFDocument.prototype, "text")
+      .mockImplementation(function (
+        this: PDFKit.PDFDocument,
+        ...args: Parameters<PDFKit.PDFDocument["text"]>
+      ) {
+        if (typeof args[0] === "string") seen.push(args[0]);
+        return original.apply(this, args);
+      });
+    try {
+      const input = chamberReportFixture();
+      input.generalInfo!.basis = null as any;
+      input.generalInfo!.qualificationType = "primary";
+      input.generalInfo!.season = null;
+      input.generalInfo!.whSeason = "warm";
+      input.generalInfo!.fillStatus = "loaded";
+      input.generalInfo!.loadPercent = "75%";
+
+      await generateProtocolPdf(input);
+      const text = seen.join("\n");
+      expect(text).toContain("75%");
+      expect(text).not.toContain("75%%");
+    } finally {
+      spy.mockRestore();
+    }
+  }, 60000);
 });

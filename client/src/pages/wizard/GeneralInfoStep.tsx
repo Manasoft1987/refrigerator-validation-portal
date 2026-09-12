@@ -271,7 +271,7 @@ export default function GeneralInfoStep({
       location: form.location ?? null,
       purpose: form.purpose ?? null,
       validationDate: form.validationDate || null,
-      basis: null,
+      basis: form.qualificationType ?? form.basis ?? null,
       qualificationType: form.qualificationType ?? null,
       season: form.season ?? null,
       commissionMembers: (form.commissionMembers || []).filter(
