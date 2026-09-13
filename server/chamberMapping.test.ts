@@ -235,13 +235,15 @@ describe("dedicated chamber EEC report", () => {
       input.generalInfo!.qualificationType = "primary";
       input.generalInfo!.season = null;
       input.generalInfo!.whSeason = "warm";
-      input.generalInfo!.fillStatus = "loaded";
+      input.generalInfo!.fillStatus = null as any;
       input.generalInfo!.loadPercent = "75%";
 
       await generateProtocolPdf(input);
       const text = seen.join("\n");
       expect(text).toContain("75%");
       expect(text).not.toContain("75%%");
+      expect(text).not.toContain("состояние загрузки: не указано");
+      expect(text).not.toContain("не указано; загрузка");
     } finally {
       spy.mockRestore();
     }

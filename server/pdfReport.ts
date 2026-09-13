@@ -7880,12 +7880,20 @@ function drawChamberMappingReport(doc: PDFKit.PDFDocument, source: ReportInput) 
     : gi?.fillStatus === "loaded"
       ? "загруженная камера"
       : "не указано";
+  const chamberFillStatusKnown = chamberFillStatusLabel !== "не указано";
   const chamberLoadPercentRaw = String(gi?.loadPercent ?? "").trim();
   const chamberLoadPercentLabel = chamberLoadPercentRaw
     ? /%|≤|>=|<=|>|</.test(chamberLoadPercentRaw)
       ? chamberLoadPercentRaw
       : `${chamberLoadPercentRaw}%`
     : "не указана";
+  const chamberLoadText = chamberFillStatusKnown && chamberLoadPercentRaw
+    ? ` Исследуется состояние загрузки: ${chamberFillStatusLabel}; загрузка: ${chamberLoadPercentLabel}.`
+    : chamberFillStatusKnown
+      ? ` Исследуется состояние загрузки: ${chamberFillStatusLabel}.`
+      : chamberLoadPercentRaw
+        ? ` Загрузка: ${chamberLoadPercentLabel}.`
+        : "";
   const chamberSeasonRaw = String(gi?.season || (gi?.whSeason && gi.whSeason !== "n_a" ? gi.whSeason : "") || "").trim();
   const chamberSeasonLabel = chamberSeasonRaw
     ? (SEASON_LABEL_RU[chamberSeasonRaw] || WAREHOUSE_SEASON_LABEL[chamberSeasonRaw] || chamberSeasonRaw)
@@ -7898,7 +7906,7 @@ function drawChamberMappingReport(doc: PDFKit.PDFDocument, source: ReportInput) 
   section("2. Описание и обоснование");
   sub("2.1. Описание объекта",`Объект: холодильная камера для хранения лекарственных средств. Организация: ${input.org.name}. Адрес / место установки: ${gi?.location || input.org.addressFact || "не указано"}. Идентификация камеры: ${[gi?.manufacturer,gi?.model,gi?.serial].filter(Boolean).join(" / ") || "не указана"}. Назначение: ${gi?.purpose || "хранение лекарственных средств в установленном температурном режиме"}.`);
   sub("2.2. Нормативные и методические основания","Структура и процедура картирования адаптированы к Руководству, утверждённому Рекомендацией Коллегии ЕЭК от 20.04.2026 №8 (разделы V–VI, пункты 10–20). Рекомендация имеет рекомендательный характер. Правила GDP ЕАЭС по Решению Совета ЕЭК от 03.11.2016 №80 применяются в соответствующей области деятельности. Размещение 15 внутренних регистраторов основано на международной практике ISPE и документированной оценке рисков; 1 внешний регистратор предназначен для оценки влияния окружающей среды.");
-  sub("2.3. Основание данного исследования",`Основание: ${chamberBasisLabel}. Исследуется состояние загрузки: ${chamberFillStatusLabel}; загрузка: ${chamberLoadPercentLabel}. Период: ${chamberSeasonLabel}. Результаты относятся к документированной конфигурации камеры и условиям испытания.`);
+  sub("2.3. Основание данного исследования",`Основание: ${chamberBasisLabel}.${chamberLoadText} Период: ${chamberSeasonLabel}. Результаты относятся к документированной конфигурации камеры и условиям испытания.`);
   section("3. Область применения");
   renderTextBlock(doc,"Настоящий протокол применяется к стационарной холодильной камере для хранения лекарственных средств. Он охватывает проверку готовности камеры и регистратора данных, исследование рабочего объёма, выявление неоднородности температуры и выбор мест постоянного мониторинга. Испытания с открыванием двери, отключением питания, переключением агрегатов и оттайкой оцениваются по утверждённой программе. Применимость результатов к иной загрузке или конфигурации требует оценки рисков.");
   sub("4. Цели и задачи температурного картирования","Подтвердить поддержание заданного диапазона температуры в зоне размещения продукции; оценить стабильность и колебания; выявить холодные, горячие и иные критические точки; определить участки с ограничениями хранения; установить места средств измерения для постоянного мониторинга и необходимые корректирующие действия.");mark("4. Цели и задачи температурного картирования");
