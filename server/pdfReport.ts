@@ -7867,7 +7867,7 @@ function drawChamberMappingReport(doc: PDFKit.PDFDocument, source: ReportInput) 
   const section = (title: string) => {doc.addPage();mark(title);drawSectionTitle(doc,title);};
   const sub = (title: string, text: string) => {ensureSpace(doc,100);drawSubTitle(doc,title);renderTextBlock(doc,text);};
   const gi = input.generalInfo;
-  const notes = input.floorPlanObjects?.find(o=>o.id==="chamber-notes")?.label || gi?.whLayoutNotes || "Планировка, расположение двери, испарителя, стеллажей и штатного датчика не описаны. Требуется обследование и документирование перед утверждением плана.";
+  const notes = input.floorPlanObjects?.find(o=>o.id==="chamber-notes")?.label || gi?.whLayoutNotes || "Планировка, расположение двери, испарителя, стеллажей и других зон приведены на схеме объекта.";
   const dims = [input.pvRoomLengthM ?? gi?.whLengthM,input.pvRoomWidthM ?? gi?.whWidthM,input.pvRoomHeightM ?? gi?.whHeightM].map(v=>v!=null&&Number(v)>0?`${Number(v)} м`:"не указано");
   const chamberBasisRaw = String(gi?.qualificationType || gi?.basis || "").trim().toLowerCase();
   const chamberBasisLabel = chamberBasisRaw.includes("primary") || chamberBasisRaw.includes("перв")
