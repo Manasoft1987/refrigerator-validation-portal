@@ -15,7 +15,7 @@
  *  - Size labels rendered on canvas (Д×Ш×В)
  *  - Zoom and pan controls (Ctrl+Scroll to zoom, Ctrl+Drag to pan)
  */
-import { useState, useRef, useCallback, useEffect, useId } from "react";
+import { useState, useRef, useCallback, useEffect, useId, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -244,6 +244,206 @@ function sensorPointColors(
   if (outOfRange) return { fill: "#fee2e2", stroke: selected ? "#f59e0b" : "#dc2626", text: "#991b1b", badge: "#dc2626" };
   if (logger?.role === "external") return { fill: "#f1f5f9", stroke: selected ? "#f59e0b" : "#64748b", text: "#334155", badge: "#64748b" };
   return { fill: "#dcfce7", stroke: selected ? "#f59e0b" : "#16a34a", text: "#14532d", badge: "#16a34a" };
+}
+
+type SensorPointDisplay = {
+  obj: FloorPlanObject;
+  logger?: SensorLogger;
+  baseX: number;
+  baseY: number;
+  anchorX: number;
+  anchorY: number;
+};
+
+type SensorPointCalloutGroup = {
+  node: string;
+  items: SensorPointDisplay[];
+  anchorX: number;
+  anchorY: number;
+  bubbleX: number;
+  bubbleY: number;
+};
+
+function assignSensorPointNodeNames(
+  groups: Array<Omit<SensorPointCalloutGroup, "node">>,
+): SensorPointCalloutGroup[] {
+  const rows: Array<Array<Omit<SensorPointCalloutGroup, "node">>> = [];
+  for (const group of [...groups].sort((a, b) => a.anchorY - b.anchorY || a.anchorX - b.anchorX)) {
+    const row = rows.find(items => Math.abs(items[0].anchorY - group.anchorY) <= 22);
+    if (row) row.push(group);
+    else rows.push([group]);
+  }
+  let index = 1;
+  return rows.flatMap(row =>
+    row
+      .sort((a, b) => a.anchorX - b.anchorX)
+      .map(group => ({ ...group, node: `T${index++}` })),
+  );
+}
+
+function buildSensorPointCalloutGroups(
+  objects: FloorPlanObject[],
+  sensorLoggers: SensorLogger[],
+  planX: number,
+  planY: number,
+  drawW: number,
+  drawH: number,
+): SensorPointCalloutGroup[] {
+  const displays: SensorPointDisplay[] = objects
+    .filter(obj => obj.type === "sensor_point")
+    .map(obj => {
+      const x = planX + (obj.xPct / 100) * drawW;
+      const y = planY + (obj.yPct / 100) * drawH;
+      const w = Math.max(4, (obj.widthPct / 100) * drawW);
+      const h = Math.max(4, (obj.heightPct / 100) * drawH);
+      const baseX = x + w / 2;
+      const baseY = y + h / 2;
+      const hasLeader =
+        typeof obj.leaderEndXPct === "number" &&
+        typeof obj.leaderEndYPct === "number" &&
+        Number.isFinite(obj.leaderEndXPct) &&
+        Number.isFinite(obj.leaderEndYPct);
+      const anchorX = hasLeader ? planX + ((obj.leaderEndXPct as number) / 100) * drawW : baseX;
+      const anchorY = hasLeader ? planY + ((obj.leaderEndYPct as number) / 100) * drawH : baseY;
+      return { obj, logger: sensorPointLogger(obj, sensorLoggers), baseX, baseY, anchorX, anchorY };
+    });
+
+  if (displays.length < 2) return [];
+
+  const thresholdPx = Math.max(10, Math.min(24, Math.min(drawW, drawH) * 0.035));
+  const groups: Array<Omit<SensorPointCalloutGroup, "node">> = [];
+  for (const display of displays) {
+    let bestGroup: Omit<SensorPointCalloutGroup, "node"> | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const group of groups) {
+      const distance = Math.hypot(group.anchorX - display.anchorX, group.anchorY - display.anchorY);
+      if (distance <= thresholdPx && distance < bestDistance) {
+        bestGroup = group;
+        bestDistance = distance;
+      }
+    }
+    if (!bestGroup) {
+      groups.push({
+        items: [display],
+        anchorX: display.anchorX,
+        anchorY: display.anchorY,
+        bubbleX: display.baseX,
+        bubbleY: display.baseY,
+      });
+      continue;
+    }
+    bestGroup.items.push(display);
+    const n = bestGroup.items.length;
+    bestGroup.anchorX += (display.anchorX - bestGroup.anchorX) / n;
+    bestGroup.anchorY += (display.anchorY - bestGroup.anchorY) / n;
+    bestGroup.bubbleX += (display.baseX - bestGroup.bubbleX) / n;
+    bestGroup.bubbleY += (display.baseY - bestGroup.bubbleY) / n;
+  }
+
+  return assignSensorPointNodeNames(groups.filter(group => group.items.length > 1));
+}
+
+function SensorPointCallout({
+  group,
+  planX,
+  planY,
+  drawW,
+  drawH,
+  selected,
+  onSelect,
+}: {
+  group: SensorPointCalloutGroup;
+  planX: number;
+  planY: number;
+  drawW: number;
+  drawH: number;
+  selected: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const rows = [...group.items]
+    .sort((a, b) => (a.obj.heightM ?? 0) - (b.obj.heightM ?? 0))
+    .map(item => {
+      const label = shortSensorCode(loggerName(item.logger) || item.obj.label) || "?";
+      const height = (item.obj.heightM ?? 0) > 0 ? `${item.obj.heightM.toFixed(2)} м` : "—";
+      return `${label} — ${height}`;
+    });
+  const labelW = clamp(Math.max(group.node.length * 8 + 20, ...rows.map(row => row.length * 5.35 + 14), 74), 74, 142);
+  const labelH = 22 + rows.length * 12.2;
+  const sideOffset = 34;
+  const canPlaceRight = group.anchorX + sideOffset + labelW <= planX + drawW - 4;
+  const canPlaceLeft = group.anchorX - sideOffset - labelW >= planX + 4;
+  let labelX = group.bubbleX - labelW / 2;
+  let labelY = group.bubbleY - labelH / 2;
+  const labelWouldCoverAnchor = group.anchorX >= labelX - 10
+    && group.anchorX <= labelX + labelW + 10
+    && group.anchorY >= labelY - 10
+    && group.anchorY <= labelY + labelH + 10;
+  if (labelWouldCoverAnchor) {
+    labelX = canPlaceRight || !canPlaceLeft ? group.anchorX + sideOffset : group.anchorX - labelW - sideOffset;
+    labelY = group.anchorY - labelH / 2;
+  }
+  labelX = clamp(labelX, planX + 4, planX + drawW - labelW - 4);
+  labelY = clamp(labelY, planY + 4, planY + drawH - labelH - 4);
+  const labelCenterX = labelX + labelW / 2;
+  const labelCenterY = labelY + labelH / 2;
+  const vx = group.anchorX - labelCenterX;
+  const vy = group.anchorY - labelCenterY;
+  const edgeScale = 1 / Math.max(Math.abs(vx) / (labelW / 2), Math.abs(vy) / (labelH / 2), 1);
+  const edgeX = labelCenterX + vx * edgeScale;
+  const edgeY = labelCenterY + vy * edgeScale;
+  const representativeId = group.items[0]?.obj.id;
+
+  return (
+    <g
+      style={{ cursor: "pointer", userSelect: "none" }}
+      onPointerDown={event => {
+        event.stopPropagation();
+        if (representativeId) onSelect(representativeId);
+      }}
+    >
+      <rect
+        x={labelX}
+        y={labelY}
+        width={labelW}
+        height={labelH}
+        rx={5}
+        fill="white"
+        fillOpacity={0.96}
+        stroke={selected ? "#f59e0b" : "#0891b2"}
+        strokeWidth={selected ? 2 : 1.2}
+      />
+      <rect x={labelX} y={labelY} width={labelW} height={17} rx={5} fill="#0891b2" />
+      <text x={labelX + 6} y={labelY + 12} fontSize={9} fontWeight={800} fill="white" style={{ pointerEvents: "none" }}>
+        {group.node}
+      </text>
+      {rows.map((row, index) => (
+        <text
+          key={`${row}-${index}`}
+          x={labelX + 6}
+          y={labelY + 28 + index * 12.2}
+          fontSize={7.6}
+          fontWeight={600}
+          fill="#0f172a"
+          style={{ pointerEvents: "none" }}
+        >
+          {row}
+        </text>
+      ))}
+      <line
+        x1={group.anchorX}
+        y1={group.anchorY}
+        x2={edgeX}
+        y2={edgeY}
+        stroke="#0f172a"
+        strokeWidth={1.35}
+        strokeLinecap="round"
+        style={{ pointerEvents: "none" }}
+      />
+      <polygon points={arrowHeadPoints(group.anchorX, group.anchorY, edgeX, edgeY, 7)} fill="#0f172a" style={{ pointerEvents: "none" }} />
+      <circle cx={group.anchorX} cy={group.anchorY} r={5.4} fill="white" stroke="#0891b2" strokeWidth={1.5} style={{ pointerEvents: "none" }} />
+      <circle cx={group.anchorX} cy={group.anchorY} r={3.2} fill="#0f172a" stroke="white" strokeWidth={0.9} style={{ pointerEvents: "none" }} />
+    </g>
+  );
 }
 
 // ─── Object shape renderer ────────────────────────────────────────────────────
@@ -1173,6 +1373,14 @@ export function FloorPlanEditor({
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   const selectedObj = objects.find(o => o.id === selectedId);
+  const sensorPointCalloutGroups = useMemo(
+    () => buildSensorPointCalloutGroups(objects, sensorLoggers, planX, planY, drawW, drawH),
+    [objects, sensorLoggers, planX, planY, drawW, drawH],
+  );
+  const groupedSensorPointIds = useMemo(
+    () => new Set(sensorPointCalloutGroups.flatMap(group => group.items.map(item => item.obj.id))),
+    [sensorPointCalloutGroups],
+  );
 
   const updateSelected = useCallback((patch: Partial<FloorPlanObject>) => {
     if (!selectedId) return;
@@ -1397,8 +1605,10 @@ export function FloorPlanEditor({
               </g>
             )}
 
-            {/* Floor plan objects (rendered first, below sensors) */}
-            {objects.map(obj => (
+            {/* Floor plan objects (rendered first, below grouped sensor callouts) */}
+            {objects
+              .filter(obj => !(obj.type === "sensor_point" && groupedSensorPointIds.has(obj.id)))
+              .map(obj => (
               <ObjectShape
                 key={obj.id}
                 obj={obj}
@@ -1413,6 +1623,25 @@ export function FloorPlanEditor({
                 onLeaderPointerDown={handleLeaderPointerDown}
                 onResizePointerDown={handleResizePointerDown}
                 onDoubleClick={(id) => { setSelectedId(id); setPanelOpen(true); }}
+              />
+            ))}
+
+            {/* Grouped stacked sensors: exact point + arrow + T-callout with heights */}
+            {sensorPointCalloutGroups.map(group => (
+              <SensorPointCallout
+                key={group.node}
+                group={group}
+                planX={planX}
+                planY={planY}
+                drawW={drawW}
+                drawH={drawH}
+                selected={group.items.some(item => item.obj.id === selectedId)}
+                onSelect={(id) => {
+                  if (readOnly) return;
+                  setSelectedId(id);
+                  setPanelOpen(false);
+                  setPickerForCell(null);
+                }}
               />
             ))}
 
