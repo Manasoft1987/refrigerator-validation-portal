@@ -27,6 +27,7 @@ const zipPath = path.join(workDir, "registry.zip");
 const unzipDir = path.join(workDir, "unzipped");
 const documentXmlPath = path.join(unzipDir, "word", "document.xml");
 const dbPath = path.join(root, ".storage", "dev-db.json");
+const defaultAccuracyC = "0.30";
 
 function decodeXml(text) {
   return String(text ?? "")
@@ -78,15 +79,62 @@ const rows = Array.from(xml.matchAll(/<w:tr[\s\S]*?<\/w:tr>/g)).map(match => mat
 const registry = [];
 const seen = new Set();
 
-for (const row of rows) {
-  const cells = Array.from(row.matchAll(/<w:tc[\s\S]*?<\/w:tc>/g)).map(match => textFromXml(match[0]));
+function normalizeHeader(value) {
+  return String(value ?? "")
+    .toLowerCase()
+    .replace(/\s+/g, "")
+    .replace(/[№#.:;,_\-–—/\\()[\]]/g, "");
+}
+
+function sensorNumberFromCell(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const sts = text.match(/\b\d{6}STS\d{7}\b/i)?.[0];
+  if (sts) return sts.toUpperCase();
+  // Bluetooth TZ-BT04 registry numbers are plain 8-digit serials, e.g. 11246327.
+  const numeric = text.match(/\b\d{6,12}\b/)?.[0];
+  return numeric ?? null;
+}
+
+function rowFromCells(cells) {
   const rowText = cells.join(" ");
-  const number = rowText.match(/\b\d{6}STS\d{7}\b/i)?.[0]?.toUpperCase();
+  const number = sensorNumberFromCell(cells[0]) ?? sensorNumberFromCell(rowText);
   const dates = Array.from(rowText.matchAll(/\b\d{2}\.\d{2}\.\d{4}\b/g)).map(match => match[0]);
-  if (!number || dates.length < 2 || seen.has(number)) continue;
+  if (!number || dates.length < 2 || seen.has(number)) return null;
   const calibrationDate = isoDateFromRu(dates[0]);
   const nextCalibrationDate = isoDateFromRu(dates[1]);
-  if (!calibrationDate || !nextCalibrationDate) continue;
+  if (!calibrationDate || !nextCalibrationDate) return null;
+  return { number, calibrationDate, nextCalibrationDate };
+}
+
+let headerMap = null;
+
+for (const row of rows) {
+  const cells = Array.from(row.matchAll(/<w:tc[\s\S]*?<\/w:tc>/g)).map(match => textFromXml(match[0]));
+  const normalizedCells = cells.map(normalizeHeader);
+  if (!headerMap) {
+    const numberIdx = normalizedCells.findIndex(cell => cell.includes("серийный") || cell === "номер" || cell.includes("serial"));
+    const calibrationIdx = normalizedCells.findIndex(cell => cell.includes("датаповер") || cell.includes("calibrationdate"));
+    const nextIdx = normalizedCells.findIndex(cell => cell === "срок" || cell.includes("след") || cell.includes("nextcalibration"));
+    if (numberIdx >= 0 && calibrationIdx >= 0 && nextIdx >= 0) {
+      headerMap = { numberIdx, calibrationIdx, nextIdx };
+      continue;
+    }
+  }
+
+  let parsed = null;
+  if (headerMap) {
+    const number = sensorNumberFromCell(cells[headerMap.numberIdx]);
+    const calibrationDate = isoDateFromRu(String(cells[headerMap.calibrationIdx] ?? "").trim());
+    const nextCalibrationDate = isoDateFromRu(String(cells[headerMap.nextIdx] ?? "").trim());
+    if (number && calibrationDate && nextCalibrationDate && !seen.has(number)) {
+      parsed = { number, calibrationDate, nextCalibrationDate };
+    }
+  }
+  parsed ??= rowFromCells(cells);
+  if (!parsed) continue;
+  const { number, calibrationDate, nextCalibrationDate } = parsed;
+  if (seen.has(number)) continue;
   seen.add(number);
   registry.push({
     number,
@@ -127,6 +175,7 @@ for (const sensor of registry) {
   if (existing) {
     existing.calibrationDate = sensor.calibrationDate;
     existing.nextCalibrationDate = sensor.nextCalibrationDate;
+    existing.accuracyC = defaultAccuracyC;
     existing.status = sensor.status;
     existing.updatedAt = nowIso;
     updated += 1;
@@ -137,6 +186,7 @@ for (const sensor of registry) {
       number: sensor.number,
       calibrationDate: sensor.calibrationDate,
       nextCalibrationDate: sensor.nextCalibrationDate,
+      accuracyC: defaultAccuracyC,
       status: sensor.status,
       createdAt: nowIso,
       updatedAt: nowIso,
