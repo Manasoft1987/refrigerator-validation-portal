@@ -3133,7 +3133,8 @@ function drawPVCalculationMethodSection(
         ["Длительность отклонений", "D = sum(delta t вне границ)", "Суммарное время значений ниже нижней границы или выше верхней границы режима."],
       ];
 
-  if (getReportEquipmentType(input) === "chamber") {
+  const equipmentType = getReportEquipmentType(input);
+  if (equipmentType === "chamber" || (isPharmacyStorageReport(input) && !en)) {
     drawChamberFormulae(doc, PAGE_MARGIN);
   } else drawSimpleTable(
     doc,
