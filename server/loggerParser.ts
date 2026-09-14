@@ -96,7 +96,9 @@ function isHumidityHeader(header: string): boolean {
   );
 }
 
-function scoreAsTime(header: string, columnValues: any[]): number {
+type LoggerDateOrder = "dmy" | "mdy";
+
+function scoreAsTime(header: string, columnValues: any[], dateOrder: LoggerDateOrder = "dmy"): number {
   const h = normKey(header);
   let s = 0;
   if (containsAny(h, TIME_TOKENS)) s += 10;
@@ -107,7 +109,7 @@ function scoreAsTime(header: string, columnValues: any[]): number {
   for (const v of sample) {
     if (v === null || v === undefined || v === "") continue;
     checked++;
-    if (parseTimestamp(v) !== null) ok++;
+    if (parseTimestamp(v, dateOrder) !== null) ok++;
   }
   if (checked > 0 && ok / checked > 0.6) s += 8;
   return s;
@@ -182,6 +184,7 @@ function cleanSensorName(value: string | undefined): string | undefined {
 function selectColumns(
   header: any[],
   dataRows: any[][],
+  dateOrder: LoggerDateOrder = "dmy",
 ): { timeIdx: number; tempIdx: number } {
   const colCount = header.length;
   const timeScores: number[] = [];
@@ -189,7 +192,7 @@ function selectColumns(
 
   for (let c = 0; c < colCount; c++) {
     const vals = dataRows.map(r => (r ? r[c] : undefined));
-    timeScores.push(scoreAsTime(String(header[c] ?? ""), vals));
+    timeScores.push(scoreAsTime(String(header[c] ?? ""), vals, dateOrder));
     tempScores.push(scoreAsTemp(String(header[c] ?? ""), vals));
   }
 
@@ -237,7 +240,7 @@ function parseNumber(raw: any): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function parseTimestamp(raw: any): number | null {
+function parseTimestamp(raw: any, dateOrder: LoggerDateOrder = "dmy"): number | null {
   if (raw === null || raw === undefined || raw === "") return null;
 
   // Excel serial number heuristic (days since 1899-12-30)
@@ -257,33 +260,43 @@ function parseTimestamp(raw: any): number | null {
   // Normalise common quirks: double spaces, "T" separator, trailing Z
   s = s.replace(/\s+/g, " ");
 
-  // Common European format: DD.MM.YYYY HH:MM[:SS]  or  DD/MM/YYYY HH:MM[:SS]  or  DD-MM-YYYY
+  // Common logger formats:
+  // - default DD.MM.YYYY / DD/MM/YYYY / DD-MM-YYYY
+  // - some BT04B-style exports explicitly state MM/dd/yyyy in the header.
   let m = s.match(
     /^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})[ T]+(\d{1,2}):(\d{1,2})(?::(\d{1,2}))?(?:\.\d+)?/,
   );
   if (m) {
-    const [, dd, mm, yyyy, hh, mi, ss] = m;
+    const [, first, second, yyyy, hh, mi, ss] = m;
     const year = yyyy.length === 2 ? 2000 + Number(yyyy) : Number(yyyy);
+    const separator = s.match(/^\d{1,2}([./-])\d{1,2}/)?.[1] ?? "";
+    const useMdy = separator === "/" && dateOrder === "mdy";
+    const dd = useMdy ? second : first;
+    const mm = useMdy ? first : second;
     // Treat naive timestamps from file as wall-clock (UTC) so display matches the file regardless of server TZ.
-    const t = Date.UTC(year, Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss || "0"));
-    if (Number.isFinite(t)) return t;
+    const t = validatedUtcTimestamp(year, Number(mm), Number(dd), Number(hh), Number(mi), Number(ss || "0"));
+    if (t !== null) return t;
   }
 
   // Date only
   m = s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
   if (m) {
-    const [, dd, mm, yyyy] = m;
+    const [, first, second, yyyy] = m;
     const year = yyyy.length === 2 ? 2000 + Number(yyyy) : Number(yyyy);
-    const t = Date.UTC(year, Number(mm) - 1, Number(dd));
-    if (Number.isFinite(t)) return t;
+    const separator = s.match(/^\d{1,2}([./-])\d{1,2}/)?.[1] ?? "";
+    const useMdy = separator === "/" && dateOrder === "mdy";
+    const dd = useMdy ? second : first;
+    const mm = useMdy ? first : second;
+    const t = validatedUtcTimestamp(year, Number(mm), Number(dd), 0, 0, 0);
+    if (t !== null) return t;
   }
 
   // ISO-style: YYYY-MM-DD HH:MM[:SS] (no timezone marker → treat as wall-clock UTC)
   m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?$/);
   if (m) {
     const [, yyyy, mm, dd, hh, mi, ss] = m;
-    const t = Date.UTC(Number(yyyy), Number(mm) - 1, Number(dd), Number(hh), Number(mi), Number(ss || "0"));
-    if (Number.isFinite(t)) return t;
+    const t = validatedUtcTimestamp(Number(yyyy), Number(mm), Number(dd), Number(hh), Number(mi), Number(ss || "0"));
+    if (t !== null) return t;
   }
 
   // Fallback to the browser Date parser (handles ISO with explicit Z/offset)
@@ -291,6 +304,52 @@ function parseTimestamp(raw: any): number | null {
   if (!isNaN(d.getTime())) return d.getTime();
 
   return null;
+}
+
+function validatedUtcTimestamp(
+  year: number,
+  month1: number,
+  day: number,
+  hour: number,
+  minute: number,
+  second: number,
+): number | null {
+  if (
+    !Number.isInteger(year) ||
+    !Number.isInteger(month1) ||
+    !Number.isInteger(day) ||
+    !Number.isInteger(hour) ||
+    !Number.isInteger(minute) ||
+    !Number.isInteger(second) ||
+    year < 1900 ||
+    year > 2200 ||
+    month1 < 1 ||
+    month1 > 12 ||
+    day < 1 ||
+    day > 31 ||
+    hour < 0 ||
+    hour > 23 ||
+    minute < 0 ||
+    minute > 59 ||
+    second < 0 ||
+    second > 59
+  ) {
+    return null;
+  }
+  const t = Date.UTC(year, month1 - 1, day, hour, minute, second);
+  if (!Number.isFinite(t)) return null;
+  const d = new Date(t);
+  if (
+    d.getUTCFullYear() !== year ||
+    d.getUTCMonth() !== month1 - 1 ||
+    d.getUTCDate() !== day ||
+    d.getUTCHours() !== hour ||
+    d.getUTCMinutes() !== minute ||
+    d.getUTCSeconds() !== second
+  ) {
+    return null;
+  }
+  return t;
 }
 
 /* ------------------------------------------------------------------ */
@@ -371,28 +430,40 @@ function parseCsvText(text: string): string[][] {
 function findHeaderRowIndex(rows: any[][]): number {
   let bestIdx = 0;
   let bestScore = -1;
+  let bestWithTimeAndTempIdx = 0;
+  let bestWithTimeAndTempScore = -1;
   const limit = Math.min(rows.length, 40);
   for (let i = 0; i < limit; i++) {
     const r = rows[i] || [];
     let textCells = 0;
-    let tokenHits = 0;
+    let timeHits = 0;
+    let tempHits = 0;
     for (const cell of r) {
       const s = String(cell ?? "").trim();
       if (!s) continue;
       // Header cells are usually text, not pure numbers / dates.
       if (parseNumber(cell) === null && parseTimestamp(cell) === null) textCells++;
       const nk = normKey(s);
-      if (containsAny(nk, TIME_TOKENS)) tokenHits += 2;
-      if (containsAny(nk, TEMP_TOKENS)) tokenHits += 2;
+      if (containsAny(nk, TIME_TOKENS)) timeHits += 2;
+      if (containsAny(nk, TEMP_TOKENS)) tempHits += 2;
       const lower = s.toLowerCase();
-      if (lower.includes("°c") || /\(\s*c\s*\)/.test(lower)) tokenHits += 1;
+      if (lower.includes("°c") || lower.includes("℃") || /\(\s*c\s*\)/.test(lower)) tempHits += 1;
     }
+    const tokenHits = timeHits + tempHits;
     const score = textCells + tokenHits * 3;
     if (score > bestScore && tokenHits > 0) {
       bestScore = score;
       bestIdx = i;
     }
+    // Prefer actual measurement headers such as "Date / Temperature" over
+    // alarm summary headers that may contain multiple "Time" columns but no
+    // temperature column.
+    if (timeHits > 0 && tempHits > 0 && score > bestWithTimeAndTempScore) {
+      bestWithTimeAndTempScore = score;
+      bestWithTimeAndTempIdx = i;
+    }
   }
+  if (bestWithTimeAndTempScore > 0) return bestWithTimeAndTempIdx;
   return bestScore > 0 ? bestIdx : 0;
 }
 
@@ -513,19 +584,36 @@ function findMeasurementTableStart(rows: any[][]): number | null {
   return null;
 }
 
+function detectDateOrder(rows: any[][]): LoggerDateOrder {
+  const headerText = rows
+    .slice(0, Math.min(rows.length, 40))
+    .flatMap(row => row ?? [])
+    .map(cell => String(cell ?? ""))
+    .join(" ")
+    .toLowerCase();
+  if (
+    /mm\s*\/\s*dd\s*\/\s*(?:yyyy|yy)/i.test(headerText) ||
+    /month\s*\/\s*day\s*\/\s*year/i.test(headerText)
+  ) {
+    return "mdy";
+  }
+  return "dmy";
+}
+
 function parseHeaderlessMeasurementTable(
   rows: any[][],
   startIdx: number,
   sensorName: string | undefined,
+  dateOrder: LoggerDateOrder = "dmy",
 ): LoggerSeries | null {
   const dataRows = rows.slice(startIdx).filter(row => Array.isArray(row) && row.length > 0);
-  const { timeIdx, tempIdx } = heuristicColumnsFromData(dataRows);
+  const { timeIdx, tempIdx } = heuristicColumnsFromData(dataRows, dateOrder);
   if (timeIdx === -1 || tempIdx === -1) return null;
 
   const ts: number[] = [];
   const temp: number[] = [];
   for (const row of dataRows) {
-    const t = parseTimestamp(row[timeIdx]);
+    const t = parseTimestamp(row[timeIdx], dateOrder);
     const v = parseNumber(row[tempIdx]);
     if (t !== null && v !== null && v > -80 && v < 80) {
       ts.push(t);
@@ -640,10 +728,11 @@ export function parseLoggerBuffer(
 
   if (rows.length < 2) return { ts: [], temp: [] };
 
+  const dateOrder = detectDateOrder(rows);
   const measurementTableStart = findMeasurementTableStart(rows);
   if (measurementTableStart !== null) {
     const sensorName = chooseSensorName(extractSensorName(rows, measurementTableStart), fileName);
-    const headerlessResult = parseHeaderlessMeasurementTable(rows, measurementTableStart, sensorName);
+    const headerlessResult = parseHeaderlessMeasurementTable(rows, measurementTableStart, sensorName, dateOrder);
     if (headerlessResult) return headerlessResult;
   }
 
@@ -655,7 +744,7 @@ export function parseLoggerBuffer(
   // not contain logger identity, use the document name as a practical fallback.
   const sensorName = chooseSensorName(extractSensorName(rows, headerIdx), fileName);
 
-  let { timeIdx, tempIdx } = selectColumns(header, dataRows);
+  let { timeIdx, tempIdx } = selectColumns(header, dataRows, dateOrder);
 
   const ts: number[] = [];
   const temp: number[] = [];
@@ -664,7 +753,7 @@ export function parseLoggerBuffer(
     // Fallback A: look column-wise on data rows, without the header row,
     // for the first column that is mostly timestamps and the first that is
     // mostly realistic temperatures (excluding the time column).
-    const { timeIdx: tA, tempIdx: tB } = heuristicColumnsFromData(dataRows);
+    const { timeIdx: tA, tempIdx: tB } = heuristicColumnsFromData(dataRows, dateOrder);
     timeIdx = timeIdx === -1 ? tA : timeIdx;
     tempIdx = tempIdx === -1 ? tB : tempIdx;
   }
@@ -674,7 +763,7 @@ export function parseLoggerBuffer(
   }
 
   for (const r of dataRows) {
-    const t = parseTimestamp(r[timeIdx]);
+    const t = parseTimestamp(r[timeIdx], dateOrder);
     const v = parseNumber(r[tempIdx]);
     if (t !== null && v !== null && v > -80 && v < 80) {
       ts.push(t);
@@ -693,7 +782,7 @@ export function parseLoggerBuffer(
 /**
  * Last-resort: pick columns based purely on data shape.
  */
-function heuristicColumnsFromData(rows: any[][]): { timeIdx: number; tempIdx: number } {
+function heuristicColumnsFromData(rows: any[][], dateOrder: LoggerDateOrder = "dmy"): { timeIdx: number; tempIdx: number } {
   if (rows.length === 0) return { timeIdx: -1, tempIdx: -1 };
   const colCount = Math.max(...rows.map(r => (r ? r.length : 0)));
   const timeHits: number[] = new Array(colCount).fill(0);
@@ -705,7 +794,7 @@ function heuristicColumnsFromData(rows: any[][]): { timeIdx: number; tempIdx: nu
     const r = rows[i] || [];
     for (let c = 0; c < colCount; c++) {
       const v = r[c];
-      if (parseTimestamp(v) !== null) timeHits[c]++;
+      if (parseTimestamp(v, dateOrder) !== null) timeHits[c]++;
       const n = parseNumber(v);
       const nextUnit = r[c + 1];
       if (n !== null && n > -80 && n < 80 && isTemperatureUnitCell(nextUnit)) {

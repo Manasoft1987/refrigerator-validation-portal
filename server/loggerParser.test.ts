@@ -163,6 +163,62 @@ describe("parseLoggerBuffer", () => {
     }
   });
 
+  it("parses BT04B-style XLSX with alarm summary before the measurement table", () => {
+    const aoa = [
+      ["Device info"],
+      ["******************************"],
+      ["Device type:BT04B"],
+      ["Firmware version:27"],
+      ["ID:11246327"],
+      ["Start Delay:0 min"],
+      ["Log Interval:600 sec"],
+      ["Description:"],
+      ["Note:All Times shown are based on UTC +5:00 and 24-Hour clock [MM/dd/yyyy HH:mm:ss]"],
+      [],
+      ["Logging Summary"],
+      ["******************************"],
+      ["First Point:07/28/2026 13:09:32"],
+      ["Stop time:08/18/2026 11:00:44"],
+      ["Number of Points:4"],
+      ["Trip Length:00d 00h 30m 00s"],
+      ["Max:31.5℃(Temp) 76.0%RH(Humidty)"],
+      ["Min:6.2℃(Temp) 37.0%RH(Humidty)"],
+      ["Average:12.7℃(Temp) 57.8%RH(Humidty)"],
+      ["mkt:17.9℃"],
+      [],
+      ["Marked Event"],
+      ["******************************"],
+      ["Alarm Condition", "Alarm Delay", "First Point Time", "Time of Violations", "No.of Violation", "Alarm Status"],
+      ["**************", "**************", "**************", "**************", "**************", "**************"],
+      ["H2:N/A"],
+      ["H1:8.0℃Above", "00 d 00h 00m 00s   Single", "07/28/2026 13:09:32", "06 02h 30m 00s", "2", "Alarm"],
+      ["L1:2.0℃Below", "00 d 00h 00m 00s   Single", "00/00/00 00:00:00", "00 00h 00m 00s", "0", "OK"],
+      ["L2:N/A"],
+      [],
+      ["NO.", "Date", "Temperature", "Humidity"],
+      ["**************", "**************", "**************", "**************"],
+      ["1", "07/28/2026 13:09:32", "21.8℃", "51.0%"],
+      ["2", "07/28/2026 13:19:32", "11.2℃", "57.0%"],
+      ["3", "08/01/2026 00:09:32", "7.3℃", "58.0%"],
+      ["4", "08/12/2026 23:59:32", "25.0℃", "62.0%"],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "11246327_20260818110737.xlsx");
+    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+    const res = parseLoggerBuffer(buf, "11246327_20260818110737.xlsx");
+    expect(res.ts.length).toBe(4);
+    expect(res.sensorName).toBe("11246327");
+    expect(res.temp).toEqual([21.8, 11.2, 7.3, 25.0]);
+    const first = new Date(res.ts[0]);
+    expect(first.getUTCFullYear()).toBe(2026);
+    expect(first.getUTCMonth()).toBe(6); // July in MM/dd/yyyy
+    expect(first.getUTCDate()).toBe(28);
+    const third = new Date(res.ts[2]);
+    expect(third.getUTCMonth()).toBe(7); // August, not January 8
+    expect(third.getUTCDate()).toBe(1);
+  });
+
   it("uses the document name as sensor name when the file has no logger identity inside", () => {
     const csv =
       "Timestamp,Temperature\n" +
