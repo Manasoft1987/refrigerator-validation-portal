@@ -19,7 +19,7 @@ INSERT INTO `questionTemplates` (`stage`, `ord`, `text`, `isDefault`, `companyId
 --> statement-breakpoint
 INSERT INTO `questionTemplates` (`stage`, `ord`, `text`, `isDefault`, `companyId`, `equipmentType`, `equipmentKind`) SELECT 'oq', 10, 'Запускается ли холодильная установка камеры корректно?', 1, NULL, 'chamber', NULL WHERE NOT EXISTS (SELECT 1 FROM `questionTemplates` WHERE `stage` = 'oq' AND `equipmentType` = 'chamber' AND `text` = 'Запускается ли холодильная установка камеры корректно?');
 --> statement-breakpoint
-INSERT INTO `questionTemplates` (`stage`, `ord`, `text`, `isDefault`, `companyId`, `equipmentType`, `equipmentKind`) SELECT 'oq', 20, 'Работает ли пульт управления без ошибок?', 1, NULL, 'chamber', NULL WHERE NOT EXISTS (SELECT 1 FROM `questionTemplates` WHERE `stage` = 'oq' AND `equipmentType` = 'chamber' AND `text` = 'Работает ли пульт управления без ошибок?');
+INSERT INTO `questionTemplates` (`stage`, `ord`, `text`, `isDefault`, `companyId`, `equipmentType`, `equipmentKind`) SELECT 'oq', 20, 'Работает ли блок управления без ошибок?', 1, NULL, 'chamber', NULL WHERE NOT EXISTS (SELECT 1 FROM `questionTemplates` WHERE `stage` = 'oq' AND `equipmentType` = 'chamber' AND `text` = 'Работает ли блок управления без ошибок?');
 --> statement-breakpoint
 INSERT INTO `questionTemplates` (`stage`, `ord`, `text`, `isDefault`, `companyId`, `equipmentType`, `equipmentKind`) SELECT 'oq', 30, 'Реагирует ли система на изменение уставки температуры?', 1, NULL, 'chamber', NULL WHERE NOT EXISTS (SELECT 1 FROM `questionTemplates` WHERE `stage` = 'oq' AND `equipmentType` = 'chamber' AND `text` = 'Реагирует ли система на изменение уставки температуры?');
 --> statement-breakpoint

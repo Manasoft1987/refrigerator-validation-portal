@@ -1469,6 +1469,15 @@ export async function ensureChamberQuestionTemplateStorage(
         AND text = ${"Соответствуют ли место установки и конструкция холодильной камеры проектной документации?"}
     `);
 
+    await db.execute(sql`
+      UPDATE questionTemplates
+      SET text = ${oqQuestions[1]}
+      WHERE stage = 'oq'
+        AND equipmentType = 'chamber'
+        AND isDefault = 1
+        AND text = ${"Работает ли пульт управления без ошибок?"}
+    `);
+
     for (const [stage, questions] of [
       ["iq", iqQuestions],
       ["oq", oqQuestions],
