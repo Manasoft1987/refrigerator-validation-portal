@@ -1270,23 +1270,6 @@ function warehouseClamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
 }
 
-function warehouseNodeRowName(index: number): string {
-  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-  if (index < alphabet.length) return alphabet[index];
-  return `${alphabet[index % alphabet.length]}${Math.floor(index / alphabet.length) + 1}`;
-}
-
-function warehouseHeightRangeLabel(values: Array<number | null | undefined>): string | null {
-  const finite = values
-    .filter((value): value is number => typeof value === "number" && Number.isFinite(value) && value > 0)
-    .sort((a, b) => a - b);
-  if (finite.length === 0) return null;
-  const min = finite[0];
-  const max = finite[finite.length - 1];
-  if (Math.abs(max - min) < 0.01) return `${min.toFixed(2)} м`;
-  return `${min.toFixed(2)}–${max.toFixed(2)} м`;
-}
-
 function assignWarehouseNodeNames<T>(
   groups: Array<Omit<WarehouseSensorDisplayGroup<T>, "node">>,
   rowTolerance: number,
@@ -1303,12 +1286,13 @@ function assignWarehouseNodeNames<T>(
     }
     row.push(group);
   }
-  return rows.flatMap((row, rowIndex) =>
+  let index = 1;
+  return rows.flatMap(row =>
     row
       .sort((a, b) => a.anchorX - b.anchorX)
-      .map((group, colIndex) => ({
+      .map(group => ({
         ...group,
-        node: `${warehouseNodeRowName(rowIndex)}${colIndex + 1}`,
+        node: `T${index++}`,
       })),
   );
 }
@@ -6093,70 +6077,97 @@ function drawWarehousePlanDiagram(
     if (groupedSensorDisplays.has(display) && !groupedNode) continue;
     if (groupedNode) {
       const r = display.r;
-      const spX = groupedNode.bubbleX;
-      const spY = groupedNode.bubbleY;
       const anchorX = groupedNode.anchorX;
       const anchorY = groupedNode.anchorY;
-      const groupBox = warehouseMarkerBox(spX, spY, r + 5);
+      const rowFont = 6.7;
+      const titleFont = 8.4;
+      const sortedItems = [...groupedNode.items].sort((a, b) => (a.sp.heightM ?? 0) - (b.sp.heightM ?? 0));
+      const calloutRows = sortedItems.map(item => {
+        const sensorLabel = shortSensorId(item.sp.label) || String(item.sp.label || "D");
+        const height = typeof item.sp.heightM === "number" && Number.isFinite(item.sp.heightM) && item.sp.heightM > 0
+          ? `${item.sp.heightM.toFixed(2)} м`
+          : "—";
+        return `${sensorLabel} — ${height}`;
+      });
+      doc.font("bold").fontSize(titleFont);
+      const titleW = doc.widthOfString(groupedNode.node);
+      doc.font("body").fontSize(rowFont);
+      const rowsW = calloutRows.reduce((max, row) => Math.max(max, doc.widthOfString(row)), 0);
+      const labelW = Math.max(68, Math.min(134, Math.max(titleW, rowsW) + 14));
+      const labelH = 20 + calloutRows.length * 10.8;
+      const closeToAnchor = Math.hypot(groupedNode.bubbleX - anchorX, groupedNode.bubbleY - anchorY) < r + 12;
+      const sideOffset = 34;
+      const canPlaceRight = anchorX + sideOffset + labelW <= markerPlanBox.x + markerPlanBox.w - 3;
+      const canPlaceLeft = anchorX - sideOffset - labelW >= markerPlanBox.x + 3;
+      let labelX = closeToAnchor
+        ? (canPlaceRight ? anchorX + sideOffset : anchorX - labelW - sideOffset)
+        : groupedNode.bubbleX - labelW / 2;
+      let labelY = closeToAnchor ? anchorY - labelH / 2 : groupedNode.bubbleY - labelH / 2;
+      const labelWouldCoverAnchor = anchorX >= labelX - 10
+        && anchorX <= labelX + labelW + 10
+        && anchorY >= labelY - 10
+        && anchorY <= labelY + labelH + 10;
+      if (labelWouldCoverAnchor) {
+        labelX = canPlaceRight || !canPlaceLeft ? anchorX + sideOffset : anchorX - labelW - sideOffset;
+        labelY = anchorY - labelH / 2;
+      }
+      labelX = Math.max(markerPlanBox.x + 3, Math.min(markerPlanBox.x + markerPlanBox.w - labelW - 3, labelX));
+      labelY = Math.max(markerPlanBox.y + 3, Math.min(markerPlanBox.y + markerPlanBox.h - labelH - 3, labelY));
+      const labelCenterX = labelX + labelW / 2;
+      const labelCenterY = labelY + labelH / 2;
+      const vx = anchorX - labelCenterX;
+      const vy = anchorY - labelCenterY;
+      const edgeScale = 1 / Math.max(Math.abs(vx) / (labelW / 2), Math.abs(vy) / (labelH / 2), 1);
+      const edgeX = labelCenterX + vx * edgeScale;
+      const edgeY = labelCenterY + vy * edgeScale;
+      const groupBox = { x: labelX, y: labelY, w: labelW, h: labelH };
       sensorLabelBoxes.push(groupBox);
       const hasHot = groupedNode.items.some(item => floorSensorPointMatchesTokens(item.sp, criticalSensorTokens.hot));
       const hasCold = groupedNode.items.some(item => floorSensorPointMatchesTokens(item.sp, criticalSensorTokens.cold));
       doc.save();
+      doc.opacity(0.94).fillColor("#ffffff").roundedRect(labelX, labelY, labelW, labelH, 4).fill();
+      doc.opacity(1).strokeColor("#0891b2").lineWidth(0.9).roundedRect(labelX, labelY, labelW, labelH, 4).stroke();
       if (hasHot) {
-        doc.circle(spX, spY, r + 2.8).lineWidth(2.0).strokeColor("#ef4444").stroke();
+        doc.roundedRect(labelX - 2.2, labelY - 2.2, labelW + 4.4, labelH + 4.4, 5).lineWidth(1.6).strokeColor("#ef4444").stroke();
       }
       if (hasCold) {
-        doc.circle(spX, spY, r + (hasHot ? 5.4 : 2.8)).lineWidth(1.8).strokeColor("#2563eb").stroke();
+        doc.roundedRect(labelX - (hasHot ? 5 : 2.2), labelY - (hasHot ? 5 : 2.2), labelW + (hasHot ? 10 : 4.4), labelH + (hasHot ? 10 : 4.4), 6).lineWidth(1.5).strokeColor("#2563eb").stroke();
       }
-      const leaderDistance = Math.hypot(anchorX - spX, anchorY - spY);
-      if (leaderDistance > r + 7) {
-        const ux = (anchorX - spX) / leaderDistance;
-        const uy = (anchorY - spY) / leaderDistance;
-        const startX = spX + ux * (r + 1.5);
-        const startY = spY + uy * (r + 1.5);
-        doc.strokeColor("#0f172a").lineWidth(1.05)
-          .moveTo(startX, startY)
-          .lineTo(anchorX, anchorY)
+      doc.fillColor("#0891b2").roundedRect(labelX, labelY, labelW, 15, 4).fill();
+      doc.fillColor("#ffffff").font("bold").fontSize(titleFont)
+        .text(groupedNode.node, labelX + 5, labelY + 3.2, { width: labelW - 10, align: "left", lineBreak: false });
+      calloutRows.forEach((row, index) => {
+        doc.fillColor("#0f172a").font("body").fontSize(rowFont)
+          .text(row, labelX + 5, labelY + 18 + index * 10.8, { width: labelW - 10, align: "left", lineBreak: false });
+      });
+      const leaderDistance = Math.hypot(edgeX - anchorX, edgeY - anchorY);
+      if (leaderDistance > 6) {
+        doc.strokeColor("#0f172a").lineWidth(1.1)
+          .moveTo(anchorX, anchorY)
+          .lineTo(edgeX, edgeY)
           .stroke();
-        drawPdfArrowHead(doc, startX, startY, anchorX, anchorY, 5.2, "#0f172a");
+        drawPdfArrowHead(doc, anchorX, anchorY, edgeX, edgeY, 5.4, "#0f172a");
       }
-      doc.fillColor("#0891b2").strokeColor("#0f172a").lineWidth(1.5).circle(spX, spY, r + 1).fillAndStroke();
-      doc.fillColor("#ffffff").font("bold").fontSize(Math.max(6.2, Math.min(9.2, r * 0.72)))
-        .text(groupedNode.node, spX - r * 1.1, spY - r * 0.45, { width: r * 2.2, align: "center", lineBreak: false });
-      doc.fillColor("#e0f2fe").font("bold").fontSize(Math.max(5.2, Math.min(7.2, r * 0.52)))
-        .text(`×${groupedNode.items.length}`, spX - r * 1.1, spY + r * 0.16, { width: r * 2.2, align: "center", lineBreak: false });
-      const heightRange = showHeightLabels
-        ? warehouseHeightRangeLabel(groupedNode.items.map(item => item.sp.heightM))
-        : null;
-      if (heightRange) {
-        const heightFont = Math.max(5.5, Math.min(7.2, r * 0.55));
-        doc.font("bold").fontSize(heightFont);
-        const heightW = Math.max(r * 3.1, doc.widthOfString(heightRange) + 5);
-        const heightY = spY + r + 4 + heightFont <= markerPlanBox.y + markerPlanBox.h - 1
-          ? spY + r + 3
-          : Math.max(markerPlanBox.y + 1, spY - r - heightFont - 4);
-        const heightX = Math.max(markerPlanBox.x + 1, Math.min(markerPlanBox.x + markerPlanBox.w - heightW - 1, spX - heightW / 2));
-        doc.fillColor("#0c4a6e").font("bold").fontSize(heightFont)
-          .text(heightRange, heightX + 2, heightY + 1, { width: heightW - 4, align: "center", lineBreak: false });
-      }
+      doc.circle(anchorX, anchorY, 5.2).lineWidth(1.0).strokeColor("#0891b2").stroke();
+      doc.fillColor("#0f172a").strokeColor("#ffffff").lineWidth(1.1).circle(anchorX, anchorY, 3.8).fillAndStroke();
       const criticalOffset = r + Math.max(3.2, r * 0.35);
       const criticalMarkerRadius = 5.6;
       const occupiedCriticalBoxes = sensorLabelBoxes.filter(item => item !== groupBox);
       if (hasHot) {
         const [markerX, markerY] = chooseWarehouseCriticalMarkerPosition([
-          [spX + criticalOffset, spY - criticalOffset],
-          [spX - criticalOffset, spY - criticalOffset],
-          [spX + criticalOffset, spY + criticalOffset],
-          [spX - criticalOffset, spY + criticalOffset],
+          [labelX + labelW + criticalOffset, labelY - criticalOffset],
+          [labelX - criticalOffset, labelY - criticalOffset],
+          [labelX + labelW + criticalOffset, labelY + labelH + criticalOffset],
+          [labelX - criticalOffset, labelY + labelH + criticalOffset],
         ], markerPlanBox, occupiedCriticalBoxes, criticalMarkerRadius);
         drawPdfStar(doc, markerX, markerY, 5.4, "#ef4444");
       }
       if (hasCold) {
         const [markerX, markerY] = chooseWarehouseCriticalMarkerPosition([
-          [spX + criticalOffset, spY + criticalOffset],
-          [spX - criticalOffset, spY + criticalOffset],
-          [spX + criticalOffset, spY - criticalOffset],
-          [spX - criticalOffset, spY - criticalOffset],
+          [labelX + labelW + criticalOffset, labelY + labelH + criticalOffset],
+          [labelX - criticalOffset, labelY + labelH + criticalOffset],
+          [labelX + labelW + criticalOffset, labelY - criticalOffset],
+          [labelX - criticalOffset, labelY - criticalOffset],
         ], markerPlanBox, occupiedCriticalBoxes, criticalMarkerRadius);
         drawPdfDiamond(doc, markerX, markerY, 5.2, "#2563eb");
       }
@@ -6444,7 +6455,7 @@ function drawWarehousePlanDiagram(
         ? [22, 34, 40, 104, 132, 56, totalW2 - (22 + 34 + 40 + 104 + 132 + 56)]
         : [24, 42, 112, 160, 56, totalW2 - (24 + 42 + 112 + 160 + 56)];
       const sHeaders = showNodeColumn
-        ? ["№", "Узел", "ID", "Серийный №", "Позиция на схеме", "Высота, м", "Прим."]
+        ? ["№", "Точка", "ID", "Серийный №", "Позиция на схеме", "Высота, м", "Прим."]
         : ["№", "ID", "Серийный №", "Позиция на схеме", "Высота, м", "Прим."];
       const centeredWarehouseTableColumnStart = showNodeColumn ? 5 : 4;
       const floorObjectById = new Map((input.floorPlanObjects ?? []).map(obj => [obj.id, obj]));
