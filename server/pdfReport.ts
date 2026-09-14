@@ -1256,9 +1256,97 @@ function drawPdfArrowHead(
 
 type WarehouseMarkerBox = { x: number; y: number; w: number; h: number };
 
+type WarehouseSensorDisplayGroup<T> = {
+  node: string;
+  items: T[];
+  anchorX: number;
+  anchorY: number;
+  bubbleX: number;
+  bubbleY: number;
+};
+
 function warehouseClamp01(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(1, value));
+}
+
+function warehouseNodeRowName(index: number): string {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  if (index < alphabet.length) return alphabet[index];
+  return `${alphabet[index % alphabet.length]}${Math.floor(index / alphabet.length) + 1}`;
+}
+
+function warehouseHeightRangeLabel(values: Array<number | null | undefined>): string | null {
+  const finite = values
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value) && value > 0)
+    .sort((a, b) => a - b);
+  if (finite.length === 0) return null;
+  const min = finite[0];
+  const max = finite[finite.length - 1];
+  if (Math.abs(max - min) < 0.01) return `${min.toFixed(2)} м`;
+  return `${min.toFixed(2)}–${max.toFixed(2)} м`;
+}
+
+function assignWarehouseNodeNames<T>(
+  groups: Array<Omit<WarehouseSensorDisplayGroup<T>, "node">>,
+  rowTolerance: number,
+): Array<WarehouseSensorDisplayGroup<T>> {
+  const rows: Array<Array<Omit<WarehouseSensorDisplayGroup<T>, "node">>> = [];
+  for (const group of [...groups].sort((a, b) => a.anchorY - b.anchorY || a.anchorX - b.anchorX)) {
+    let row = rows.find(items => {
+      const avgY = items.reduce((sum, item) => sum + item.anchorY, 0) / Math.max(1, items.length);
+      return Math.abs(avgY - group.anchorY) <= rowTolerance;
+    });
+    if (!row) {
+      row = [];
+      rows.push(row);
+    }
+    row.push(group);
+  }
+  return rows.flatMap((row, rowIndex) =>
+    row
+      .sort((a, b) => a.anchorX - b.anchorX)
+      .map((group, colIndex) => ({
+        ...group,
+        node: `${warehouseNodeRowName(rowIndex)}${colIndex + 1}`,
+      })),
+  );
+}
+
+function groupWarehouseSensorDisplays<T extends {
+  baseX: number;
+  baseY: number;
+  leaderEndX: number | null;
+  leaderEndY: number | null;
+}>(
+  displays: T[],
+  thresholdPx: number,
+): Array<WarehouseSensorDisplayGroup<T>> {
+  const groups: Array<Omit<WarehouseSensorDisplayGroup<T>, "node">> = [];
+  for (const display of displays) {
+    const anchorX = display.leaderEndX ?? display.baseX;
+    const anchorY = display.leaderEndY ?? display.baseY;
+    let bestGroup: Omit<WarehouseSensorDisplayGroup<T>, "node"> | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (const group of groups) {
+      const distance = Math.hypot(group.anchorX - anchorX, group.anchorY - anchorY);
+      if (distance <= thresholdPx && distance < bestDistance) {
+        bestGroup = group;
+        bestDistance = distance;
+      }
+    }
+    if (!bestGroup) {
+      groups.push({ items: [display], anchorX, anchorY, bubbleX: display.baseX, bubbleY: display.baseY });
+      continue;
+    }
+    bestGroup.items.push(display);
+    const n = bestGroup.items.length;
+    bestGroup.anchorX = bestGroup.anchorX + (anchorX - bestGroup.anchorX) / n;
+    bestGroup.anchorY = bestGroup.anchorY + (anchorY - bestGroup.anchorY) / n;
+    bestGroup.bubbleX = bestGroup.bubbleX + (display.baseX - bestGroup.bubbleX) / n;
+    bestGroup.bubbleY = bestGroup.bubbleY + (display.baseY - bestGroup.bubbleY) / n;
+  }
+  return assignWarehouseNodeNames(groups, Math.max(18, thresholdPx * 1.4));
 }
 
 function warehouseTemperatureColor(value: number, lo: number, hi: number): string {
@@ -5974,8 +6062,106 @@ function drawWarehousePlanDiagram(
     occupiedSensorBubbles.push(markerBox);
     return { sp, baseX, baseY, x: baseX, y: baseY, r, markerBox, leaderEndX, leaderEndY };
   });
+  const shouldGroupStackedSensors = !template && showSensorLabels && !showAverageLabels && sensorDisplays.length >= 12;
+  const stackedSensorThresholdPx = Math.max(uniformSensorMarkerRadius * 2.8, Math.min(drawW, drawH) * 0.055);
+  const warehouseSensorGroups = shouldGroupStackedSensors
+    ? groupWarehouseSensorDisplays(sensorDisplays, stackedSensorThresholdPx)
+    : [];
+  const groupedSensorDisplays = new Set(
+    warehouseSensorGroups
+      .filter(group => group.items.length > 1)
+      .flatMap(group => group.items),
+  );
+  const representativeSensorDisplays = new Map(
+    warehouseSensorGroups
+      .filter(group => group.items.length > 1)
+      .map(group => [group.items[0], group]),
+  );
+  const warehouseNodeByToken = new Map<string, string>();
+  warehouseSensorGroups
+    .filter(group => group.items.length > 1)
+    .forEach(group => {
+      group.items.forEach(display => {
+        sensorTokenVariants(display.sp.id).forEach(token => warehouseNodeByToken.set(token, group.node));
+        sensorTokenVariants(display.sp.label).forEach(token => warehouseNodeByToken.set(token, group.node));
+      });
+    });
   const sensorLabelBoxes: WarehouseMarkerBox[] = [...occupiedSensorBubbles];
   for (const display of sensorDisplays) {
+    const groupedNode = representativeSensorDisplays.get(display);
+    if (groupedSensorDisplays.has(display) && !groupedNode) continue;
+    if (groupedNode) {
+      const r = display.r;
+      const spX = groupedNode.bubbleX;
+      const spY = groupedNode.bubbleY;
+      const anchorX = groupedNode.anchorX;
+      const anchorY = groupedNode.anchorY;
+      const groupBox = warehouseMarkerBox(spX, spY, r + 5);
+      sensorLabelBoxes.push(groupBox);
+      const hasHot = groupedNode.items.some(item => floorSensorPointMatchesTokens(item.sp, criticalSensorTokens.hot));
+      const hasCold = groupedNode.items.some(item => floorSensorPointMatchesTokens(item.sp, criticalSensorTokens.cold));
+      doc.save();
+      if (hasHot) {
+        doc.circle(spX, spY, r + 2.8).lineWidth(2.0).strokeColor("#ef4444").stroke();
+      }
+      if (hasCold) {
+        doc.circle(spX, spY, r + (hasHot ? 5.4 : 2.8)).lineWidth(1.8).strokeColor("#2563eb").stroke();
+      }
+      const leaderDistance = Math.hypot(anchorX - spX, anchorY - spY);
+      if (leaderDistance > r + 7) {
+        const ux = (anchorX - spX) / leaderDistance;
+        const uy = (anchorY - spY) / leaderDistance;
+        const startX = spX + ux * (r + 1.5);
+        const startY = spY + uy * (r + 1.5);
+        doc.strokeColor("#0f172a").lineWidth(1.05)
+          .moveTo(startX, startY)
+          .lineTo(anchorX, anchorY)
+          .stroke();
+        drawPdfArrowHead(doc, startX, startY, anchorX, anchorY, 5.2, "#0f172a");
+      }
+      doc.fillColor("#0891b2").strokeColor("#0f172a").lineWidth(1.5).circle(spX, spY, r + 1).fillAndStroke();
+      doc.fillColor("#ffffff").font("bold").fontSize(Math.max(6.2, Math.min(9.2, r * 0.72)))
+        .text(groupedNode.node, spX - r * 1.1, spY - r * 0.45, { width: r * 2.2, align: "center", lineBreak: false });
+      doc.fillColor("#e0f2fe").font("bold").fontSize(Math.max(5.2, Math.min(7.2, r * 0.52)))
+        .text(`×${groupedNode.items.length}`, spX - r * 1.1, spY + r * 0.16, { width: r * 2.2, align: "center", lineBreak: false });
+      const heightRange = showHeightLabels
+        ? warehouseHeightRangeLabel(groupedNode.items.map(item => item.sp.heightM))
+        : null;
+      if (heightRange) {
+        const heightFont = Math.max(5.5, Math.min(7.2, r * 0.55));
+        doc.font("bold").fontSize(heightFont);
+        const heightW = Math.max(r * 3.1, doc.widthOfString(heightRange) + 5);
+        const heightY = spY + r + 4 + heightFont <= markerPlanBox.y + markerPlanBox.h - 1
+          ? spY + r + 3
+          : Math.max(markerPlanBox.y + 1, spY - r - heightFont - 4);
+        const heightX = Math.max(markerPlanBox.x + 1, Math.min(markerPlanBox.x + markerPlanBox.w - heightW - 1, spX - heightW / 2));
+        doc.fillColor("#0c4a6e").font("bold").fontSize(heightFont)
+          .text(heightRange, heightX + 2, heightY + 1, { width: heightW - 4, align: "center", lineBreak: false });
+      }
+      const criticalOffset = r + Math.max(3.2, r * 0.35);
+      const criticalMarkerRadius = 5.6;
+      const occupiedCriticalBoxes = sensorLabelBoxes.filter(item => item !== groupBox);
+      if (hasHot) {
+        const [markerX, markerY] = chooseWarehouseCriticalMarkerPosition([
+          [spX + criticalOffset, spY - criticalOffset],
+          [spX - criticalOffset, spY - criticalOffset],
+          [spX + criticalOffset, spY + criticalOffset],
+          [spX - criticalOffset, spY + criticalOffset],
+        ], markerPlanBox, occupiedCriticalBoxes, criticalMarkerRadius);
+        drawPdfStar(doc, markerX, markerY, 5.4, "#ef4444");
+      }
+      if (hasCold) {
+        const [markerX, markerY] = chooseWarehouseCriticalMarkerPosition([
+          [spX + criticalOffset, spY + criticalOffset],
+          [spX - criticalOffset, spY + criticalOffset],
+          [spX + criticalOffset, spY - criticalOffset],
+          [spX - criticalOffset, spY - criticalOffset],
+        ], markerPlanBox, occupiedCriticalBoxes, criticalMarkerRadius);
+        drawPdfDiamond(doc, markerX, markerY, 5.2, "#2563eb");
+      }
+      doc.restore();
+      continue;
+    }
     const { sp, baseX, baseY, x: spX, y: spY, r, markerBox, leaderEndX, leaderEndY } = display;
     const label = shortSensorId(sp.label) || "D";
     const directSensorKey = normalizeSensorNumber(sp.label);
@@ -6251,9 +6437,15 @@ function drawWarehousePlanDiagram(
       doc.fillColor(ACCENT).font("bold").fontSize(9)
         .text("Таблица размещения регистраторов данных", { align: "left" });
       doc.moveDown(0.3);
-      // Columns: №, ID (last 4), Serial, Position, Height (m), Comment
-      const sColW = [24, 42, 112, 160, 56, totalW2 - (24 + 42 + 112 + 160 + 56)];
-      const sHeaders = ["№", "ID", "Серийный №", "Позиция на схеме", "Высота, м", "Прим."];
+      // Columns: №, optional node, ID (last 4), Serial, Position, Height (m), Comment
+      const showNodeColumn = warehouseNodeByToken.size > 0;
+      const sColW = showNodeColumn
+        ? [22, 34, 40, 104, 132, 56, totalW2 - (22 + 34 + 40 + 104 + 132 + 56)]
+        : [24, 42, 112, 160, 56, totalW2 - (24 + 42 + 112 + 160 + 56)];
+      const sHeaders = showNodeColumn
+        ? ["№", "Узел", "ID", "Серийный №", "Позиция на схеме", "Высота, м", "Прим."]
+        : ["№", "ID", "Серийный №", "Позиция на схеме", "Высота, м", "Прим."];
+      const centeredWarehouseTableColumnStart = showNodeColumn ? 5 : 4;
       const floorObjectById = new Map((input.floorPlanObjects ?? []).map(obj => [obj.id, obj]));
       const formatGridPosition = (raw: string): string | null => {
         const match = raw.match(/^L(\d+)-c(\d+)-t(\d+)$/i);
@@ -6295,6 +6487,15 @@ function drawWarehousePlanDiagram(
         }
         return null;
       };
+      const manualFloorSensorNode = (...values: Array<string | number | null | undefined>): string => {
+        for (const value of values) {
+          for (const token of sensorTokenVariants(value)) {
+            const node = warehouseNodeByToken.get(token);
+            if (node) return node;
+          }
+        }
+        return "—";
+      };
       const isManualFloorSensorPosition = (raw: string): boolean => {
         return sensorTokenVariants(raw).some(token => floorSensorPointTokens.has(token));
       };
@@ -6318,7 +6519,7 @@ function drawWarehousePlanDiagram(
       let scx = pageLeft2;
       sHeaders.forEach((h, i) => {
         doc.fillColor(ACCENT).font("bold").fontSize(8)
-          .text(h, scx + 3, sy + 4, { width: sColW[i] - 6, align: i >= 4 ? "center" : "left" });
+          .text(h, scx + 3, sy + 4, { width: sColW[i] - 6, align: i >= centeredWarehouseTableColumnStart ? "center" : "left" });
         scx += sColW[i];
       });
       sy += sRowH;
@@ -6348,7 +6549,7 @@ function drawWarehousePlanDiagram(
             heightStr = `${h} м`;
           }
         }
-        const cells = [
+        const baseCells = [
           String(idx + 1),
           shortId,
           l.label,
@@ -6356,10 +6557,13 @@ function drawWarehousePlanDiagram(
           manualHeightStr ?? heightStr,
           isExt ? "Внешний" : "",
         ];
+        const cells = showNodeColumn
+          ? [baseCells[0], manualFloorSensorNode(l.position, l.label, l.customName), ...baseCells.slice(1)]
+          : baseCells;
         let scx2 = pageLeft2;
         cells.forEach((cell, ci) => {
           doc.fillColor(isExt ? "#92400e" : ACCENT).font("body").fontSize(8)
-            .text(cell, scx2 + 3, sy + 4, { width: sColW[ci] - 6, align: ci >= 4 ? "center" : "left" });
+            .text(cell, scx2 + 3, sy + 4, { width: sColW[ci] - 6, align: ci >= centeredWarehouseTableColumnStart ? "center" : "left" });
           scx2 += sColW[ci];
         });
         sy += sRowH;
