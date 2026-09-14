@@ -6047,7 +6047,7 @@ function drawWarehousePlanDiagram(
     occupiedSensorBubbles.push(markerBox);
     return { sp, baseX, baseY, x: baseX, y: baseY, r, markerBox, leaderEndX, leaderEndY };
   });
-  const shouldGroupStackedSensors = !template && showSensorLabels && !showAverageLabels && sensorDisplays.length >= 12;
+  const shouldGroupStackedSensors = !template && showSensorLabels && !showAverageLabels && sensorDisplays.length >= 2;
   const stackedSensorThresholdPx = Math.max(uniformSensorMarkerRadius * 2.8, Math.min(drawW, drawH) * 0.055);
   const warehouseSensorGroups = shouldGroupStackedSensors
     ? groupWarehouseSensorDisplays(sensorDisplays, stackedSensorThresholdPx)

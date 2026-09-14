@@ -255,6 +255,140 @@ describe("generateProtocolPdf – warehouse / storage zone", () => {
   );
 
   it(
+    "uses T-point callouts for stacked loggers in every warehouse-like room type",
+    async () => {
+      const now = Date.UTC(2026, 4, 1, 9, 0, 0);
+      const series = mkSeries(now, 24, 20);
+      const originalText = (PDFDocument.prototype as any).text;
+      const textOrder: string[] = [];
+      (PDFDocument.prototype as any).text = function (text: string, ...args: any[]) {
+        textOrder.push(text);
+        return originalText.call(this, text, ...args);
+      };
+      try {
+        const loggers = [0.3, 1.5, 2.2].map((height, index) => ({
+          id: index + 1,
+          label: `KG-200${index + 1}`,
+          customName: null,
+          role: "internal" as const,
+          pointCount: series.temp.length,
+          min: 18.5,
+          max: 21.4,
+          avg: 20.0,
+          std: 0.5,
+          mkt: 20.1,
+          series,
+          deviations: [],
+          height,
+        }));
+        const buf = await generateProtocolPdf({
+          org: {
+            name: "ТОО «Тест»",
+            bin: null,
+            addressLegal: null,
+            addressFact: null,
+            responsible: null,
+            phone: null,
+            email: null,
+            logoBuffer: null,
+          },
+          protocol: {
+            number: "VAL-STR-KG-2026-TEST",
+            createdAt: new Date(now),
+            equipmentType: "warehouse-kg",
+            customEquipmentName: null,
+          },
+          generalInfo: {
+            equipmentType: "warehouse-kg",
+            manufacturer: null,
+            model: null,
+            serial: null,
+            inventory: null,
+            year: null,
+            tempMode: "15-25",
+            location: "Помещение хранения",
+            purpose: "Хранение ЛС",
+            validationDate: "2026-05-01",
+            basis: "primary",
+            whLengthM: 8,
+            whWidthM: 6,
+            whHeightM: 3,
+            whHumidityControl: 0,
+            whSeason: "summer",
+            whStudyType: "warehouse",
+            whExternalEnv: 0,
+          },
+          iq: {
+            purpose: "IQ",
+            description: "IQ",
+            criteria: "IQ",
+            items: [{ questionIndex: 1, questionText: "Q", answer: "yes", comment: null }],
+            verdict: "pass",
+          },
+          oq: {
+            purpose: "OQ",
+            description: "OQ",
+            criteria: "OQ",
+            items: [{ questionIndex: 1, questionText: "Q", answer: "yes", comment: null }],
+            verdict: "pass",
+          },
+          pv: {
+            purpose: "PV",
+            description: "PV",
+            criteria: "PV",
+            tempMode: "15-25",
+            rangeMin: 15,
+            rangeMax: 25,
+            startAt: now,
+            endAt: now + 24 * 3600_000,
+            minDurationHours: 24,
+            minSensorCount: 3,
+            loggers,
+            verdict: "pass",
+            failureReasons: [],
+            hotIdx: 0,
+            coldIdx: 1,
+            extIndices: [],
+          },
+          pvLoggers: loggers.map(logger => ({
+            id: logger.id,
+            label: logger.label,
+            customName: null,
+            role: logger.role,
+            position: logger.label,
+            posX: null,
+            posY: null,
+          })),
+          floorPlanObjects: loggers.map((logger, index) => ({
+            id: `sp-${index + 1}`,
+            type: "sensor_point",
+            xPct: 30,
+            yPct: 38,
+            widthPct: 3,
+            heightPct: 3,
+            heightM: logger.height,
+            rotation: 0,
+            label: logger.label,
+            sensors: [{ sensorId: logger.label, heightFromFloor: logger.height }],
+          })),
+        } as any);
+
+        expect(Buffer.isBuffer(buf)).toBe(true);
+        expect(buf.subarray(0, 5).toString("ascii")).toBe("%PDF-");
+      } finally {
+        (PDFDocument.prototype as any).text = originalText;
+      }
+
+      expect(textOrder).toContain("T1");
+      expect(textOrder).toContain("2001 — 0.30 м");
+      expect(textOrder).toContain("2002 — 1.50 м");
+      expect(textOrder).toContain("2003 — 2.20 м");
+      expect(textOrder.filter(text => text === "T1").length).toBeGreaterThanOrEqual(3);
+    },
+    60_000,
+  );
+
+  it(
     "renders PDF without crashing when warehouse dimensions are missing",
     async () => {
       const now = Date.UTC(2026, 4, 1, 9, 0, 0);
