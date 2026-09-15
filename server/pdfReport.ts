@@ -2918,6 +2918,11 @@ function pvDurationRequirementLabel(pv: ReportInput["pv"], input?: ReportInput, 
         ? `24–72 h or longer when justified; selected ${pv.minDurationHours} h`
         : `24–72 ч или более при обосновании; выбрано ${pv.minDurationHours} ч`;
     }
+    if (eqType === "warehouse") {
+      return en
+        ? `recommended 168 h; not less than 72 h when justified; selected ${pv.minDurationHours} h`
+        : `рекомендовано 168 ч; не менее 72 ч при обосновании; выбрано ${pv.minDurationHours} ч`;
+    }
     return en
       ? `not less than 7 consecutive days (168 h); selected ${pv.minDurationHours} h`
       : `не менее 7 суток подряд (168 ч); выбрано ${pv.minDurationHours} ч`;
@@ -7210,8 +7215,10 @@ const WAREHOUSE_MAPPING_METHOD_NOTE_EN =
 const PHARMACY_STORAGE_MAPPING_METHOD_NOTE_EN =
   "The guide for temperature mapping of medicinal product storage areas approved by EEC Board Recommendation No. 8 is used as a methodological reference. " +
   "This protocol is adapted to its structure and approach. For controlled-environment rooms, " +
-  "the study duration is established as not less than 7 consecutive days (168 hours), considering risk assessment, operating mode of the object " +
-  "and representativeness of the observation period.";
+  "a 7-consecutive-day observation period (168 hours) is considered the recommended baseline because it covers the weekly operating cycle. " +
+  "For a pharmacy storage room / area, a reduced period of not less than 3 consecutive days (72 hours) may be accepted when justified by risk assessment, " +
+  "stable HVAC/heating operation, operating mode of the object, absence of significant seasonal or daily influences and representativeness of the selected observation period. " +
+  "The actual study duration is fixed in the protocol and supported by continuous logger records.";
 
 function drawWarehouseEquipmentList(doc: PDFKit.PDFDocument, input: ReportInput, prefix = "5.1."): void {
   const en = isEnglishWarehouse(input);

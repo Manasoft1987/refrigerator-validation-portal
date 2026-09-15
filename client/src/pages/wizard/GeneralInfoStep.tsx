@@ -190,7 +190,7 @@ export default function GeneralInfoStep({
   const isAutoRefrigerator = isAutoRefrigeratorLike(form.equipmentType);
   const standardTempModes = TEMP_MODES.filter(m => m.id !== "custom");
   const storageStudyTypes = isPharmacyStorage
-    ? [{ id: "warehouse", label: "Помещение (зона) хранения аптеки", duration: "не менее 7 суток" }]
+    ? [{ id: "warehouse", label: "Помещение (зона) хранения аптеки", duration: "рекомендовано 7 суток; допустимо от 3 суток по обоснованию" }]
     : WAREHOUSE_STUDY_TYPES;
   const supportsCustomTempMode = form.equipmentType === "refrigerator" || form.equipmentType === "freezer";
   const tempModesForEquipment = supportsCustomTempMode

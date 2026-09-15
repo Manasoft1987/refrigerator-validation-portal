@@ -73,8 +73,9 @@ export default function PVStep({
   const isWarehouseByEaeu = isWarehouseEaeu(equipmentType);
   const isChamber = equipmentType === "chamber";
   const warehouseStudyType = (giQ.data as any)?.whStudyType;
+  const isPharmacyStorage = equipmentType === "warehouse";
   const warehouseMinDurationHours = isWarehouseByEaeu
-    ? (warehouseStudyType === "cold_room" ? 24 : 168)
+    ? (warehouseStudyType === "cold_room" ? 24 : isPharmacyStorage ? 72 : 168)
     : 72;
   const isThermalContainer = equipmentType === "thermal-container";
   const tempModesForPV = equipmentType === "refrigerator" || equipmentType === "freezer"
@@ -366,7 +367,9 @@ export default function PVStep({
               hint={isWarehouseByEaeu ? (
                 warehouseStudyType === "cold_room"
                   ? "Для холодильной/морозильной камеры: 24–72 ч или более по обоснованию."
-                  : "Для помещения хранения: не менее 168 ч (7 суток подряд)."
+                  : isPharmacyStorage
+                    ? "Для аптечного помещения хранения: рекомендовано 168 ч (7 суток), допускается от 72 ч (3 суток) при документированном риск-обосновании и репрезентативном режиме работы."
+                    : "Для помещения хранения: не менее 168 ч (7 суток подряд)."
               ) : isChamber ? "Для холодильной камеры: не менее 24 часов непрерывно. Фактический период задаётся датами начала и окончания." : undefined}
             >
               <Input

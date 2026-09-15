@@ -167,6 +167,12 @@ function defaultLoadPercentForFillStatus(fillStatus: unknown): string | null {
   return null;
 }
 
+function warehouseMinDurationHoursFor(equipmentType: unknown, studyType: unknown): number {
+  if (studyType === "cold_room") return 24;
+  if (equipmentType === "warehouse") return 72;
+  return 168;
+}
+
 async function removeAutoLinkedSensorIfUnused(protocolId: number, removedLabel: string | null | undefined) {
   const removed = normalizeSensorNumber(removedLabel);
   if (!removed) return;
@@ -1447,7 +1453,7 @@ export const appRouter = router({
             protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER
               ? "chamber"
               : ((gi?.equipmentType as string | null | undefined) || protocol.equipmentType);
-          const warehouseMinDurationHours = gi?.whStudyType === "cold_room" ? 24 : 168;
+          const warehouseMinDurationHours = warehouseMinDurationHoursFor(effectiveEquipmentType, gi?.whStudyType);
           const minimumDurationHours =
             isWarehouseEaeu(effectiveEquipmentType)
               ? warehouseMinDurationHours
@@ -1814,7 +1820,7 @@ export const appRouter = router({
           protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || gi1?.equipmentType === "chamber";
         const effectiveAnalysisEquipmentType = (gi1?.equipmentType as string | null | undefined) || protocol.equipmentType;
         const warehouseMinDurationHours = isWarehouseEaeu(effectiveAnalysisEquipmentType)
-          ? (gi1?.whStudyType === "cold_room" ? 24 : 168)
+          ? warehouseMinDurationHoursFor(effectiveAnalysisEquipmentType, gi1?.whStudyType)
           : 72;
         const minDurationHours = isWarehouseEaeu(effectiveAnalysisEquipmentType)
           ? Math.max(warehouseMinDurationHours, session.minDurationHours)
@@ -2184,7 +2190,7 @@ export const appRouter = router({
         const isChamberProtocol =
           protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || gi?.equipmentType === "chamber";
         const warehouseMinDurationHours = isWarehouseEaeu(effectiveEquipmentType)
-          ? (gi?.whStudyType === "cold_room" ? 24 : 168)
+          ? warehouseMinDurationHoursFor(effectiveEquipmentType, gi?.whStudyType)
           : 72;
         const reportMinDurationHours = isWarehouseEaeu(effectiveEquipmentType)
           ? Math.max(warehouseMinDurationHours, session?.minDurationHours ?? warehouseMinDurationHours)
