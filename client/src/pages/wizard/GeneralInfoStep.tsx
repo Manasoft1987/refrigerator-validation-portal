@@ -30,6 +30,12 @@ import { toast } from "sonner";
 type CM = { name: string; role: string; company?: string | null };
 type RefrigerationUnitInfo = { manufacturer?: string | null; model?: string | null; serial?: string | null; note?: string | null };
 
+function defaultLoadPercentForFillStatus(fillStatus: unknown): string | null {
+  if (fillStatus === "loaded") return "≤75%";
+  if (fillStatus === "empty") return "0%";
+  return null;
+}
+
 function cleanRefrigerationUnits(value: unknown, fallback?: RefrigerationUnitInfo): RefrigerationUnitInfo[] {
   const rows = Array.isArray(value) ? value : [];
   const cleaned = rows
@@ -138,6 +144,7 @@ export default function GeneralInfoStep({
         ...prev,
         ...giQ.data,
         equipmentType: giQ.data?.equipmentType || initialEquipmentType || prev.equipmentType,
+        loadPercent: giQ.data?.loadPercent ?? defaultLoadPercentForFillStatus(giQ.data?.fillStatus) ?? "",
         refrigerationUnits: cleanRefrigerationUnits((giQ.data as any)?.refrigerationUnits, giQ.data as any),
         commissionMembers: (giQ.data?.commissionMembers as CM[] | null) || [],
         thermalContainerConfig: {
@@ -253,6 +260,9 @@ export default function GeneralInfoStep({
   const handleSave = async (goNext: boolean) => {
     const refrigerationUnits = cleanRefrigerationUnits(form.refrigerationUnits, form);
     const primaryRefrigerationUnit = isAutoRefrigerator ? (refrigerationUnits[0] ?? {}) : form;
+    const normalizedLoadPercent =
+      defaultLoadPercentForFillStatus(form.fillStatus) ??
+      (form.loadPercent === "" || form.loadPercent == null ? null : String(form.loadPercent));
     // Whitelist only the fields the save mutation accepts — prevents
     // accidentally sending DB metadata (id, createdAt, updatedAt) from giQ.data
     // which can cause silent server-side failures.
@@ -294,7 +304,7 @@ export default function GeneralInfoStep({
       whExternalEnv: form.whExternalEnv ?? 0,
       whLayoutNotes: form.whLayoutNotes ?? null,
       fillStatus: form.fillStatus ?? null,
-      loadPercent: form.loadPercent === "" || form.loadPercent == null ? null : String(form.loadPercent),
+      loadPercent: normalizedLoadPercent,
     };
     try {
       if (!customRangeValid) {
@@ -574,7 +584,7 @@ export default function GeneralInfoStep({
                   </Select>
                 </Field>
                 <Field label="Заполненность объекта">
-                  <Select value={form.fillStatus || undefined} onValueChange={v => setForm({ ...form, fillStatus: v })}>
+                  <Select value={form.fillStatus || undefined} onValueChange={v => setForm({ ...form, fillStatus: v, loadPercent: defaultLoadPercentForFillStatus(v) ?? form.loadPercent })}>
                     <SelectTrigger><SelectValue placeholder="Выберите..." /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="empty">Пустой</SelectItem>
@@ -755,6 +765,15 @@ export default function GeneralInfoStep({
                 ))}
               </div>
             )}
+            <Field label="Заполненность объекта">
+              <Select value={form.fillStatus || undefined} onValueChange={v => setForm({ ...form, fillStatus: v, loadPercent: defaultLoadPercentForFillStatus(v) ?? form.loadPercent })}>
+                <SelectTrigger><SelectValue placeholder="Выберите..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="empty">Пустой</SelectItem>
+                  <SelectItem value="loaded">Загруженный</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
             <Field label="Процент загруженности объекта">
               <Input
                 value={form.loadPercent || ""}

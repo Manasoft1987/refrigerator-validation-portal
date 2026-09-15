@@ -161,6 +161,12 @@ function sensorNumberMatchesLabel(sensorNumber: string, loggerLabel: string | nu
   return number === label || (label.length >= 4 && number.endsWith(label));
 }
 
+function defaultLoadPercentForFillStatus(fillStatus: unknown): string | null {
+  if (fillStatus === "loaded") return "≤75%";
+  if (fillStatus === "empty") return "0%";
+  return null;
+}
+
 async function removeAutoLinkedSensorIfUnused(protocolId: number, removedLabel: string | null | undefined) {
   const removed = normalizeSensorNumber(removedLabel);
   if (!removed) return;
@@ -1101,6 +1107,10 @@ export const appRouter = router({
           "customMax",
         ] as const;
         const coerced: any = { ...patch };
+        const defaultLoadPercent = defaultLoadPercentForFillStatus(coerced.fillStatus);
+        if (defaultLoadPercent !== null) {
+          coerced.loadPercent = defaultLoadPercent;
+        }
         for (const k of decimalKeys) {
           if (!(k in coerced)) continue;
           const v = coerced[k];
