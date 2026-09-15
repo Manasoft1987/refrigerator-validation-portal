@@ -2368,9 +2368,19 @@ function drawSubTitle(doc: PDFKit.PDFDocument, title: string) {
   doc.moveDown(0.4);
 }
 
-function formatLoadPercent(value: string | number | null | undefined): string {
-  if (value === null || value === undefined || value === "") return "—";
-  const raw = String(value).trim();
+function defaultLoadPercentForFillStatus(fillStatus: unknown): string | null {
+  if (fillStatus === "loaded") return "≤75%";
+  if (fillStatus === "empty") return "0%";
+  return null;
+}
+
+function formatLoadPercent(value: string | number | null | undefined, fillStatus?: unknown): string {
+  const effectiveValue =
+    value === null || value === undefined || value === ""
+      ? defaultLoadPercentForFillStatus(fillStatus)
+      : value;
+  if (effectiveValue === null || effectiveValue === undefined || effectiveValue === "") return "—";
+  const raw = String(effectiveValue).trim();
   if (!raw) return "—";
   const normalized = raw.replace("%", "").replace(",", ".").trim();
   const numeric = Number(normalized);
@@ -2420,7 +2430,7 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
   const eqType = getReportEquipmentType(input) || "";
   const isWarehouse = isWarehouseLike(eqType);
   const en = isEnglishWarehouse(input);
-  const loadPercentLabel = formatLoadPercent(gi?.loadPercent);
+  const loadPercentLabel = formatLoadPercent(gi?.loadPercent, gi?.fillStatus);
 
   let rows: Array<[string, string]>;
 
@@ -7620,7 +7630,7 @@ function warehouseMethodologySectionText(key: string, input: ReportInput): strin
       `Тип помещения / зоны: ${warehouseStudyLabel(input)}.`,
       `Температурный режим: ${tempMode}.`,
       `Геометрические размеры: ${warehouseDimensionsLabel(input)}.`,
-      `Заполненность объекта: ${gi?.fillStatus ? FILL_STATUS_LABEL_RU[gi.fillStatus] : "—"}; загрузка: ${formatLoadPercent(gi?.loadPercent)}.`,
+      `Заполненность объекта: ${gi?.fillStatus ? FILL_STATUS_LABEL_RU[gi.fillStatus] : "—"}; загрузка: ${formatLoadPercent(gi?.loadPercent, gi?.fillStatus)}.`,
       `Контроль влажности: ${warehouseHumidityLabel(input)}.`,
       `Контакт с внешней средой: ${gi?.whExternalEnv ? "имеется" : "не указан / отсутствует"}; сезон исследования: ${warehouseSeasonLabel(input)}.`,
       gi?.whLayoutNotes ? `Описание планировки: ${gi.whLayoutNotes}.` : "",
@@ -8107,7 +8117,7 @@ function drawChamberMappingReport(doc: PDFKit.PDFDocument, source: ReportInput) 
       ? "загруженная камера"
       : "не указано";
   const chamberFillStatusKnown = chamberFillStatusLabel !== "не указано";
-  const chamberLoadPercentRaw = String(gi?.loadPercent ?? "").trim();
+  const chamberLoadPercentRaw = String(gi?.loadPercent ?? defaultLoadPercentForFillStatus(gi?.fillStatus) ?? "").trim();
   const chamberLoadPercentLabel = chamberLoadPercentRaw
     ? /%|≤|>=|<=|>|</.test(chamberLoadPercentRaw)
       ? chamberLoadPercentRaw

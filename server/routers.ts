@@ -167,6 +167,15 @@ function defaultLoadPercentForFillStatus(fillStatus: unknown): string | null {
   return null;
 }
 
+function withDefaultGeneralInfoLoadPercent<T extends { fillStatus?: unknown; loadPercent?: unknown } | null>(generalInfo: T): T {
+  if (!generalInfo) return generalInfo;
+  if (generalInfo.loadPercent !== null && generalInfo.loadPercent !== undefined && String(generalInfo.loadPercent).trim() !== "") {
+    return generalInfo;
+  }
+  const loadPercent = defaultLoadPercentForFillStatus(generalInfo.fillStatus);
+  return loadPercent === null ? generalInfo : { ...generalInfo, loadPercent } as T;
+}
+
 function warehouseMinDurationHoursFor(equipmentType: unknown, studyType: unknown): number {
   if (studyType === "cold_room") return 24;
   if (equipmentType === "warehouse") return 72;
@@ -1025,7 +1034,7 @@ export const appRouter = router({
       .input(z.object({ protocolId: z.number() }))
       .query(async ({ ctx, input }) => {
         await ownProtocol(ctx.user.id, input.protocolId);
-        return (await getGeneralInfo(input.protocolId)) ?? null;
+        return withDefaultGeneralInfoLoadPercent((await getGeneralInfo(input.protocolId)) ?? null);
       }),
     save: protectedProcedure
       .input(
