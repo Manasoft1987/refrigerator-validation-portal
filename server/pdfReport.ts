@@ -1965,6 +1965,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
 
   if (input.excursion?.enabled) {
     doc.addPage();
+    recordToc("10. Испытания на температурное отклонение (Temperature Excursion Study)", 1);
     drawExcursionSection(doc, input.excursion, input.pv.rangeMin, input.pv.rangeMax, input.pv.sensorAccuracy);
   }
 
@@ -8175,7 +8176,7 @@ function drawChamberMappingReport(doc: PDFKit.PDFDocument, source: ReportInput) 
   }
   drawDeviationsSection(doc,input.pv,input);
   sub("9.3. Эксплуатационные события и дополнительные испытания",input.planDeviations?.trim() || "Специальные испытания с открыванием двери и отключением питания оцениваются в ходе аварийных испытаний, где определяются время набора режима, допустимый промежуток времени открывания двери и автономного сохранения режима при отключении питания.");
-  if(input.excursion?.enabled) {doc.addPage();drawExcursionSection(doc,input.excursion,input.pv.rangeMin,input.pv.rangeMax,input.pv.sensorAccuracy,"9.3.1");}
+  if(input.excursion?.enabled) {doc.addPage();mark("9.3.1. Испытания на температурное отклонение (Temperature Excursion Study)",1);drawExcursionSection(doc,input.excursion,input.pv.rangeMin,input.pv.rangeMax,input.pv.sensorAccuracy,"9.3.1");}
   section("10. Выводы о пригодности холодильной камеры");
   const passed = input.iq.verdict==="pass"&&input.oq.verdict==="pass"&&input.pv.verdict==="pass";
   renderTextBlock(doc,passed ? `На основании результатов подготовительных проверок IQ/OQ и температурного картирования PQ/PV холодильная камера признана пригодной для хранения лекарственных средств в температурном режиме ${pvTemperatureModeLabel(input.pv,input)} в исследованном рабочем объёме, при документированной загрузке и условиях эксплуатации. Испытание завершено с положительным заключением.` : "Пригодность холодильной камеры по совокупности IQ/OQ и PQ/PV не подтверждена. Требуется завершить проверки, оценить недостаточность данных и устранить зафиксированные несоответствия; при необходимости выполнить повторное картирование.");
