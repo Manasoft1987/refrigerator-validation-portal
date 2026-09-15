@@ -395,7 +395,7 @@ function SensorPointCallout({
 
   return (
     <g
-      style={{ cursor: "pointer", userSelect: "none" }}
+      style={{ pointerEvents: "none", userSelect: "none" }}
       onPointerDown={event => {
         event.stopPropagation();
         if (representativeId) onSelect(representativeId);
@@ -1040,6 +1040,7 @@ export function FloorPlanEditor({
   const [panelOpen, setPanelOpen] = useState(false);
   const [placingType, setPlacingType] = useState<FloorObjectType | null>(null);
   const [toolbarOpen, setToolbarOpen] = useState(true);
+  const [showSensorCallouts, setShowSensorCallouts] = useState(false);
   const [pickerForCell, setPickerForCell] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [panX, setPanX] = useState(0);
@@ -1377,10 +1378,6 @@ export function FloorPlanEditor({
     () => buildSensorPointCalloutGroups(objects, sensorLoggers, planX, planY, drawW, drawH),
     [objects, sensorLoggers, planX, planY, drawW, drawH],
   );
-  const groupedSensorPointIds = useMemo(
-    () => new Set(sensorPointCalloutGroups.flatMap(group => group.items.map(item => item.obj.id))),
-    [sensorPointCalloutGroups],
-  );
 
   const updateSelected = useCallback((patch: Partial<FloorPlanObject>) => {
     if (!selectedId) return;
@@ -1430,6 +1427,19 @@ export function FloorPlanEditor({
                 <span>●</span>
                 Поставить датчик на план
               </button>
+              {sensorPointCalloutGroups.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setShowSensorCallouts(v => !v)}
+                  className={`w-full mb-2 px-3 py-2 text-xs rounded-md font-semibold transition-all flex items-center justify-center gap-2 ${
+                    showSensorCallouts
+                      ? "bg-cyan-50 text-cyan-800 border border-cyan-300"
+                      : "bg-white border hover:bg-gray-50 text-muted-foreground"
+                  }`}
+                >
+                  T1/T2 подсказки {showSensorCallouts ? "вкл." : "выкл."}
+                </button>
+              )}
               <div className="grid grid-cols-4 gap-1.5 mb-2">
                 {OBJECT_DEFS.filter(def => def.type !== "sensor_point").map(def => (
                   <button
@@ -1607,7 +1617,6 @@ export function FloorPlanEditor({
 
             {/* Floor plan objects (rendered first, below grouped sensor callouts) */}
             {objects
-              .filter(obj => !(obj.type === "sensor_point" && groupedSensorPointIds.has(obj.id)))
               .map(obj => (
               <ObjectShape
                 key={obj.id}
@@ -1627,7 +1636,7 @@ export function FloorPlanEditor({
             ))}
 
             {/* Grouped stacked sensors: exact point + arrow + T-callout with heights */}
-            {sensorPointCalloutGroups.map(group => (
+            {showSensorCallouts && sensorPointCalloutGroups.map(group => (
               <SensorPointCallout
                 key={group.node}
                 group={group}
