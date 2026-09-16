@@ -400,10 +400,11 @@ function SensorPointCallout({
   onSelect: (id: string) => void;
   onCalloutPointerDown: (group: SensorPointCalloutGroup, e: React.PointerEvent) => void;
 }) {
-  const fontSize = clamp(group.calloutFontSize ?? 8.6, 6, 12);
-  const rowGap = fontSize + 3.2;
-  const rowTextOffset = fontSize * 0.72;
-  const rowLineOffset = rowTextOffset - 3;
+  const fontSize = clamp(group.calloutFontSize ?? 7.2, 5.4, 11);
+  const rowGap = fontSize + 3.8;
+  const padX = 5.5;
+  const padY = 4.5;
+  const rowTextOffset = padY + fontSize * 0.82;
   const rows = [...group.items]
     .sort((a, b) => (a.obj.heightM ?? 0) - (b.obj.heightM ?? 0))
     .map(item => {
@@ -411,8 +412,8 @@ function SensorPointCallout({
       const height = (item.obj.heightM ?? 0) > 0 ? `${item.obj.heightM.toFixed(2)} м` : "—";
       return `${label} — ${height}`;
     });
-  const labelW = clamp(Math.max(...rows.map(row => row.length * fontSize * 0.54), 58), 58, 136);
-  const labelH = rows.length * rowGap;
+  const labelW = clamp(Math.max(...rows.map(row => row.length * fontSize * 0.52 + padX * 2), 52), 52, 124);
+  const labelH = rows.length * rowGap + padY * 1.3;
   const sideOffset = 34;
   const canPlaceRight = group.anchorX + sideOffset + labelW <= planX + drawW - 4;
   const canPlaceLeft = group.anchorX - sideOffset - labelW >= planX + 4;
@@ -433,8 +434,14 @@ function SensorPointCallout({
   labelY = clamp(labelY, planY + 4, planY + drawH - labelH - 4);
   const textOnLeft = labelX + labelW / 2 < group.anchorX;
   const textAnchor = textOnLeft ? "start" : "end";
-  const textX = textOnLeft ? labelX : labelX + labelW;
-  const lineStartX = textOnLeft ? labelX + labelW + 4 : labelX - 4;
+  const textX = textOnLeft ? labelX + padX : labelX + labelW - padX;
+  const labelCenterX = labelX + labelW / 2;
+  const labelCenterY = labelY + labelH / 2;
+  const vx = group.anchorX - labelCenterX;
+  const vy = group.anchorY - labelCenterY;
+  const edgeScale = 1 / Math.max(Math.abs(vx) / (labelW / 2), Math.abs(vy) / (labelH / 2), 1);
+  const edgeX = labelCenterX + vx * edgeScale;
+  const edgeY = labelCenterY + vy * edgeScale;
   const representativeId = group.items[0]?.obj.id;
 
   return (
@@ -447,34 +454,35 @@ function SensorPointCallout({
       }}
     >
       <rect
-        x={labelX - 6}
-        y={labelY - 6}
-        width={labelW + 12}
-        height={labelH + 12}
-        rx={4}
-        fill="transparent"
+        x={labelX}
+        y={labelY}
+        width={labelW}
+        height={labelH}
+        rx={4.5}
+        fill="white"
+        fillOpacity={0.94}
+        stroke={selected ? "#f59e0b" : "#38bdf8"}
+        strokeWidth={selected ? 1.25 : 0.8}
       />
+      <line
+        x1={edgeX}
+        y1={edgeY}
+        x2={group.anchorX}
+        y2={group.anchorY}
+        stroke="#2563eb"
+        strokeWidth={0.9}
+        strokeLinecap="round"
+        style={{ pointerEvents: "none" }}
+      />
+      <polygon points={arrowHeadPoints(edgeX, edgeY, group.anchorX, group.anchorY, 4.8)} fill="#2563eb" style={{ pointerEvents: "none" }} />
       {rows.map((row, index) => (
         <g key={`${row}-${index}`} style={{ pointerEvents: "none" }}>
-          <line
-            x1={lineStartX}
-            y1={labelY + rowLineOffset + index * rowGap}
-            x2={group.anchorX + (textOnLeft ? -6 : 6)}
-            y2={group.anchorY}
-            stroke="#60a5fa"
-            strokeWidth={0.9}
-            strokeLinecap="round"
-          />
-          <polygon
-            points={arrowHeadPoints(lineStartX, labelY + rowLineOffset + index * rowGap, group.anchorX + (textOnLeft ? -6 : 6), group.anchorY, 5)}
-            fill="#60a5fa"
-          />
           <text
             x={textX}
             y={labelY + rowTextOffset + index * rowGap}
             textAnchor={textAnchor}
             fontSize={fontSize}
-            fontWeight={800}
+            fontWeight={750}
             fill="#020617"
           >
             {row}
@@ -540,7 +548,7 @@ function ObjectShape({
 
   // Sensor point: keep warehouse markers compact and scalable; full sensor IDs stay in tables.
   if (obj.type === "sensor_point") {
-    const r = clamp(Math.min(w, h) / 2, 6, 24);
+    const r = clamp(Math.min(w, h) / 2, 5, 10);
     const cx2 = x + w / 2;
     const cy2 = y + h / 2;
     const logger = sensorPointLogger(obj, sensorLoggers);
@@ -618,7 +626,7 @@ function ObjectShape({
           x={cx2}
           y={cy2 + r * 0.18}
           textAnchor="middle"
-          fontSize={clamp(r * 0.42, 3.8, 7.4)}
+          fontSize={clamp(r * 0.46, 3.8, 5.8)}
           fontWeight={800}
           fill={colors.text}
           textLength={shortId.length >= 4 ? Math.max(1, r * 1.58) : undefined}
@@ -628,7 +636,7 @@ function ObjectShape({
           {shortId}
         </text>
         {htLabel && (
-          <text x={cx2} y={cy2 + r + 9} textAnchor="middle" fontSize={7} fill={colors.text} fontWeight={600} style={{ pointerEvents: "none", userSelect: "none" }}>
+          <text x={cx2} y={cy2 + r + 7.5} textAnchor="middle" fontSize={5.8} fill={colors.text} fontWeight={600} style={{ pointerEvents: "none", userSelect: "none" }}>
             {htLabel}
           </text>
         )}
@@ -837,14 +845,14 @@ function SidePanel({
     const calloutFontSize = clamp(
       typeof obj.calloutFontSize === "number" && Number.isFinite(obj.calloutFontSize)
         ? obj.calloutFontSize
-        : 8.6,
-      6,
-      12,
+        : 7.2,
+      5.4,
+      11,
     );
     const handleCalloutFontSize = (raw: string) => {
       const v = parseFloat(raw.replace(",", "."));
       if (!Number.isFinite(v)) return;
-      onUpdate({ calloutFontSize: clamp(v, 6, 12) });
+      onUpdate({ calloutFontSize: clamp(v, 5.4, 11) });
     };
     const hasLeader =
       typeof obj.leaderEndXPct === "number" &&
@@ -914,7 +922,7 @@ function SidePanel({
               variant="outline"
               size="sm"
               className="h-7 w-7 p-0 text-xs"
-              onClick={() => onUpdate({ calloutFontSize: clamp(calloutFontSize - 0.5, 6, 12) })}
+              onClick={() => onUpdate({ calloutFontSize: clamp(calloutFontSize - 0.5, 5.4, 11) })}
             >
               âˆ’
             </Button>
@@ -922,8 +930,8 @@ function SidePanel({
               className="h-7 text-xs text-center"
               type="number"
               step="0.5"
-              min="6"
-              max="12"
+              min="5.4"
+              max="11"
               value={calloutFontSize.toFixed(1)}
               onChange={e => handleCalloutFontSize(e.target.value)}
             />
@@ -932,7 +940,7 @@ function SidePanel({
               variant="outline"
               size="sm"
               className="h-7 w-7 p-0 text-xs"
-              onClick={() => onUpdate({ calloutFontSize: clamp(calloutFontSize + 0.5, 6, 12) })}
+              onClick={() => onUpdate({ calloutFontSize: clamp(calloutFontSize + 0.5, 5.4, 11) })}
             >
               +
             </Button>

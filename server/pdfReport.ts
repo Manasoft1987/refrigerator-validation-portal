@@ -6096,7 +6096,7 @@ function drawWarehousePlanDiagram(
   const medianSensorMarkerRadius = sensorMarkerRadii.length > 0
     ? sensorMarkerRadii[Math.floor(sensorMarkerRadii.length / 2)]
     : 8;
-  const uniformSensorMarkerRadius = Math.max(5, Math.min(20, medianSensorMarkerRadius));
+  const uniformSensorMarkerRadius = Math.max(4.8, Math.min(10, medianSensorMarkerRadius));
   const sensorDisplays = sensorPointObjs.map(sp => {
     // sensor_point xPct/yPct are stored as the top-left corner in the editor.
     // Render the PDF marker at the same visual center as the portal.
@@ -6157,10 +6157,11 @@ function drawWarehousePlanDiagram(
       const r = display.r;
       const anchorX = groupedNode.anchorX;
       const anchorY = groupedNode.anchorY;
-      const rowFont = Math.max(6, Math.min(12, groupedNode.calloutFontSize ?? 8.0));
-      const rowGap = rowFont + 3.2;
-      const rowTextOffset = rowFont * 0.72;
-      const rowLineOffset = rowTextOffset - 3;
+      const rowFont = Math.max(5.4, Math.min(11, groupedNode.calloutFontSize ?? 7.2));
+      const rowGap = rowFont + 3.8;
+      const padX = 5.2;
+      const padY = 4.2;
+      const rowTextOffset = padY + rowFont * 0.82;
       const sortedItems = [...groupedNode.items].sort((a, b) => (a.sp.heightM ?? 0) - (b.sp.heightM ?? 0));
       const calloutRows = sortedItems.map(item => {
         const sensorLabel = shortSensorId(item.sp.label) || String(item.sp.label || "D");
@@ -6171,8 +6172,8 @@ function drawWarehousePlanDiagram(
       });
       doc.font("bold").fontSize(rowFont);
       const rowsW = calloutRows.reduce((max, row) => Math.max(max, doc.widthOfString(row)), 0);
-      const labelW = Math.max(58, Math.min(128, rowsW));
-      const labelH = calloutRows.length * rowGap;
+      const labelW = Math.max(52, Math.min(124, rowsW + padX * 2));
+      const labelH = calloutRows.length * rowGap + padY * 1.3;
       const closeToAnchor = Math.hypot(groupedNode.bubbleX - anchorX, groupedNode.bubbleY - anchorY) < r + 12;
       const sideOffset = 34;
       const canPlaceRight = anchorX + sideOffset + labelW <= markerPlanBox.x + markerPlanBox.w - 3;
@@ -6204,20 +6205,26 @@ function drawWarehousePlanDiagram(
       const hasCold = groupedNode.items.some(item => floorSensorPointMatchesTokens(item.sp, criticalSensorTokens.cold));
       doc.save();
       const textOnLeft = labelX + labelW / 2 < anchorX;
-      const textX = textOnLeft ? labelX : labelX + labelW;
+      const textX = labelX + padX;
       const textAlign = textOnLeft ? "left" : "right";
-      const lineStartX = textOnLeft ? labelX + labelW + 3 : labelX - 3;
+      const labelCenterX = labelX + labelW / 2;
+      const labelCenterY = labelY + labelH / 2;
+      const vx = anchorX - labelCenterX;
+      const vy = anchorY - labelCenterY;
+      const edgeScale = 1 / Math.max(Math.abs(vx) / (labelW / 2), Math.abs(vy) / (labelH / 2), 1);
+      const edgeX = labelCenterX + vx * edgeScale;
+      const edgeY = labelCenterY + vy * edgeScale;
+      doc.opacity(0.94).fillColor("#ffffff").roundedRect(labelX, labelY, labelW, labelH, 4.5).fill();
+      doc.opacity(1).strokeColor("#38bdf8").lineWidth(0.75).roundedRect(labelX, labelY, labelW, labelH, 4.5).stroke();
+      doc.strokeColor("#2563eb").lineWidth(0.85)
+        .moveTo(edgeX, edgeY)
+        .lineTo(anchorX, anchorY)
+        .stroke();
+      drawPdfArrowHead(doc, edgeX, edgeY, anchorX, anchorY, 4.6, "#2563eb");
       calloutRows.forEach((row, index) => {
-        const rowY = labelY + rowLineOffset + index * rowGap;
         const textY = labelY + rowTextOffset + index * rowGap;
-        const targetX = anchorX + (textOnLeft ? -6 : 6);
-        doc.strokeColor("#60a5fa").lineWidth(0.75)
-          .moveTo(lineStartX, rowY)
-          .lineTo(targetX, anchorY)
-          .stroke();
-        drawPdfArrowHead(doc, lineStartX, rowY, targetX, anchorY, 4.6, "#60a5fa");
         doc.fillColor("#020617").font("bold").fontSize(rowFont)
-          .text(row, textOnLeft ? textX : labelX, textY - rowFont * 0.62, { width: labelW, align: textAlign as "left" | "right", lineBreak: false });
+          .text(row, textX, textY - rowFont * 0.62, { width: labelW - padX * 2, align: textAlign as "left" | "right", lineBreak: false });
       });
       doc.fillColor("#fbbf24").strokeColor("#92400e").lineWidth(1.05).circle(anchorX, anchorY, 6.7).fillAndStroke();
       doc.fillColor("#facc15").strokeColor("#ffffff").lineWidth(0.8).circle(anchorX, anchorY, 3.8).fillAndStroke();
