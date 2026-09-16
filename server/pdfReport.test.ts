@@ -861,6 +861,102 @@ describe("generateProtocolPdf", () => {
   );
 
   it(
+    "adds an automatic contents page to auto-refrigerator reports and includes enabled excursion tests",
+    async () => {
+      const now = Date.UTC(2026, 8, 13, 15, 0, 0);
+      const pvSeries = mkSeries(now, 24, 5);
+      const excursionSeries = mkSeries(now + 24 * 3600_000, 3, 12);
+      const sensor = {
+        id: 1,
+        label: "3711",
+        customName: null,
+        role: "internal" as const,
+        pointCount: pvSeries.temp.length,
+        min: 3.9,
+        max: 6.4,
+        avg: 5.0,
+        std: 0.3,
+        mkt: 5.1,
+        series: pvSeries,
+        deviations: [],
+      };
+      const originalText = (PDFDocument.prototype as any).text;
+      const writtenText: string[] = [];
+
+      (PDFDocument.prototype as any).text = function (text: string, ...args: any[]) {
+        writtenText.push(String(text));
+        return originalText.call(this, text, ...args);
+      };
+
+      try {
+        await generateProtocolPdf({
+          org: BASE_ORG,
+          protocol: { number: "VAL-TRK-2026-TOC", createdAt: new Date(now) },
+          generalInfo: {
+            ...BASE_GI,
+            equipmentType: "auto-refrigerator",
+            validationDate: "2026-09-13",
+          },
+          iq: {
+            purpose: "IQ", description: "IQ", criteria: "IQ",
+            items: [], verdict: "pass",
+          },
+          oq: {
+            purpose: "OQ", description: "OQ", criteria: "OQ",
+            items: [], verdict: "pass",
+          },
+          pv: {
+            purpose: "PV", description: "PV", criteria: "PV",
+            tempMode: "2-8", rangeMin: 2, rangeMax: 8,
+            startAt: now, endAt: now + 24 * 3600_000,
+            minDurationHours: 24, minSensorCount: 1,
+            loggers: [sensor], verdict: "pass", failureReasons: [],
+            hotIdx: 0, coldIdx: 0, extIndices: [],
+          },
+          excursion: {
+            enabled: true,
+            timingVsPv: "after_pv",
+            test1Enabled: false,
+            test2Enabled: true,
+            test3Enabled: true,
+            recordStartAt: now + 24 * 3600_000,
+            recordEndAt: now + 27 * 3600_000,
+            t1PowerOnAt: null,
+            t1TStableAt: null,
+            t1DurationSec: null,
+            t1CriticalSensor: null,
+            t1SensorEntries: null,
+            t2DoorOpenAt: now + 24.5 * 3600_000,
+            t2DoorCloseAt: now + 24.6 * 3600_000,
+            t2TBreakAt: null,
+            t2DurationSec: null,
+            t2CriticalSensor: null,
+            t2NoBreak: true,
+            t2SensorBreaks: [{ label: "3711", tBreakAt: null, durationSec: null }],
+            t3PowerOffAt: now + 25 * 3600_000,
+            t3TBreakAt: now + 25.5 * 3600_000,
+            t3DurationSec: 1800,
+            t3CriticalSensor: "3711",
+            t3NoBreak: false,
+            t3SensorBreaks: [{ label: "3711", tBreakAt: now + 25.5 * 3600_000, durationSec: 1800 }],
+            warnings: [],
+            loggers: [{ label: "3711", role: "internal", series: excursionSeries }],
+          },
+        } as any);
+      } finally {
+        (PDFDocument.prototype as any).text = originalText;
+      }
+
+      const allText = writtenText.join("\n");
+      expect(allText).toContain("Содержание");
+      expect(allText).toContain("ЧАСТЬ I. Протокол");
+      expect(allText).toContain("1. Общие сведения об оборудовании");
+      expect((allText.match(/10\. Испытания на температурное отклонение/g) ?? []).length).toBeGreaterThanOrEqual(2);
+    },
+    60_000,
+  );
+
+  it(
     "uses a risk-oriented actual placement diagram for auto-refrigerators with fewer than 15 internal loggers",
     async () => {
       const now = Date.UTC(2026, 6, 10, 9, 0, 0);

@@ -1677,7 +1677,9 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     doc.end();
     return done;
   }
-  const isWarehouseDoc = isWarehouseLike(getReportEquipmentType(input));
+  const eqTypeForToc = getReportEquipmentType(input);
+  const isWarehouseDoc = isWarehouseLike(eqTypeForToc);
+  const shouldRenderToc = isWarehouseDoc || isAutoRefrigeratorLike(eqTypeForToc);
   const tocEntries: TableOfContentsEntry[] = [];
   let tableOfContentsPageIndex: number | null = null;
   const currentPageNumber = () => {
@@ -1685,20 +1687,23 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     return range.start + range.count;
   };
   const recordToc = (title: string, level = 0) => {
-    if (!isWarehouseDoc) return;
+    if (!shouldRenderToc) return;
     tocEntries.push({ title, page: currentPageNumber(), level });
   };
 
   drawPartCover(doc, input, "part1");
-  if (isWarehouseDoc) {
+  if (shouldRenderToc) {
     recordToc(isEnglishWarehouse(input) ? "PART I. Protocol" : "ЧАСТЬ I. Протокол");
     doc.addPage();
     tableOfContentsPageIndex = doc.bufferedPageRange().start + doc.bufferedPageRange().count - 1;
+  }
+  if (isWarehouseDoc) {
     // ── WAREHOUSE PART I: sections 1–7 per EEC Rec. #8 ───────────────────────
     drawWarehouseProtocolPart1(doc, input, recordToc);
   } else {
     // ── STANDARD PART I ──────────────────────────────────────────────────────
     doc.addPage();
+    recordToc("1. Общие сведения об оборудовании", 1);
     drawSectionTitle(doc, "1. Общие сведения об оборудовании");
     drawGeneralInfoTable(doc, input);
     drawRevisionHistorySection(doc, input);
@@ -1708,6 +1713,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     const reportSensors = filterProtocolSensorsForReport(input);
     if (reportSensors && reportSensors.length > 0) {
         doc.addPage();
+        recordToc("1.1. Датчики, используемые для валидации", 1);
         drawSectionTitle(doc, "1.1. Датчики, используемые для валидации");
       drawSensorTable(
         doc,
@@ -1723,19 +1729,23 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     }
     
     doc.addPage();
+    recordToc("2. План IQ — Квалификация монтажа", 1);
     drawSectionTitle(doc, "2. План IQ — Квалификация монтажа");
     drawStageBlocks(doc, input.iq, input);
     drawChecklistPlan(doc, checklistItemsForReport(input, "iq"), input);
     doc.addPage();
+    recordToc("3. План OQ — Квалификация функционирования", 1);
     drawSectionTitle(doc, "3. План OQ — Квалификация функционирования");
     drawStageBlocks(doc, input.oq, input);
     drawChecklistPlan(doc, checklistItemsForReport(input, "oq"), input);
     doc.addPage();
+    recordToc("4. План PQ/PV — Эксплуатационная квалификация / валидация", 1);
     drawSectionTitle(doc, "4. План PQ/PV — Эксплуатационная квалификация / валидация");
     drawStageBlocks(doc, input.pv, input);
     drawPVPlan(doc, input.pv, input);
     drawPVPlacementPlan(doc, input);
     doc.addPage();
+    recordToc("5. Подписи к Протоколу", 1);
     drawSectionTitle(doc, "5. Подписи к Протоколу");
     drawSignaturesBlock(doc, getSignatoriesPart1(input), "Настоящий протокол квалификации рассмотрен и утверждён:", input);
   }
