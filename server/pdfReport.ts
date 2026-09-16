@@ -332,6 +332,7 @@ export type ReportInput = {
     size?: number | null;
     includeInPdf?: number | boolean | null;
     imageBuffer?: Buffer | null;
+    pdfBuffer?: Buffer | null;
   }>;
   /** GMP пункт 6 — подписанты Протокола (Часть I) */
   signatoriesPart1?: Signatory[];
@@ -4502,6 +4503,9 @@ function drawAttachmentsSection(doc: PDFKit.PDFDocument, input: ReportInput) {
       ["Формат", attachment.contentType || "—"],
       ["Размер", formatAttachmentSize(attachment.size)],
     ];
+    if ((attachment.contentType ?? "").toLowerCase().includes("pdf") || /\.pdf$/i.test(attachment.fileName ?? "")) {
+      metaRows.push(["Включение в отчёт", "Страницы PDF-файла подшиты в итоговый документ после основного отчёта."]);
+    }
     if (attachment.comment?.trim()) metaRows.push(["Комментарий", attachment.comment.trim()]);
 
     ensureSpace(doc, 130);

@@ -146,6 +146,7 @@ import type { Protocol } from "../drizzle/schema";
 import { getComputerizedSystemReleaseReadiness } from "@shared/computerizedSystem";
 import { storagePut, storageReadBuffer } from "./storage";
 import { calculateCriticalLoggerIndices } from "./pvCriticalPoints";
+import { PDFDocument as MergePdfDocument } from "pdf-lib";
 
 function normalizeSensorNumber(value: string | null | undefined): string {
   return String(value ?? "")
@@ -174,6 +175,32 @@ function withDefaultGeneralInfoLoadPercent<T extends { fillStatus?: unknown; loa
   }
   const loadPercent = defaultLoadPercentForFillStatus(generalInfo.fillStatus);
   return loadPercent === null ? generalInfo : { ...generalInfo, loadPercent } as T;
+}
+
+async function appendIncludedPdfAttachments(
+  reportBuffer: Buffer,
+  attachments: NonNullable<ReportInput["attachments"]> | undefined,
+): Promise<Buffer> {
+  const pdfAttachments = (attachments ?? []).filter(item =>
+    item.includeInPdf !== false &&
+    item.includeInPdf !== 0 &&
+    item.pdfBuffer &&
+    ((item.contentType ?? "").toLowerCase().includes("pdf") || /\.pdf$/i.test(item.fileName ?? "")),
+  );
+  if (pdfAttachments.length === 0) return reportBuffer;
+
+  const merged = await MergePdfDocument.load(reportBuffer);
+  for (const attachment of pdfAttachments) {
+    try {
+      const source = await MergePdfDocument.load(attachment.pdfBuffer!);
+      const pages = await merged.copyPages(source, source.getPageIndices());
+      pages.forEach(page => merged.addPage(page));
+    } catch (error) {
+      console.warn(`Failed to append PDF attachment ${attachment.fileName}:`, error);
+    }
+  }
+
+  return Buffer.from(await merged.save({ useObjectStreams: false }));
 }
 
 function warehouseMinDurationHoursFor(equipmentType: unknown, studyType: unknown): number {
@@ -2371,6 +2398,7 @@ export const appRouter = router({
                 .filter(item => item.includeInPdf !== 0)
                 .map(async item => {
                   let imageBuffer: Buffer | null = null;
+                  let pdfBuffer: Buffer | null = null;
                   if ((item.contentType ?? "").startsWith("image/")) {
                     try {
                       imageBuffer = (await storageReadBuffer(item.fileKey)).data;
@@ -2380,6 +2408,18 @@ export const appRouter = router({
                         imageBuffer = Buffer.from(inlineImage[1], "base64");
                       } else {
                         console.warn("Attachment image fetch failed:", error);
+                      }
+                    }
+                  }
+                  if ((item.contentType ?? "").toLowerCase().includes("pdf") || /\.pdf$/i.test(item.fileName ?? "")) {
+                    try {
+                      pdfBuffer = (await storageReadBuffer(item.fileKey)).data;
+                    } catch (error) {
+                      const inlinePdf = item.fileUrl?.match(/^data:application\/pdf;base64,(.+)$/);
+                      if (inlinePdf) {
+                        pdfBuffer = Buffer.from(inlinePdf[1], "base64");
+                      } else {
+                        console.warn("Attachment PDF fetch failed:", error);
                       }
                     }
                   }
@@ -2394,6 +2434,7 @@ export const appRouter = router({
                     size: item.size,
                     includeInPdf: item.includeInPdf,
                     imageBuffer,
+                    pdfBuffer,
                   };
                 }),
             )
@@ -2627,7 +2668,7 @@ export const appRouter = router({
           }));
         }
         
-        const buffer = await generateProtocolPdf(reportInput);
+        const buffer = await appendIncludedPdfAttachments(await generateProtocolPdf(reportInput), reportInput.attachments);
         return storeGeneratedPdfOrInline(
           `protocol-${input.protocolId}/report-${protocol.number}-${Date.now()}.pdf`,
           buffer,

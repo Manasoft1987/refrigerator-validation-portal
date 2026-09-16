@@ -186,7 +186,7 @@ export default function ProtocolAttachmentsStep({
                 onChange={event => setFile(event.target.files?.[0] ?? null)}
               />
               <p className="text-xs text-muted-foreground">
-                Фото встраиваются в PDF как изображение. Документы PDF/DOCX/XLS добавляются карточкой с названием файла.
+                Фото встраиваются в PDF как изображение. PDF-файлы подшиваются в итоговый PDF страницами; DOCX/XLS добавляются карточкой с названием файла.
               </p>
             </div>
             <Button onClick={handleUpload} disabled={busy || !file}>
