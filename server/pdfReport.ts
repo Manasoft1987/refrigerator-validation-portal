@@ -389,6 +389,7 @@ export type ReportInput = {
     leaderEndYPct?: number | null;
     calloutXPct?: number | null;
     calloutYPct?: number | null;
+    calloutFontSize?: number | null;
   }> | null;
   /**
    * Saved PNG screenshot of the FloorPlanEditor (stored in S3).
@@ -1268,6 +1269,7 @@ type WarehouseSensorDisplayGroup<T> = {
   bubbleY: number;
   calloutX: number | null;
   calloutY: number | null;
+  calloutFontSize: number | null;
 };
 
 function warehouseClamp01(value: number): number {
@@ -1309,6 +1311,7 @@ function groupWarehouseSensorDisplays<T extends {
   leaderEndY: number | null;
   calloutX?: number | null;
   calloutY?: number | null;
+  calloutFontSize?: number | null;
 }>(
   displays: T[],
   thresholdPx: number,
@@ -1335,6 +1338,9 @@ function groupWarehouseSensorDisplays<T extends {
         bubbleY: display.baseY,
         calloutX: display.calloutX ?? null,
         calloutY: display.calloutY ?? null,
+        calloutFontSize: typeof display.calloutFontSize === "number" && Number.isFinite(display.calloutFontSize)
+          ? Math.max(6, Math.min(12, display.calloutFontSize))
+          : null,
       });
       continue;
     }
@@ -1344,6 +1350,13 @@ function groupWarehouseSensorDisplays<T extends {
     bestGroup.anchorY = bestGroup.anchorY + (anchorY - bestGroup.anchorY) / n;
     bestGroup.bubbleX = bestGroup.bubbleX + (display.baseX - bestGroup.bubbleX) / n;
     bestGroup.bubbleY = bestGroup.bubbleY + (display.baseY - bestGroup.bubbleY) / n;
+    if (typeof display.calloutFontSize === "number" && Number.isFinite(display.calloutFontSize)) {
+      const fontSize = Math.max(6, Math.min(12, display.calloutFontSize));
+      const existingCount = bestGroup.items.filter(item => typeof item.calloutFontSize === "number" && Number.isFinite(item.calloutFontSize)).length;
+      bestGroup.calloutFontSize = bestGroup.calloutFontSize == null
+        ? fontSize
+        : bestGroup.calloutFontSize + (fontSize - bestGroup.calloutFontSize) / Math.max(1, existingCount);
+    }
     if (display.calloutX != null && display.calloutY != null) {
       const existingCount = bestGroup.items.filter(item => item.calloutX != null && item.calloutY != null).length;
       bestGroup.calloutX = bestGroup.calloutX == null
@@ -6103,10 +6116,14 @@ function drawWarehousePlanDiagram(
       Number.isFinite(sp.calloutYPct);
     const calloutX = hasCallout ? planX + ((sp.calloutXPct as number) / 100) * drawW : null;
     const calloutY = hasCallout ? planY + ((sp.calloutYPct as number) / 100) * drawH : null;
+    const calloutFontSize =
+      typeof sp.calloutFontSize === "number" && Number.isFinite(sp.calloutFontSize)
+        ? Math.max(6, Math.min(12, sp.calloutFontSize))
+        : null;
     const r = uniformSensorMarkerRadius;
     const markerBox = warehouseMarkerBox(baseX, baseY, r + 4);
     occupiedSensorBubbles.push(markerBox);
-    return { sp, baseX, baseY, x: baseX, y: baseY, r, markerBox, leaderEndX, leaderEndY, calloutX, calloutY };
+    return { sp, baseX, baseY, x: baseX, y: baseY, r, markerBox, leaderEndX, leaderEndY, calloutX, calloutY, calloutFontSize };
   });
   const shouldGroupStackedSensors = !template && showSensorLabels && !showAverageLabels && sensorDisplays.length >= 2;
   const stackedSensorThresholdPx = Math.max(uniformSensorMarkerRadius * 2.8, Math.min(drawW, drawH) * 0.055);
@@ -6140,7 +6157,10 @@ function drawWarehousePlanDiagram(
       const r = display.r;
       const anchorX = groupedNode.anchorX;
       const anchorY = groupedNode.anchorY;
-      const rowFont = 8.6;
+      const rowFont = Math.max(6, Math.min(12, groupedNode.calloutFontSize ?? 8.0));
+      const rowGap = rowFont + 3.2;
+      const rowTextOffset = rowFont * 0.72;
+      const rowLineOffset = rowTextOffset - 3;
       const sortedItems = [...groupedNode.items].sort((a, b) => (a.sp.heightM ?? 0) - (b.sp.heightM ?? 0));
       const calloutRows = sortedItems.map(item => {
         const sensorLabel = shortSensorId(item.sp.label) || String(item.sp.label || "D");
@@ -6152,7 +6172,7 @@ function drawWarehousePlanDiagram(
       doc.font("bold").fontSize(rowFont);
       const rowsW = calloutRows.reduce((max, row) => Math.max(max, doc.widthOfString(row)), 0);
       const labelW = Math.max(58, Math.min(128, rowsW));
-      const labelH = calloutRows.length * 12.4;
+      const labelH = calloutRows.length * rowGap;
       const closeToAnchor = Math.hypot(groupedNode.bubbleX - anchorX, groupedNode.bubbleY - anchorY) < r + 12;
       const sideOffset = 34;
       const canPlaceRight = anchorX + sideOffset + labelW <= markerPlanBox.x + markerPlanBox.w - 3;
@@ -6188,15 +6208,16 @@ function drawWarehousePlanDiagram(
       const textAlign = textOnLeft ? "left" : "right";
       const lineStartX = textOnLeft ? labelX + labelW + 3 : labelX - 3;
       calloutRows.forEach((row, index) => {
-        const rowY = labelY + 8 + index * 12.4;
+        const rowY = labelY + rowLineOffset + index * rowGap;
+        const textY = labelY + rowTextOffset + index * rowGap;
         const targetX = anchorX + (textOnLeft ? -6 : 6);
         doc.strokeColor("#60a5fa").lineWidth(0.75)
-          .moveTo(lineStartX, rowY - 2)
+          .moveTo(lineStartX, rowY)
           .lineTo(targetX, anchorY)
           .stroke();
-        drawPdfArrowHead(doc, lineStartX, rowY - 2, targetX, anchorY, 4.6, "#60a5fa");
+        drawPdfArrowHead(doc, lineStartX, rowY, targetX, anchorY, 4.6, "#60a5fa");
         doc.fillColor("#020617").font("bold").fontSize(rowFont)
-          .text(row, textOnLeft ? textX : labelX, rowY - 6.2, { width: labelW, align: textAlign as "left" | "right", lineBreak: false });
+          .text(row, textOnLeft ? textX : labelX, textY - rowFont * 0.62, { width: labelW, align: textAlign as "left" | "right", lineBreak: false });
       });
       doc.fillColor("#fbbf24").strokeColor("#92400e").lineWidth(1.05).circle(anchorX, anchorY, 6.7).fillAndStroke();
       doc.fillColor("#facc15").strokeColor("#ffffff").lineWidth(0.8).circle(anchorX, anchorY, 3.8).fillAndStroke();

@@ -55,6 +55,7 @@ export interface FloorPlanObject {
   leaderEndYPct?: number | null; // optional arrow tip Y for exact sensor placement
   calloutXPct?: number | null; // optional T-callout label center X
   calloutYPct?: number | null; // optional T-callout label center Y
+  calloutFontSize?: number | null; // optional grouped callout text size
 }
 
 // ─── Object catalogue ─────────────────────────────────────────────────────────
@@ -257,6 +258,7 @@ type SensorPointDisplay = {
   anchorY: number;
   calloutX: number | null;
   calloutY: number | null;
+  calloutFontSize: number | null;
 };
 
 type SensorPointCalloutGroup = {
@@ -268,6 +270,7 @@ type SensorPointCalloutGroup = {
   bubbleY: number;
   calloutX: number | null;
   calloutY: number | null;
+  calloutFontSize: number | null;
 };
 
 function assignSensorPointNodeNames(
@@ -318,7 +321,11 @@ function buildSensorPointCalloutGroups(
         Number.isFinite(obj.calloutYPct);
       const calloutX = hasCallout ? planX + ((obj.calloutXPct as number) / 100) * drawW : null;
       const calloutY = hasCallout ? planY + ((obj.calloutYPct as number) / 100) * drawH : null;
-      return { obj, logger: sensorPointLogger(obj, sensorLoggers), baseX, baseY, anchorX, anchorY, calloutX, calloutY };
+      const calloutFontSize =
+        typeof obj.calloutFontSize === "number" && Number.isFinite(obj.calloutFontSize)
+          ? clamp(obj.calloutFontSize, 6, 12)
+          : null;
+      return { obj, logger: sensorPointLogger(obj, sensorLoggers), baseX, baseY, anchorX, anchorY, calloutX, calloutY, calloutFontSize };
     });
 
   if (displays.length < 2) return [];
@@ -344,6 +351,7 @@ function buildSensorPointCalloutGroups(
         bubbleY: display.baseY,
         calloutX: display.calloutX,
         calloutY: display.calloutY,
+        calloutFontSize: display.calloutFontSize,
       });
       continue;
     }
@@ -353,6 +361,12 @@ function buildSensorPointCalloutGroups(
     bestGroup.anchorY += (display.anchorY - bestGroup.anchorY) / n;
     bestGroup.bubbleX += (display.baseX - bestGroup.bubbleX) / n;
     bestGroup.bubbleY += (display.baseY - bestGroup.bubbleY) / n;
+    if (display.calloutFontSize !== null) {
+      const existingCount = bestGroup.items.filter(item => item.calloutFontSize !== null).length;
+      bestGroup.calloutFontSize = bestGroup.calloutFontSize === null
+        ? display.calloutFontSize
+        : bestGroup.calloutFontSize + (display.calloutFontSize - bestGroup.calloutFontSize) / Math.max(1, existingCount);
+    }
     if (display.calloutX !== null && display.calloutY !== null) {
       const existingCount = bestGroup.items.filter(item => item.calloutX !== null && item.calloutY !== null).length;
       bestGroup.calloutX = bestGroup.calloutX === null
@@ -386,6 +400,10 @@ function SensorPointCallout({
   onSelect: (id: string) => void;
   onCalloutPointerDown: (group: SensorPointCalloutGroup, e: React.PointerEvent) => void;
 }) {
+  const fontSize = clamp(group.calloutFontSize ?? 8.6, 6, 12);
+  const rowGap = fontSize + 3.2;
+  const rowTextOffset = fontSize * 0.72;
+  const rowLineOffset = rowTextOffset - 3;
   const rows = [...group.items]
     .sort((a, b) => (a.obj.heightM ?? 0) - (b.obj.heightM ?? 0))
     .map(item => {
@@ -393,8 +411,8 @@ function SensorPointCallout({
       const height = (item.obj.heightM ?? 0) > 0 ? `${item.obj.heightM.toFixed(2)} м` : "—";
       return `${label} — ${height}`;
     });
-  const labelW = clamp(Math.max(...rows.map(row => row.length * 5.7), 68), 68, 136);
-  const labelH = rows.length * 14.2;
+  const labelW = clamp(Math.max(...rows.map(row => row.length * fontSize * 0.54), 58), 58, 136);
+  const labelH = rows.length * rowGap;
   const sideOffset = 34;
   const canPlaceRight = group.anchorX + sideOffset + labelW <= planX + drawW - 4;
   const canPlaceLeft = group.anchorX - sideOffset - labelW >= planX + 4;
@@ -440,22 +458,22 @@ function SensorPointCallout({
         <g key={`${row}-${index}`} style={{ pointerEvents: "none" }}>
           <line
             x1={lineStartX}
-            y1={labelY + 7 + index * 14.2}
+            y1={labelY + rowLineOffset + index * rowGap}
             x2={group.anchorX + (textOnLeft ? -6 : 6)}
             y2={group.anchorY}
             stroke="#60a5fa"
-            strokeWidth={1.05}
+            strokeWidth={0.9}
             strokeLinecap="round"
           />
           <polygon
-            points={arrowHeadPoints(lineStartX, labelY + 7 + index * 14.2, group.anchorX + (textOnLeft ? -6 : 6), group.anchorY, 5.5)}
+            points={arrowHeadPoints(lineStartX, labelY + rowLineOffset + index * rowGap, group.anchorX + (textOnLeft ? -6 : 6), group.anchorY, 5)}
             fill="#60a5fa"
           />
           <text
             x={textX}
-            y={labelY + 10 + index * 14.2}
+            y={labelY + rowTextOffset + index * rowGap}
             textAnchor={textAnchor}
-            fontSize={11}
+            fontSize={fontSize}
             fontWeight={800}
             fill="#020617"
           >
@@ -816,6 +834,18 @@ function SidePanel({
         heightPct: clamp((v / (roomWidthM || 1)) * 100, MIN_SIZE_PCT, 100),
       });
     };
+    const calloutFontSize = clamp(
+      typeof obj.calloutFontSize === "number" && Number.isFinite(obj.calloutFontSize)
+        ? obj.calloutFontSize
+        : 8.6,
+      6,
+      12,
+    );
+    const handleCalloutFontSize = (raw: string) => {
+      const v = parseFloat(raw.replace(",", "."));
+      if (!Number.isFinite(v)) return;
+      onUpdate({ calloutFontSize: clamp(v, 6, 12) });
+    };
     const hasLeader =
       typeof obj.leaderEndXPct === "number" &&
       typeof obj.leaderEndYPct === "number" &&
@@ -875,6 +905,38 @@ function SidePanel({
         </div>
         <div className="rounded-md border bg-muted/30 p-2 text-[11px] leading-snug text-muted-foreground">
           Для точного места: выделите датчик и потяните оранжевую точку — появится стрелка-указатель.
+        </div>
+        <div className="space-y-1">
+          <Label className="text-[11px] text-muted-foreground">Ð Ð°Ð·Ð¼ÐµÑ€ Ñ‚ÐµÐºÑÑ‚Ð° Ð²Ñ‹Ð½Ð¾ÑÐºÐ¸</Label>
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 w-7 p-0 text-xs"
+              onClick={() => onUpdate({ calloutFontSize: clamp(calloutFontSize - 0.5, 6, 12) })}
+            >
+              âˆ’
+            </Button>
+            <Input
+              className="h-7 text-xs text-center"
+              type="number"
+              step="0.5"
+              min="6"
+              max="12"
+              value={calloutFontSize.toFixed(1)}
+              onChange={e => handleCalloutFontSize(e.target.value)}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-7 w-7 p-0 text-xs"
+              onClick={() => onUpdate({ calloutFontSize: clamp(calloutFontSize + 0.5, 6, 12) })}
+            >
+              +
+            </Button>
+          </div>
         </div>
         <Button
           variant="outline" size="sm"
@@ -1224,7 +1286,7 @@ export function FloorPlanEditor({
     (e.target as Element).setPointerCapture?.(e.pointerId);
     const representativeId = group.items[0]?.obj.id;
     if (representativeId) setSelectedId(representativeId);
-    setPanelOpen(false);
+    setPanelOpen(true);
     const { x, y } = clientToCanvasSvg(e.clientX, e.clientY);
     const calloutCenterX = group.calloutX ?? group.bubbleX;
     const calloutCenterY = group.calloutY ?? group.bubbleY;
