@@ -2054,6 +2054,12 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     nextSectionNumber += 1;
   }
 
+  doc.addPage();
+  const metrologySectionNumber = nextSectionNumber;
+  recordToc(isEnglishWarehouse(input) ? `${metrologySectionNumber}. Metrological Verification of Measuring Instruments` : `${metrologySectionNumber}. Поверка средств измерений`, 1);
+  drawCalibrationPage(doc, isEnglishWarehouse(input) ? `${metrologySectionNumber}. Metrological Verification of Measuring Instruments` : `${metrologySectionNumber}. Поверка средств измерений`);
+  nextSectionNumber += 1;
+
   if (input.attachments?.some(item => item.includeInPdf !== false && item.includeInPdf !== 0)) {
     doc.addPage();
     const annexSectionNumber = nextSectionNumber;
@@ -2062,11 +2068,6 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     drawAttachmentsSection(doc, input);
     nextSectionNumber += 1;
   }
-
-  doc.addPage();
-  const metrologySectionNumber = nextSectionNumber;
-  recordToc(isEnglishWarehouse(input) ? `${metrologySectionNumber}. Metrological Verification of Measuring Instruments` : `${metrologySectionNumber}. Поверка средств измерений`, 1);
-  drawCalibrationPage(doc, isEnglishWarehouse(input) ? `${metrologySectionNumber}. Metrological Verification of Measuring Instruments` : `${metrologySectionNumber}. Поверка средств измерений`);
 
   /* ---------------- Footer / pagination ---------------- */
   if (tableOfContentsPageIndex !== null) {
@@ -4504,7 +4505,7 @@ function drawAttachmentsSection(doc: PDFKit.PDFDocument, input: ReportInput) {
       ["Размер", formatAttachmentSize(attachment.size)],
     ];
     if ((attachment.contentType ?? "").toLowerCase().includes("pdf") || /\.pdf$/i.test(attachment.fileName ?? "")) {
-      metaRows.push(["Включение в отчёт", "Страницы PDF-файла подшиты в итоговый документ после основного отчёта."]);
+      metaRows.push(["Включение в отчёт", "Страницы PDF-файла подшиты в итоговый документ сразу после раздела «Приложения»."]);
     }
     if (attachment.comment?.trim()) metaRows.push(["Комментарий", attachment.comment.trim()]);
 
