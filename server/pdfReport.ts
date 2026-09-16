@@ -4621,7 +4621,7 @@ function drawMeasurementTable(doc: PDFKit.PDFDocument, loggers: LoggerSummary[],
 
   const ROW_H = 18;
   const HEADER_H = 26;
-  const MAX_SENSORS_PER_BLOCK = 12;
+  const MAX_SENSORS_PER_BLOCK = 16;
 
   // Limit to 2000 rows to avoid huge PDFs; if more, sample evenly
   const MAX_ROWS = 2000;
@@ -4647,7 +4647,7 @@ function drawMeasurementTable(doc: PDFKit.PDFDocument, loggers: LoggerSummary[],
       doc.y = HEADER_CONTENT_TOP;
     }
 
-    const tsColW = 0.2;
+    const tsColW = group.length >= 14 ? 0.18 : 0.2;
     const sensorColW = (1 - tsColW) / group.length;
     const cols: Array<{ label: string; w: number }> = [
       { label: en ? "Date / Time" : "Дата / Время", w: tsColW },

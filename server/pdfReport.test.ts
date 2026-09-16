@@ -1099,8 +1099,8 @@ describe("generateProtocolPdf", () => {
       }
 
       expect(Array.from(blockLabels)).toEqual([
-        "Датчики 1–12 из 18",
-        "Датчики 13–18 из 18",
+        "Датчики 1–16 из 18",
+        "Датчики 17–18 из 18",
       ]);
     },
     60_000,
