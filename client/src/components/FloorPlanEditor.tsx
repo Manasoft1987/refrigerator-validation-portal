@@ -393,8 +393,8 @@ function SensorPointCallout({
       const height = (item.obj.heightM ?? 0) > 0 ? `${item.obj.heightM.toFixed(2)} м` : "—";
       return `${label} — ${height}`;
     });
-  const labelW = clamp(Math.max(group.node.length * 8 + 20, ...rows.map(row => row.length * 4.75 + 18), 66), 66, 118);
-  const labelH = 18 + rows.length * 10.8;
+  const labelW = clamp(Math.max(...rows.map(row => row.length * 5.7), 68), 68, 136);
+  const labelH = rows.length * 14.2;
   const sideOffset = 34;
   const canPlaceRight = group.anchorX + sideOffset + labelW <= planX + drawW - 4;
   const canPlaceLeft = group.anchorX - sideOffset - labelW >= planX + 4;
@@ -413,13 +413,10 @@ function SensorPointCallout({
   }
   labelX = clamp(labelX, planX + 4, planX + drawW - labelW - 4);
   labelY = clamp(labelY, planY + 4, planY + drawH - labelH - 4);
-  const labelCenterX = labelX + labelW / 2;
-  const labelCenterY = labelY + labelH / 2;
-  const vx = group.anchorX - labelCenterX;
-  const vy = group.anchorY - labelCenterY;
-  const edgeScale = 1 / Math.max(Math.abs(vx) / (labelW / 2), Math.abs(vy) / (labelH / 2), 1);
-  const edgeX = labelCenterX + vx * edgeScale;
-  const edgeY = labelCenterY + vy * edgeScale;
+  const textOnLeft = labelX + labelW / 2 < group.anchorX;
+  const textAnchor = textOnLeft ? "start" : "end";
+  const textX = textOnLeft ? labelX : labelX + labelW;
+  const lineStartX = textOnLeft ? labelX + labelW + 4 : labelX - 4;
   const representativeId = group.items[0]?.obj.id;
 
   return (
@@ -432,45 +429,43 @@ function SensorPointCallout({
       }}
     >
       <rect
-        x={labelX}
-        y={labelY}
-        width={labelW}
-        height={labelH}
+        x={labelX - 6}
+        y={labelY - 6}
+        width={labelW + 12}
+        height={labelH + 12}
         rx={4}
-        fill="white"
-        fillOpacity={0.9}
-        stroke={selected ? "#f59e0b" : "#0ea5e9"}
-        strokeWidth={selected ? 1.8 : 1}
+        fill="transparent"
       />
-      <text x={labelX + 5} y={labelY + 11} fontSize={8.4} fontWeight={900} fill="#0284c7" style={{ pointerEvents: "none" }}>
-        {group.node}
-      </text>
       {rows.map((row, index) => (
-        <text
-          key={`${row}-${index}`}
-          x={labelX + 5}
-          y={labelY + 22 + index * 10.8}
-          fontSize={7}
-          fontWeight={600}
-          fill="#0f172a"
-          style={{ pointerEvents: "none" }}
-        >
-          {row}
-        </text>
+        <g key={`${row}-${index}`} style={{ pointerEvents: "none" }}>
+          <line
+            x1={lineStartX}
+            y1={labelY + 7 + index * 14.2}
+            x2={group.anchorX + (textOnLeft ? -6 : 6)}
+            y2={group.anchorY}
+            stroke="#60a5fa"
+            strokeWidth={1.05}
+            strokeLinecap="round"
+          />
+          <polygon
+            points={arrowHeadPoints(lineStartX, labelY + 7 + index * 14.2, group.anchorX + (textOnLeft ? -6 : 6), group.anchorY, 5.5)}
+            fill="#60a5fa"
+          />
+          <text
+            x={textX}
+            y={labelY + 10 + index * 14.2}
+            textAnchor={textAnchor}
+            fontSize={11}
+            fontWeight={800}
+            fill="#020617"
+          >
+            {row}
+          </text>
+        </g>
       ))}
-      <line
-        x1={group.anchorX}
-        y1={group.anchorY}
-        x2={edgeX}
-        y2={edgeY}
-        stroke="#0f172a"
-        strokeWidth={1.15}
-        strokeLinecap="round"
-        style={{ pointerEvents: "none" }}
-      />
-      <polygon points={arrowHeadPoints(group.anchorX, group.anchorY, edgeX, edgeY, 6.2)} fill="#0f172a" style={{ pointerEvents: "none" }} />
-      <circle cx={group.anchorX} cy={group.anchorY} r={6.2} fill="white" stroke="#0284c7" strokeWidth={1.9} style={{ pointerEvents: "none" }} />
-      <circle cx={group.anchorX} cy={group.anchorY} r={3.7} fill="#00a6d6" stroke="white" strokeWidth={1} style={{ pointerEvents: "none" }} />
+      <circle cx={group.anchorX} cy={group.anchorY} r={7.2} fill="#fbbf24" stroke="#92400e" strokeWidth={1.35} style={{ pointerEvents: "none" }} />
+      <circle cx={group.anchorX} cy={group.anchorY} r={4.2} fill="#facc15" stroke="white" strokeWidth={1} style={{ pointerEvents: "none" }} />
+      {selected && <circle cx={group.anchorX} cy={group.anchorY} r={10.5} fill="none" stroke="#f59e0b" strokeWidth={1.4} strokeDasharray="3 2" style={{ pointerEvents: "none" }} />}
     </g>
   );
 }
@@ -1440,6 +1435,10 @@ export function FloorPlanEditor({
     () => buildSensorPointCalloutGroups(objects, sensorLoggers, planX, planY, drawW, drawH),
     [objects, sensorLoggers, planX, planY, drawW, drawH],
   );
+  const groupedSensorPointIds = useMemo(
+    () => new Set(sensorPointCalloutGroups.flatMap(group => group.items.map(item => item.obj.id))),
+    [sensorPointCalloutGroups],
+  );
 
   const updateSelected = useCallback((patch: Partial<FloorPlanObject>) => {
     if (!selectedId) return;
@@ -1679,6 +1678,7 @@ export function FloorPlanEditor({
 
             {/* Floor plan objects (rendered first, below grouped sensor callouts) */}
             {objects
+              .filter(obj => !(showSensorCallouts && obj.type === "sensor_point" && groupedSensorPointIds.has(obj.id)))
               .map(obj => (
               <ObjectShape
                 key={obj.id}

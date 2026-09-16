@@ -6140,8 +6140,7 @@ function drawWarehousePlanDiagram(
       const r = display.r;
       const anchorX = groupedNode.anchorX;
       const anchorY = groupedNode.anchorY;
-      const rowFont = 6.2;
-      const titleFont = 8.0;
+      const rowFont = 8.6;
       const sortedItems = [...groupedNode.items].sort((a, b) => (a.sp.heightM ?? 0) - (b.sp.heightM ?? 0));
       const calloutRows = sortedItems.map(item => {
         const sensorLabel = shortSensorId(item.sp.label) || String(item.sp.label || "D");
@@ -6150,12 +6149,10 @@ function drawWarehousePlanDiagram(
           : "—";
         return `${sensorLabel} — ${height}`;
       });
-      doc.font("bold").fontSize(titleFont);
-      const titleW = doc.widthOfString(groupedNode.node);
-      doc.font("body").fontSize(rowFont);
+      doc.font("bold").fontSize(rowFont);
       const rowsW = calloutRows.reduce((max, row) => Math.max(max, doc.widthOfString(row)), 0);
-      const labelW = Math.max(60, Math.min(116, Math.max(titleW, rowsW) + 14));
-      const labelH = 17 + calloutRows.length * 9.8;
+      const labelW = Math.max(58, Math.min(128, rowsW));
+      const labelH = calloutRows.length * 12.4;
       const closeToAnchor = Math.hypot(groupedNode.bubbleX - anchorX, groupedNode.bubbleY - anchorY) < r + 12;
       const sideOffset = 34;
       const canPlaceRight = anchorX + sideOffset + labelW <= markerPlanBox.x + markerPlanBox.w - 3;
@@ -6181,42 +6178,28 @@ function drawWarehousePlanDiagram(
       }
       labelX = Math.max(markerPlanBox.x + 3, Math.min(markerPlanBox.x + markerPlanBox.w - labelW - 3, labelX));
       labelY = Math.max(markerPlanBox.y + 3, Math.min(markerPlanBox.y + markerPlanBox.h - labelH - 3, labelY));
-      const labelCenterX = labelX + labelW / 2;
-      const labelCenterY = labelY + labelH / 2;
-      const vx = anchorX - labelCenterX;
-      const vy = anchorY - labelCenterY;
-      const edgeScale = 1 / Math.max(Math.abs(vx) / (labelW / 2), Math.abs(vy) / (labelH / 2), 1);
-      const edgeX = labelCenterX + vx * edgeScale;
-      const edgeY = labelCenterY + vy * edgeScale;
       const groupBox = { x: labelX, y: labelY, w: labelW, h: labelH };
       sensorLabelBoxes.push(groupBox);
       const hasHot = groupedNode.items.some(item => floorSensorPointMatchesTokens(item.sp, criticalSensorTokens.hot));
       const hasCold = groupedNode.items.some(item => floorSensorPointMatchesTokens(item.sp, criticalSensorTokens.cold));
       doc.save();
-      doc.opacity(0.9).fillColor("#ffffff").roundedRect(labelX, labelY, labelW, labelH, 4).fill();
-      doc.opacity(1).strokeColor("#0ea5e9").lineWidth(0.8).roundedRect(labelX, labelY, labelW, labelH, 4).stroke();
-      if (hasHot) {
-        doc.roundedRect(labelX - 2.2, labelY - 2.2, labelW + 4.4, labelH + 4.4, 5).lineWidth(1.6).strokeColor("#ef4444").stroke();
-      }
-      if (hasCold) {
-        doc.roundedRect(labelX - (hasHot ? 5 : 2.2), labelY - (hasHot ? 5 : 2.2), labelW + (hasHot ? 10 : 4.4), labelH + (hasHot ? 10 : 4.4), 6).lineWidth(1.5).strokeColor("#2563eb").stroke();
-      }
-      doc.fillColor("#0284c7").font("bold").fontSize(titleFont)
-        .text(groupedNode.node, labelX + 5, labelY + 3.2, { width: labelW - 10, align: "left", lineBreak: false });
+      const textOnLeft = labelX + labelW / 2 < anchorX;
+      const textX = textOnLeft ? labelX : labelX + labelW;
+      const textAlign = textOnLeft ? "left" : "right";
+      const lineStartX = textOnLeft ? labelX + labelW + 3 : labelX - 3;
       calloutRows.forEach((row, index) => {
-        doc.fillColor("#0f172a").font("body").fontSize(rowFont)
-          .text(row, labelX + 5, labelY + 16 + index * 9.8, { width: labelW - 10, align: "left", lineBreak: false });
-      });
-      const leaderDistance = Math.hypot(edgeX - anchorX, edgeY - anchorY);
-      if (leaderDistance > 6) {
-        doc.strokeColor("#0f172a").lineWidth(1.1)
-          .moveTo(anchorX, anchorY)
-          .lineTo(edgeX, edgeY)
+        const rowY = labelY + 8 + index * 12.4;
+        const targetX = anchorX + (textOnLeft ? -6 : 6);
+        doc.strokeColor("#60a5fa").lineWidth(0.75)
+          .moveTo(lineStartX, rowY - 2)
+          .lineTo(targetX, anchorY)
           .stroke();
-        drawPdfArrowHead(doc, anchorX, anchorY, edgeX, edgeY, 5.4, "#0f172a");
-      }
-      doc.fillColor("#ffffff").strokeColor("#0284c7").lineWidth(1.4).circle(anchorX, anchorY, 5.8).fillAndStroke();
-      doc.fillColor("#00a6d6").strokeColor("#ffffff").lineWidth(1.0).circle(anchorX, anchorY, 3.6).fillAndStroke();
+        drawPdfArrowHead(doc, lineStartX, rowY - 2, targetX, anchorY, 4.6, "#60a5fa");
+        doc.fillColor("#020617").font("bold").fontSize(rowFont)
+          .text(row, textOnLeft ? textX : labelX, rowY - 6.2, { width: labelW, align: textAlign as "left" | "right", lineBreak: false });
+      });
+      doc.fillColor("#fbbf24").strokeColor("#92400e").lineWidth(1.05).circle(anchorX, anchorY, 6.7).fillAndStroke();
+      doc.fillColor("#facc15").strokeColor("#ffffff").lineWidth(0.8).circle(anchorX, anchorY, 3.8).fillAndStroke();
       const criticalOffset = r + Math.max(3.2, r * 0.35);
       const criticalMarkerRadius = 5.6;
       const occupiedCriticalBoxes = sensorLabelBoxes.filter(item => item !== groupBox);
