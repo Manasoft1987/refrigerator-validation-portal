@@ -4505,7 +4505,7 @@ function drawAttachmentsSection(doc: PDFKit.PDFDocument, input: ReportInput) {
       ["Размер", formatAttachmentSize(attachment.size)],
     ];
     if ((attachment.contentType ?? "").toLowerCase().includes("pdf") || /\.pdf$/i.test(attachment.fileName ?? "")) {
-      metaRows.push(["Включение в отчёт", "Страницы PDF-файла подшиты в итоговый документ сразу после раздела «Приложения»."]);
+      metaRows.push(["Включение в отчёт", "Страницы PDF-файла подшиты в итоговый документ сразу после данной страницы приложения."]);
     }
     if (attachment.comment?.trim()) metaRows.push(["Комментарий", attachment.comment.trim()]);
 

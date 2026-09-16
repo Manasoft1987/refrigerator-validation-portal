@@ -177,18 +177,60 @@ function withDefaultGeneralInfoLoadPercent<T extends { fillStatus?: unknown; loa
   return loadPercent === null ? generalInfo : { ...generalInfo, loadPercent } as T;
 }
 
-async function appendIncludedPdfAttachments(
+function isIncludedPdfAttachment(item: NonNullable<ReportInput["attachments"]>[number]): boolean {
+  return (
+    item.includeInPdf !== false &&
+    item.includeInPdf !== 0 &&
+    Boolean(item.pdfBuffer) &&
+    ((item.contentType ?? "").toLowerCase().includes("pdf") || /\.pdf$/i.test(item.fileName ?? ""))
+  );
+}
+
+async function interleaveIncludedPdfAttachments(
   reportBuffer: Buffer,
   attachments: NonNullable<ReportInput["attachments"]> | undefined,
 ): Promise<Buffer> {
-  const pdfAttachments = (attachments ?? []).filter(item =>
-    item.includeInPdf !== false &&
-    item.includeInPdf !== 0 &&
-    item.pdfBuffer &&
-    ((item.contentType ?? "").toLowerCase().includes("pdf") || /\.pdf$/i.test(item.fileName ?? "")),
-  );
+  const includedAttachments = (attachments ?? []).filter(item => item.includeInPdf !== false && item.includeInPdf !== 0);
+  const pdfAttachments = includedAttachments.filter(isIncludedPdfAttachment);
   if (pdfAttachments.length === 0) return reportBuffer;
 
+  const sourceReport = await MergePdfDocument.load(reportBuffer);
+  const reportPages = sourceReport.getPageIndices();
+  const attachmentSectionStart = reportPages.length - includedAttachments.length;
+
+  // The report generator prints the "Приложения" section as the final section and
+  // starts every included attachment card on its own page. Build a fresh PDF so the
+  // original PDF attachment pages are inserted immediately after their card instead
+  // of being appended as one undifferentiated block at the end.
+  if (attachmentSectionStart < 0) {
+    return appendIncludedPdfAttachmentsToEnd(reportBuffer, pdfAttachments);
+  }
+
+  const merged = await MergePdfDocument.create();
+  const copiedReportPages = await merged.copyPages(sourceReport, reportPages);
+  for (let pageIndex = 0; pageIndex < copiedReportPages.length; pageIndex += 1) {
+    merged.addPage(copiedReportPages[pageIndex]);
+
+    const attachmentIndex = pageIndex - attachmentSectionStart;
+    const attachment = includedAttachments[attachmentIndex];
+    if (!attachment || !isIncludedPdfAttachment(attachment)) continue;
+
+    try {
+      const source = await MergePdfDocument.load(attachment.pdfBuffer!);
+      const pages = await merged.copyPages(source, source.getPageIndices());
+      pages.forEach(page => merged.addPage(page));
+    } catch (error) {
+      console.warn(`Failed to insert PDF attachment ${attachment.fileName}:`, error);
+    }
+  }
+
+  return Buffer.from(await merged.save({ useObjectStreams: false }));
+}
+
+async function appendIncludedPdfAttachmentsToEnd(
+  reportBuffer: Buffer,
+  pdfAttachments: NonNullable<ReportInput["attachments"]>,
+): Promise<Buffer> {
   const merged = await MergePdfDocument.load(reportBuffer);
   for (const attachment of pdfAttachments) {
     try {
@@ -2668,7 +2710,7 @@ export const appRouter = router({
           }));
         }
         
-        const buffer = await appendIncludedPdfAttachments(await generateProtocolPdf(reportInput), reportInput.attachments);
+        const buffer = await interleaveIncludedPdfAttachments(await generateProtocolPdf(reportInput), reportInput.attachments);
         return storeGeneratedPdfOrInline(
           `protocol-${input.protocolId}/report-${protocol.number}-${Date.now()}.pdf`,
           buffer,
