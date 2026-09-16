@@ -53,6 +53,8 @@ export interface FloorPlanObject {
   sensors?: ObjectSensor[]; // up to 4 sensors attached to this object
   leaderEndXPct?: number | null; // optional arrow tip X for exact sensor placement
   leaderEndYPct?: number | null; // optional arrow tip Y for exact sensor placement
+  calloutXPct?: number | null; // optional T-callout label center X
+  calloutYPct?: number | null; // optional T-callout label center Y
 }
 
 // ─── Object catalogue ─────────────────────────────────────────────────────────
@@ -236,14 +238,14 @@ function sensorPointColors(
   rangeMax: number | null | undefined,
   selected: boolean,
 ) {
-  if (!logger) return { fill: "#e0f2fe", stroke: selected ? "#f59e0b" : "#0369a1", text: "#1e3a8a", badge: "#0284c7" };
+  if (!logger) return { fill: "#38bdf8", stroke: selected ? "#f59e0b" : "#0284c7", text: "#ffffff", badge: "#0369a1" };
   const avg = numericValue(logger?.avgVal);
   const min = numericValue(rangeMin);
   const max = numericValue(rangeMax);
   const outOfRange = avg != null && min != null && max != null && (avg < min || avg > max);
-  if (outOfRange) return { fill: "#fee2e2", stroke: selected ? "#f59e0b" : "#dc2626", text: "#991b1b", badge: "#dc2626" };
-  if (logger?.role === "external") return { fill: "#f1f5f9", stroke: selected ? "#f59e0b" : "#64748b", text: "#334155", badge: "#64748b" };
-  return { fill: "#dcfce7", stroke: selected ? "#f59e0b" : "#16a34a", text: "#14532d", badge: "#16a34a" };
+  if (outOfRange) return { fill: "#ef4444", stroke: selected ? "#f59e0b" : "#b91c1c", text: "#ffffff", badge: "#991b1b" };
+  if (logger?.role === "external") return { fill: "#94a3b8", stroke: selected ? "#f59e0b" : "#475569", text: "#ffffff", badge: "#475569" };
+  return { fill: "#22c55e", stroke: selected ? "#f59e0b" : "#15803d", text: "#ffffff", badge: "#15803d" };
 }
 
 type SensorPointDisplay = {
@@ -253,6 +255,8 @@ type SensorPointDisplay = {
   baseY: number;
   anchorX: number;
   anchorY: number;
+  calloutX: number | null;
+  calloutY: number | null;
 };
 
 type SensorPointCalloutGroup = {
@@ -262,6 +266,8 @@ type SensorPointCalloutGroup = {
   anchorY: number;
   bubbleX: number;
   bubbleY: number;
+  calloutX: number | null;
+  calloutY: number | null;
 };
 
 function assignSensorPointNodeNames(
@@ -305,7 +311,14 @@ function buildSensorPointCalloutGroups(
         Number.isFinite(obj.leaderEndYPct);
       const anchorX = hasLeader ? planX + ((obj.leaderEndXPct as number) / 100) * drawW : baseX;
       const anchorY = hasLeader ? planY + ((obj.leaderEndYPct as number) / 100) * drawH : baseY;
-      return { obj, logger: sensorPointLogger(obj, sensorLoggers), baseX, baseY, anchorX, anchorY };
+      const hasCallout =
+        typeof obj.calloutXPct === "number" &&
+        typeof obj.calloutYPct === "number" &&
+        Number.isFinite(obj.calloutXPct) &&
+        Number.isFinite(obj.calloutYPct);
+      const calloutX = hasCallout ? planX + ((obj.calloutXPct as number) / 100) * drawW : null;
+      const calloutY = hasCallout ? planY + ((obj.calloutYPct as number) / 100) * drawH : null;
+      return { obj, logger: sensorPointLogger(obj, sensorLoggers), baseX, baseY, anchorX, anchorY, calloutX, calloutY };
     });
 
   if (displays.length < 2) return [];
@@ -329,6 +342,8 @@ function buildSensorPointCalloutGroups(
         anchorY: display.anchorY,
         bubbleX: display.baseX,
         bubbleY: display.baseY,
+        calloutX: display.calloutX,
+        calloutY: display.calloutY,
       });
       continue;
     }
@@ -338,6 +353,15 @@ function buildSensorPointCalloutGroups(
     bestGroup.anchorY += (display.anchorY - bestGroup.anchorY) / n;
     bestGroup.bubbleX += (display.baseX - bestGroup.bubbleX) / n;
     bestGroup.bubbleY += (display.baseY - bestGroup.bubbleY) / n;
+    if (display.calloutX !== null && display.calloutY !== null) {
+      const existingCount = bestGroup.items.filter(item => item.calloutX !== null && item.calloutY !== null).length;
+      bestGroup.calloutX = bestGroup.calloutX === null
+        ? display.calloutX
+        : bestGroup.calloutX + (display.calloutX - bestGroup.calloutX) / Math.max(1, existingCount);
+      bestGroup.calloutY = bestGroup.calloutY === null
+        ? display.calloutY
+        : bestGroup.calloutY + (display.calloutY - bestGroup.calloutY) / Math.max(1, existingCount);
+    }
   }
 
   return assignSensorPointNodeNames(groups.filter(group => group.items.length > 1));
@@ -351,6 +375,7 @@ function SensorPointCallout({
   drawH,
   selected,
   onSelect,
+  onCalloutPointerDown,
 }: {
   group: SensorPointCalloutGroup;
   planX: number;
@@ -359,6 +384,7 @@ function SensorPointCallout({
   drawH: number;
   selected: boolean;
   onSelect: (id: string) => void;
+  onCalloutPointerDown: (group: SensorPointCalloutGroup, e: React.PointerEvent) => void;
 }) {
   const rows = [...group.items]
     .sort((a, b) => (a.obj.heightM ?? 0) - (b.obj.heightM ?? 0))
@@ -367,20 +393,23 @@ function SensorPointCallout({
       const height = (item.obj.heightM ?? 0) > 0 ? `${item.obj.heightM.toFixed(2)} м` : "—";
       return `${label} — ${height}`;
     });
-  const labelW = clamp(Math.max(group.node.length * 8 + 20, ...rows.map(row => row.length * 5.35 + 14), 74), 74, 142);
-  const labelH = 22 + rows.length * 12.2;
+  const labelW = clamp(Math.max(group.node.length * 8 + 20, ...rows.map(row => row.length * 4.75 + 18), 66), 66, 118);
+  const labelH = 18 + rows.length * 10.8;
   const sideOffset = 34;
   const canPlaceRight = group.anchorX + sideOffset + labelW <= planX + drawW - 4;
   const canPlaceLeft = group.anchorX - sideOffset - labelW >= planX + 4;
-  let labelX = group.bubbleX - labelW / 2;
-  let labelY = group.bubbleY - labelH / 2;
-  const labelWouldCoverAnchor = group.anchorX >= labelX - 10
-    && group.anchorX <= labelX + labelW + 10
-    && group.anchorY >= labelY - 10
-    && group.anchorY <= labelY + labelH + 10;
-  if (labelWouldCoverAnchor) {
-    labelX = canPlaceRight || !canPlaceLeft ? group.anchorX + sideOffset : group.anchorX - labelW - sideOffset;
-    labelY = group.anchorY - labelH / 2;
+  const hasSavedCallout = group.calloutX !== null && group.calloutY !== null;
+  let labelX = hasSavedCallout ? (group.calloutX as number) - labelW / 2 : group.bubbleX - labelW / 2;
+  let labelY = hasSavedCallout ? (group.calloutY as number) - labelH / 2 : group.bubbleY - labelH / 2;
+  if (!hasSavedCallout) {
+    const labelWouldCoverAnchor = group.anchorX >= labelX - 10
+      && group.anchorX <= labelX + labelW + 10
+      && group.anchorY >= labelY - 10
+      && group.anchorY <= labelY + labelH + 10;
+    if (labelWouldCoverAnchor) {
+      labelX = canPlaceRight || !canPlaceLeft ? group.anchorX + sideOffset : group.anchorX - labelW - sideOffset;
+      labelY = group.anchorY - labelH / 2;
+    }
   }
   labelX = clamp(labelX, planX + 4, planX + drawW - labelW - 4);
   labelY = clamp(labelY, planY + 4, planY + drawH - labelH - 4);
@@ -395,10 +424,11 @@ function SensorPointCallout({
 
   return (
     <g
-      style={{ pointerEvents: "none", userSelect: "none" }}
+      style={{ pointerEvents: "all", userSelect: "none", cursor: "grab" }}
       onPointerDown={event => {
         event.stopPropagation();
         if (representativeId) onSelect(representativeId);
+        onCalloutPointerDown(group, event);
       }}
     >
       <rect
@@ -406,22 +436,21 @@ function SensorPointCallout({
         y={labelY}
         width={labelW}
         height={labelH}
-        rx={5}
+        rx={4}
         fill="white"
-        fillOpacity={0.96}
-        stroke={selected ? "#f59e0b" : "#0891b2"}
-        strokeWidth={selected ? 2 : 1.2}
+        fillOpacity={0.9}
+        stroke={selected ? "#f59e0b" : "#0ea5e9"}
+        strokeWidth={selected ? 1.8 : 1}
       />
-      <rect x={labelX} y={labelY} width={labelW} height={17} rx={5} fill="#0891b2" />
-      <text x={labelX + 6} y={labelY + 12} fontSize={9} fontWeight={800} fill="white" style={{ pointerEvents: "none" }}>
+      <text x={labelX + 5} y={labelY + 11} fontSize={8.4} fontWeight={900} fill="#0284c7" style={{ pointerEvents: "none" }}>
         {group.node}
       </text>
       {rows.map((row, index) => (
         <text
           key={`${row}-${index}`}
-          x={labelX + 6}
-          y={labelY + 28 + index * 12.2}
-          fontSize={7.6}
+          x={labelX + 5}
+          y={labelY + 22 + index * 10.8}
+          fontSize={7}
           fontWeight={600}
           fill="#0f172a"
           style={{ pointerEvents: "none" }}
@@ -435,13 +464,13 @@ function SensorPointCallout({
         x2={edgeX}
         y2={edgeY}
         stroke="#0f172a"
-        strokeWidth={1.35}
+        strokeWidth={1.15}
         strokeLinecap="round"
         style={{ pointerEvents: "none" }}
       />
-      <polygon points={arrowHeadPoints(group.anchorX, group.anchorY, edgeX, edgeY, 7)} fill="#0f172a" style={{ pointerEvents: "none" }} />
-      <circle cx={group.anchorX} cy={group.anchorY} r={5.4} fill="white" stroke="#0891b2" strokeWidth={1.5} style={{ pointerEvents: "none" }} />
-      <circle cx={group.anchorX} cy={group.anchorY} r={3.2} fill="#0f172a" stroke="white" strokeWidth={0.9} style={{ pointerEvents: "none" }} />
+      <polygon points={arrowHeadPoints(group.anchorX, group.anchorY, edgeX, edgeY, 6.2)} fill="#0f172a" style={{ pointerEvents: "none" }} />
+      <circle cx={group.anchorX} cy={group.anchorY} r={6.2} fill="white" stroke="#0284c7" strokeWidth={1.9} style={{ pointerEvents: "none" }} />
+      <circle cx={group.anchorX} cy={group.anchorY} r={3.7} fill="#00a6d6" stroke="white" strokeWidth={1} style={{ pointerEvents: "none" }} />
     </g>
   );
 }
@@ -1003,7 +1032,8 @@ function SidePanel({
 type DragMode =
   | { kind: "move"; id: string }
   | { kind: "resize"; id: string; corner: ResizeCorner }
-  | { kind: "leader"; id: string };
+  | { kind: "leader"; id: string }
+  | { kind: "callout"; ids: string[]; startCalloutXPct: number; startCalloutYPct: number };
 
 export interface FloorPlanEditorProps {
   objects: FloorPlanObject[];
@@ -1040,7 +1070,7 @@ export function FloorPlanEditor({
   const [panelOpen, setPanelOpen] = useState(false);
   const [placingType, setPlacingType] = useState<FloorObjectType | null>(null);
   const [toolbarOpen, setToolbarOpen] = useState(true);
-  const [showSensorCallouts, setShowSensorCallouts] = useState(false);
+  const [showSensorCallouts, setShowSensorCallouts] = useState(true);
   const [pickerForCell, setPickerForCell] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(1);
   const [panX, setPanX] = useState(0);
@@ -1193,6 +1223,32 @@ export function FloorPlanEditor({
     };
   }, [readOnly, objects, clientToCanvasSvg, svgToRoomPct, gridStep, onChange]);
 
+  const handleCalloutPointerDown = useCallback((group: SensorPointCalloutGroup, e: React.PointerEvent) => {
+    if (readOnly) return;
+    e.preventDefault();
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    const representativeId = group.items[0]?.obj.id;
+    if (representativeId) setSelectedId(representativeId);
+    setPanelOpen(false);
+    const { x, y } = clientToCanvasSvg(e.clientX, e.clientY);
+    const calloutCenterX = group.calloutX ?? group.bubbleX;
+    const calloutCenterY = group.calloutY ?? group.bubbleY;
+    const startCallout = svgToRoomPct(calloutCenterX, calloutCenterY);
+    const firstObj = objects.find(o => o.id === representativeId) ?? group.items[0]?.obj;
+    if (!firstObj) return;
+    dragState.current = {
+      mode: {
+        kind: "callout",
+        ids: group.items.map(item => item.obj.id),
+        startCalloutXPct: startCallout.x,
+        startCalloutYPct: startCallout.y,
+      },
+      startSvgX: x,
+      startSvgY: y,
+      snapshot: { ...firstObj },
+    };
+  }, [readOnly, clientToCanvasSvg, svgToRoomPct, objects]);
+
   // ── Global pointer move / up ───────────────────────────────────────────────
 
   useEffect(() => {
@@ -1223,19 +1279,25 @@ export function FloorPlanEditor({
       const snap  = ds.snapshot;
       const stepX = gridStep("x");
       const stepY = gridStep("y");
+      const mode = ds.mode;
 
-      if (ds.mode.kind === "leader") {
+      if (mode.kind === "leader") {
         const point = svgToRoomPct(svgX, svgY);
         const newX = clamp(snapVal(point.x, stepX), 0, 100);
         const newY = clamp(snapVal(point.y, stepY), 0, 100);
-        onChange(objects.map(o => o.id === ds.mode.id ? { ...o, leaderEndXPct: newX, leaderEndYPct: newY } : o));
-      } else if (ds.mode.kind === "move") {
+        onChange(objects.map(o => o.id === mode.id ? { ...o, leaderEndXPct: newX, leaderEndYPct: newY } : o));
+      } else if (mode.kind === "callout") {
+        const newX = clamp(snapVal(mode.startCalloutXPct + dxPct, stepX), 0, 100);
+        const newY = clamp(snapVal(mode.startCalloutYPct + dyPct, stepY), 0, 100);
+        const ids = new Set(mode.ids);
+        onChange(objects.map(o => ids.has(o.id) ? { ...o, calloutXPct: newX, calloutYPct: newY } : o));
+      } else if (mode.kind === "move") {
         // Snap position to the grid, keep object fully inside the room
         const newX = clamp(snapVal(snap.xPct + dxPct, stepX), 0, Math.max(0, 100 - snap.widthPct));
         const newY = clamp(snapVal(snap.yPct + dyPct, stepY), 0, Math.max(0, 100 - snap.heightPct));
-        onChange(objects.map(o => o.id === ds.mode.id ? { ...o, xPct: newX, yPct: newY } : o));
-      } else {
-        const { corner } = ds.mode;
+        onChange(objects.map(o => o.id === mode.id ? { ...o, xPct: newX, yPct: newY } : o));
+      } else if (mode.kind === "resize") {
+        const { corner } = mode;
         const resized = resizeFloorPlanRect({
           rect: snap,
           handle: corner,
@@ -1250,7 +1312,7 @@ export function FloorPlanEditor({
           stepYPct: stepY,
           minSizePct: MIN_SIZE_PCT,
         });
-        onChange(objects.map(o => o.id === ds.mode.id ? { ...o, ...resized } : o));
+        onChange(objects.map(o => o.id === mode.id ? { ...o, ...resized } : o));
       }
     };
 
@@ -1645,6 +1707,7 @@ export function FloorPlanEditor({
                 drawW={drawW}
                 drawH={drawH}
                 selected={group.items.some(item => item.obj.id === selectedId)}
+                onCalloutPointerDown={handleCalloutPointerDown}
                 onSelect={(id) => {
                   if (readOnly) return;
                   setSelectedId(id);

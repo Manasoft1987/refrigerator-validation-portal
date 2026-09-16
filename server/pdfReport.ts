@@ -387,6 +387,8 @@ export type ReportInput = {
     sensors?: Array<{ sensorId: string; heightFromFloor: number }> | null;
     leaderEndXPct?: number | null;
     leaderEndYPct?: number | null;
+    calloutXPct?: number | null;
+    calloutYPct?: number | null;
   }> | null;
   /**
    * Saved PNG screenshot of the FloorPlanEditor (stored in S3).
@@ -1264,6 +1266,8 @@ type WarehouseSensorDisplayGroup<T> = {
   anchorY: number;
   bubbleX: number;
   bubbleY: number;
+  calloutX: number | null;
+  calloutY: number | null;
 };
 
 function warehouseClamp01(value: number): number {
@@ -1303,6 +1307,8 @@ function groupWarehouseSensorDisplays<T extends {
   baseY: number;
   leaderEndX: number | null;
   leaderEndY: number | null;
+  calloutX?: number | null;
+  calloutY?: number | null;
 }>(
   displays: T[],
   thresholdPx: number,
@@ -1321,7 +1327,15 @@ function groupWarehouseSensorDisplays<T extends {
       }
     }
     if (!bestGroup) {
-      groups.push({ items: [display], anchorX, anchorY, bubbleX: display.baseX, bubbleY: display.baseY });
+      groups.push({
+        items: [display],
+        anchorX,
+        anchorY,
+        bubbleX: display.baseX,
+        bubbleY: display.baseY,
+        calloutX: display.calloutX ?? null,
+        calloutY: display.calloutY ?? null,
+      });
       continue;
     }
     bestGroup.items.push(display);
@@ -1330,6 +1344,15 @@ function groupWarehouseSensorDisplays<T extends {
     bestGroup.anchorY = bestGroup.anchorY + (anchorY - bestGroup.anchorY) / n;
     bestGroup.bubbleX = bestGroup.bubbleX + (display.baseX - bestGroup.bubbleX) / n;
     bestGroup.bubbleY = bestGroup.bubbleY + (display.baseY - bestGroup.bubbleY) / n;
+    if (display.calloutX != null && display.calloutY != null) {
+      const existingCount = bestGroup.items.filter(item => item.calloutX != null && item.calloutY != null).length;
+      bestGroup.calloutX = bestGroup.calloutX == null
+        ? display.calloutX
+        : bestGroup.calloutX + (display.calloutX - bestGroup.calloutX) / Math.max(1, existingCount);
+      bestGroup.calloutY = bestGroup.calloutY == null
+        ? display.calloutY
+        : bestGroup.calloutY + (display.calloutY - bestGroup.calloutY) / Math.max(1, existingCount);
+    }
   }
   return assignWarehouseNodeNames(groups, Math.max(18, thresholdPx * 1.4));
 }
@@ -6073,10 +6096,17 @@ function drawWarehousePlanDiagram(
       Number.isFinite(sp.leaderEndYPct);
     const leaderEndX = hasLeader ? planX + ((sp.leaderEndXPct as number) / 100) * drawW : null;
     const leaderEndY = hasLeader ? planY + ((sp.leaderEndYPct as number) / 100) * drawH : null;
+    const hasCallout =
+      typeof sp.calloutXPct === "number" &&
+      typeof sp.calloutYPct === "number" &&
+      Number.isFinite(sp.calloutXPct) &&
+      Number.isFinite(sp.calloutYPct);
+    const calloutX = hasCallout ? planX + ((sp.calloutXPct as number) / 100) * drawW : null;
+    const calloutY = hasCallout ? planY + ((sp.calloutYPct as number) / 100) * drawH : null;
     const r = uniformSensorMarkerRadius;
     const markerBox = warehouseMarkerBox(baseX, baseY, r + 4);
     occupiedSensorBubbles.push(markerBox);
-    return { sp, baseX, baseY, x: baseX, y: baseY, r, markerBox, leaderEndX, leaderEndY };
+    return { sp, baseX, baseY, x: baseX, y: baseY, r, markerBox, leaderEndX, leaderEndY, calloutX, calloutY };
   });
   const shouldGroupStackedSensors = !template && showSensorLabels && !showAverageLabels && sensorDisplays.length >= 2;
   const stackedSensorThresholdPx = Math.max(uniformSensorMarkerRadius * 2.8, Math.min(drawW, drawH) * 0.055);
@@ -6110,8 +6140,8 @@ function drawWarehousePlanDiagram(
       const r = display.r;
       const anchorX = groupedNode.anchorX;
       const anchorY = groupedNode.anchorY;
-      const rowFont = 6.7;
-      const titleFont = 8.4;
+      const rowFont = 6.2;
+      const titleFont = 8.0;
       const sortedItems = [...groupedNode.items].sort((a, b) => (a.sp.heightM ?? 0) - (b.sp.heightM ?? 0));
       const calloutRows = sortedItems.map(item => {
         const sensorLabel = shortSensorId(item.sp.label) || String(item.sp.label || "D");
@@ -6124,23 +6154,30 @@ function drawWarehousePlanDiagram(
       const titleW = doc.widthOfString(groupedNode.node);
       doc.font("body").fontSize(rowFont);
       const rowsW = calloutRows.reduce((max, row) => Math.max(max, doc.widthOfString(row)), 0);
-      const labelW = Math.max(68, Math.min(134, Math.max(titleW, rowsW) + 14));
-      const labelH = 20 + calloutRows.length * 10.8;
+      const labelW = Math.max(60, Math.min(116, Math.max(titleW, rowsW) + 14));
+      const labelH = 17 + calloutRows.length * 9.8;
       const closeToAnchor = Math.hypot(groupedNode.bubbleX - anchorX, groupedNode.bubbleY - anchorY) < r + 12;
       const sideOffset = 34;
       const canPlaceRight = anchorX + sideOffset + labelW <= markerPlanBox.x + markerPlanBox.w - 3;
       const canPlaceLeft = anchorX - sideOffset - labelW >= markerPlanBox.x + 3;
-      let labelX = closeToAnchor
-        ? (canPlaceRight ? anchorX + sideOffset : anchorX - labelW - sideOffset)
-        : groupedNode.bubbleX - labelW / 2;
-      let labelY = closeToAnchor ? anchorY - labelH / 2 : groupedNode.bubbleY - labelH / 2;
-      const labelWouldCoverAnchor = anchorX >= labelX - 10
-        && anchorX <= labelX + labelW + 10
-        && anchorY >= labelY - 10
-        && anchorY <= labelY + labelH + 10;
-      if (labelWouldCoverAnchor) {
-        labelX = canPlaceRight || !canPlaceLeft ? anchorX + sideOffset : anchorX - labelW - sideOffset;
-        labelY = anchorY - labelH / 2;
+      const hasSavedCallout = groupedNode.calloutX != null && groupedNode.calloutY != null;
+      let labelX = hasSavedCallout
+        ? (groupedNode.calloutX as number) - labelW / 2
+        : closeToAnchor
+          ? (canPlaceRight ? anchorX + sideOffset : anchorX - labelW - sideOffset)
+          : groupedNode.bubbleX - labelW / 2;
+      let labelY = hasSavedCallout
+        ? (groupedNode.calloutY as number) - labelH / 2
+        : closeToAnchor ? anchorY - labelH / 2 : groupedNode.bubbleY - labelH / 2;
+      if (!hasSavedCallout) {
+        const labelWouldCoverAnchor = anchorX >= labelX - 10
+          && anchorX <= labelX + labelW + 10
+          && anchorY >= labelY - 10
+          && anchorY <= labelY + labelH + 10;
+        if (labelWouldCoverAnchor) {
+          labelX = canPlaceRight || !canPlaceLeft ? anchorX + sideOffset : anchorX - labelW - sideOffset;
+          labelY = anchorY - labelH / 2;
+        }
       }
       labelX = Math.max(markerPlanBox.x + 3, Math.min(markerPlanBox.x + markerPlanBox.w - labelW - 3, labelX));
       labelY = Math.max(markerPlanBox.y + 3, Math.min(markerPlanBox.y + markerPlanBox.h - labelH - 3, labelY));
@@ -6156,20 +6193,19 @@ function drawWarehousePlanDiagram(
       const hasHot = groupedNode.items.some(item => floorSensorPointMatchesTokens(item.sp, criticalSensorTokens.hot));
       const hasCold = groupedNode.items.some(item => floorSensorPointMatchesTokens(item.sp, criticalSensorTokens.cold));
       doc.save();
-      doc.opacity(0.94).fillColor("#ffffff").roundedRect(labelX, labelY, labelW, labelH, 4).fill();
-      doc.opacity(1).strokeColor("#0891b2").lineWidth(0.9).roundedRect(labelX, labelY, labelW, labelH, 4).stroke();
+      doc.opacity(0.9).fillColor("#ffffff").roundedRect(labelX, labelY, labelW, labelH, 4).fill();
+      doc.opacity(1).strokeColor("#0ea5e9").lineWidth(0.8).roundedRect(labelX, labelY, labelW, labelH, 4).stroke();
       if (hasHot) {
         doc.roundedRect(labelX - 2.2, labelY - 2.2, labelW + 4.4, labelH + 4.4, 5).lineWidth(1.6).strokeColor("#ef4444").stroke();
       }
       if (hasCold) {
         doc.roundedRect(labelX - (hasHot ? 5 : 2.2), labelY - (hasHot ? 5 : 2.2), labelW + (hasHot ? 10 : 4.4), labelH + (hasHot ? 10 : 4.4), 6).lineWidth(1.5).strokeColor("#2563eb").stroke();
       }
-      doc.fillColor("#0891b2").roundedRect(labelX, labelY, labelW, 15, 4).fill();
-      doc.fillColor("#ffffff").font("bold").fontSize(titleFont)
+      doc.fillColor("#0284c7").font("bold").fontSize(titleFont)
         .text(groupedNode.node, labelX + 5, labelY + 3.2, { width: labelW - 10, align: "left", lineBreak: false });
       calloutRows.forEach((row, index) => {
         doc.fillColor("#0f172a").font("body").fontSize(rowFont)
-          .text(row, labelX + 5, labelY + 18 + index * 10.8, { width: labelW - 10, align: "left", lineBreak: false });
+          .text(row, labelX + 5, labelY + 16 + index * 9.8, { width: labelW - 10, align: "left", lineBreak: false });
       });
       const leaderDistance = Math.hypot(edgeX - anchorX, edgeY - anchorY);
       if (leaderDistance > 6) {
@@ -6179,8 +6215,8 @@ function drawWarehousePlanDiagram(
           .stroke();
         drawPdfArrowHead(doc, anchorX, anchorY, edgeX, edgeY, 5.4, "#0f172a");
       }
-      doc.circle(anchorX, anchorY, 5.2).lineWidth(1.0).strokeColor("#0891b2").stroke();
-      doc.fillColor("#0f172a").strokeColor("#ffffff").lineWidth(1.1).circle(anchorX, anchorY, 3.8).fillAndStroke();
+      doc.fillColor("#ffffff").strokeColor("#0284c7").lineWidth(1.4).circle(anchorX, anchorY, 5.8).fillAndStroke();
+      doc.fillColor("#00a6d6").strokeColor("#ffffff").lineWidth(1.0).circle(anchorX, anchorY, 3.6).fillAndStroke();
       const criticalOffset = r + Math.max(3.2, r * 0.35);
       const criticalMarkerRadius = 5.6;
       const occupiedCriticalBoxes = sensorLabelBoxes.filter(item => item !== groupBox);
@@ -6255,9 +6291,9 @@ function drawWarehousePlanDiagram(
         drawPdfArrowHead(doc, startX, startY, leaderEndX, leaderEndY, 5.2, "#0f172a");
       }
     }
-    doc.fillColor("#7dd3fc").strokeColor("#0369a1").lineWidth(1.5).circle(spX, spY, r).fillAndStroke();
+    doc.fillColor("#22c55e").strokeColor("#15803d").lineWidth(1.5).circle(spX, spY, r).fillAndStroke();
     if (showSensorLabels) {
-      doc.fillColor("#0c4a6e")
+      doc.fillColor("#ffffff")
         .text(label, spX - r * 1.2, spY - labelFont / 2 + 0.6, { width: r * 2.4, align: "center", lineBreak: false });
     }
     if (avgLabel) {
