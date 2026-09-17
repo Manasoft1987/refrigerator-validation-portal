@@ -6872,6 +6872,9 @@ function drawWarehouseAnnex2(doc: PDFKit.PDFDocument, input: ReportInput, record
       ok ? "" : "✓",
     ];
     ensureSpace(doc, rowH);
+    // ensureSpace may have started a new page; keep the local row cursor in
+    // sync with PDFKit so rows never render at the old page's bottom edge.
+    y = doc.y;
     if (i % 2 === 0) {
       doc.save().fillColor("#f1f5f9").rect(left, y, totalW, rowH).fill().restore();
     }
@@ -6905,6 +6908,7 @@ function drawWarehouseAnnex2(doc: PDFKit.PDFDocument, input: ReportInput, record
   const timeRowH = 28;
   for (const label of ["Дата и время начала температурного картирования:", "Дата и время окончания температурного картирования:"]) {
     ensureSpace(doc, timeRowH);
+    y = doc.y;
     doc.save().lineWidth(0.5).strokeColor(BORDER).rect(left, y, totalW, timeRowH).stroke().restore();
     doc.fillColor(ACCENT).font("body").fontSize(9)
       .text(label, left + 6, y + 8, { width: totalW - 12 });
