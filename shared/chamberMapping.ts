@@ -397,20 +397,49 @@ export function buildChamberScene(
           : features.racks === "right"
             ? [0.88]
             : [];
-    for (const x of sides)
-      for (const z of [0.1, 0.5, 0.9])
+    for (const x of sides) {
+      // Shelves are drawn as shallow translucent slabs first, then the frame
+      // is overlaid. This gives the chamber a readable 3D volume without
+      // obscuring logger locations or the interpolated temperature field.
+      for (const z of [0.1, 0.5, 0.9]) {
+        const zTop = Math.min(1, z + 0.025);
+        poly(
+          [
+            [x - 0.1, 0.12, z],
+            [x + 0.1, 0.12, z],
+            [x + 0.1, 0.88, z],
+            [x - 0.1, 0.88, z],
+          ],
+          "#cbd5e1",
+          0.42,
+          "#64748b"
+        );
         out.push({
           kind: "line",
           points: [
-            [x - 0.08, 0.15, z],
-            [x + 0.08, 0.15, z],
-            [x + 0.08, 0.85, z],
-            [x - 0.08, 0.85, z],
-            [x - 0.08, 0.15, z],
+            [x - 0.1, 0.12, zTop],
+            [x + 0.1, 0.12, zTop],
+            [x + 0.1, 0.88, zTop],
+            [x - 0.1, 0.88, zTop],
+            [x - 0.1, 0.12, zTop],
           ].map(p => chamberProject(p[0], p[1], p[2])),
           stroke: "#475569",
           width: 1.2,
         });
+      }
+      // Uprights make the rack orientation immediately legible in the
+      // isometric view and remain subtle in the plan/placement modes.
+      for (const y of [0.12, 0.88])
+        out.push({
+          kind: "line",
+          points: [
+            [x - 0.1, y, 0.05],
+            [x - 0.1, y, 0.95],
+          ].map(p => chamberProject(p[0], p[1], p[2])),
+          stroke: "#64748b",
+          width: 1.4,
+        });
+    }
   }
   text(455, 740, "Открытая передняя сторона · рабочий объём", 17, "#475569");
   // Label displacements keep IDs/averages readable and leave true locations fixed.
