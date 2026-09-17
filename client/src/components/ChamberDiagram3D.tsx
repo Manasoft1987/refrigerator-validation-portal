@@ -24,6 +24,8 @@ export default function ChamberDiagram3D({
   const [mode, setMode] = useState<ChamberMode>("actual");
   const [view, setView] = useState<ChamberViewMode>("iso");
   const [zoom, setZoom] = useState(1);
+  const [showHeatmap, setShowHeatmap] = useState(true);
+  const [heatmapOpacity, setHeatmapOpacity] = useState(0.86);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState("");
   const utils = trpc.useUtils();
@@ -69,7 +71,9 @@ export default function ChamberDiagram3D({
       })
     ),
     chamberFeatures(baseObjects),
-    view
+    view,
+    showHeatmap,
+    heatmapOpacity
   );
   const issues = chamberPlacementIssues(currentLoggers);
   const [config, setConfig] = useState<Record<string, string> | null>(null);
@@ -249,6 +253,27 @@ export default function ChamberDiagram3D({
           onChange={e => setZoom(Number(e.target.value))}
         />
         <span className="w-10 text-right text-xs text-slate-600">{Math.round(zoom * 100)}%</span>
+        {mode === "temperature" && (
+          <>
+            <label className="ml-2 flex items-center gap-1 text-slate-700">
+              <input type="checkbox" checked={showHeatmap} onChange={e => setShowHeatmap(e.target.checked)} />
+              Тепловое поле
+            </label>
+            <label className="flex items-center gap-1 text-slate-700">
+              Насыщенность
+              <input
+                aria-label="Насыщенность тепловой карты"
+                type="range"
+                min="0.35"
+                max="1"
+                step="0.05"
+                value={heatmapOpacity}
+                disabled={!showHeatmap}
+                onChange={e => setHeatmapOpacity(Number(e.target.value))}
+              />
+            </label>
+          </>
+        )}
       </div>
       <p className="text-sm text-muted-foreground">
         15 внутренних точек и 1 внешний регистратор. Нажмите на точку и

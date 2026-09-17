@@ -234,7 +234,9 @@ export function buildChamberScene(
   coldLabel?: string | null,
   heights?: Record<string, string>,
   features: ChamberFeatures = {},
-  view: ChamberViewMode = "iso"
+  view: ChamberViewMode = "iso",
+  showHeatmap = true,
+  heatmapOpacity = 0.86
 ): ChamberPrimitive[] {
   const out: ChamberPrimitive[] = [];
   const project = (x: number, y: number, z: number) => chamberProjectView(x, y, z, view);
@@ -300,7 +302,7 @@ export function buildChamberScene(
   // Three horizontal slices of a common 3D field. Coordinates are measurement
   // points; marker label offsets below never affect interpolation.
   for (const z of [0, 0.5, 1]) {
-    if (mode === "temperature" && samples.length) {
+    if (mode === "temperature" && samples.length && showHeatmap) {
       const n = 28;
       for (let i = 0; i < n; i++)
         for (let j = 0; j < n; j++) {
@@ -318,7 +320,7 @@ export function buildChamberScene(
               [i / n, (j + 1) / n, z],
             ],
             chamberTemperatureColor(hi === lo ? 0.5 : (avg - lo) / (hi - lo)),
-            0.86
+            Math.max(0, Math.min(1, heatmapOpacity))
           );
         }
     }
