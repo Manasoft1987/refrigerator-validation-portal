@@ -328,7 +328,7 @@ function buildSensorPointCalloutGroups(
       return { obj, logger: sensorPointLogger(obj, sensorLoggers), baseX, baseY, anchorX, anchorY, calloutX, calloutY, calloutFontSize };
     });
 
-  if (displays.length < 2) return [];
+  if (displays.length === 0) return [];
 
   const thresholdPx = Math.max(10, Math.min(24, Math.min(drawW, drawH) * 0.035));
   const groups: Array<Omit<SensorPointCalloutGroup, "node">> = [];
@@ -378,7 +378,10 @@ function buildSensorPointCalloutGroups(
     }
   }
 
-  return assignSensorPointNodeNames(groups.filter(group => group.items.length > 1));
+  // Every sensor gets a movable callout. Nearby points are combined into one
+  // T-node so stacked sensors remain readable, while a single point still
+  // uses the same consistent plaque style.
+  return assignSensorPointNodeNames(groups);
 }
 
 function SensorPointCallout({

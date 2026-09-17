@@ -6125,24 +6125,21 @@ function drawWarehousePlanDiagram(
     occupiedSensorBubbles.push(markerBox);
     return { sp, baseX, baseY, x: baseX, y: baseY, r, markerBox, leaderEndX, leaderEndY, calloutX, calloutY, calloutFontSize };
   });
-  const shouldGroupStackedSensors = !template && showSensorLabels && !showAverageLabels && sensorDisplays.length >= 2;
+  // Use the same plaque treatment for every sensor, including a lone point.
+  // Nearby points are still grouped into one T-node to keep stacked levels
+  // readable; the content of each row is controlled by the diagram mode.
+  const shouldGroupStackedSensors = (showSensorLabels || showHeightLabels || showAverageLabels) && sensorDisplays.length > 0;
   const stackedSensorThresholdPx = Math.max(uniformSensorMarkerRadius * 2.8, Math.min(drawW, drawH) * 0.055);
   const warehouseSensorGroups = shouldGroupStackedSensors
     ? groupWarehouseSensorDisplays(sensorDisplays, stackedSensorThresholdPx)
     : [];
-  const groupedSensorDisplays = new Set(
-    warehouseSensorGroups
-      .filter(group => group.items.length > 1)
-      .flatMap(group => group.items),
-  );
+  const groupedSensorDisplays = new Set(warehouseSensorGroups.flatMap(group => group.items));
   const representativeSensorDisplays = new Map(
     warehouseSensorGroups
-      .filter(group => group.items.length > 1)
       .map(group => [group.items[0], group]),
   );
   const warehouseNodeByToken = new Map<string, string>();
   warehouseSensorGroups
-    .filter(group => group.items.length > 1)
     .forEach(group => {
       group.items.forEach(display => {
         sensorTokenVariants(display.sp.id).forEach(token => warehouseNodeByToken.set(token, group.node));
@@ -6166,9 +6163,12 @@ function drawWarehousePlanDiagram(
       const calloutRows = sortedItems.map(item => {
         const sensorLabel = shortSensorId(item.sp.label) || String(item.sp.label || "D");
         const height = typeof item.sp.heightM === "number" && Number.isFinite(item.sp.heightM) && item.sp.heightM > 0
-          ? `${item.sp.heightM.toFixed(2)} м`
+          ? `${item.sp.heightM.toFixed(1)} м`
           : "—";
-        return `${sensorLabel} — ${height}`;
+        const avg = averageBySensor.get(normalizeSensorNumber(item.sp.label)) ?? "—";
+        if (showAverageLabels) return showSensorLabels ? `${sensorLabel} — ${avg}` : avg;
+        if (showHeightLabels) return showSensorLabels ? `${sensorLabel} — ${height}` : height;
+        return sensorLabel;
       });
       doc.font("bold").fontSize(rowFont);
       const rowsW = calloutRows.reduce((max, row) => Math.max(max, doc.widthOfString(row)), 0);
