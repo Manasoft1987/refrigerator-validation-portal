@@ -175,6 +175,7 @@ function LegacyReeferTruckDiagram3D({
   objectType = "truck",
 }: Props) {
   const utils = trpc.useUtils();
+  const generalInfo = trpc.generalInfo.get.useQuery({ protocolId });
   const updateLogger = trpc.pv.updateLogger.useMutation({
     onSuccess: () => utils.pv.get.invalidate({ protocolId }),
   });
@@ -190,6 +191,10 @@ function LegacyReeferTruckDiagram3D({
 
   const effectiveCoolingUnitPositions = localCoolingUnitPositions ?? normalizeCoolingUnitPositions(coolingUnitPositions, coolingUnitPos);
   const effectiveDoorPos = localDoorPos ?? doorPos ?? defaultDoorPos();
+  const thermalConfig = (generalInfo.data as any)?.thermalContainerConfig ?? {};
+  const thermalElementCount = objectType === "thermal-container"
+    ? Math.max(0, Math.min(12, Number(thermalConfig.thermalElementCount) || 0))
+    : 0;
 
   // positionId → logger
   const positionMap: Record<string, Logger> = {};
@@ -423,6 +428,33 @@ function LegacyReeferTruckDiagram3D({
           points={pts([b0, b1, t1, t0])}
           fill="#dbeafe" stroke="#7a9ab5" strokeWidth={1.2}
         />
+
+        {/* Passive thermal-container elements. They are rendered as recessed,
+            translucent blue plates inside the walls so their placement is
+            readable without hiding the logger points. */}
+        {objectType === "thermal-container" && thermalElementCount > 0 && (
+          <g>
+            {Array.from({ length: thermalElementCount }, (_, i) => {
+              const side = i % 2 === 0 ? 0 : 1;
+              const y0 = 0.32 + ((i % 3) * 0.19);
+              const z0 = 0.18 + (Math.floor(i / 6) * 0.42);
+              const a = side === 0 ? iso(0.035, y0, z0) : iso(W - 0.035, y0, z0);
+              const b = side === 0 ? iso(0.035, y0 + 0.34, z0) : iso(W - 0.035, y0 + 0.34, z0);
+              const c = side === 0 ? iso(0.035, y0 + 0.34, z0 + 0.16) : iso(W - 0.035, y0 + 0.34, z0 + 0.16);
+              const d = side === 0 ? iso(0.035, y0, z0 + 0.16) : iso(W - 0.035, y0, z0 + 0.16);
+              const center = iso(side === 0 ? 0.02 : W - 0.02, y0 + 0.17, z0 + 0.08);
+              return (
+                <g key={`thermal-element-${i}`}>
+                  <polygon points={pts([a, b, c, d])} fill="#38bdf8" fillOpacity={0.42} stroke="#0284c7" strokeWidth={1.1} />
+                  <line x1={a[0]} y1={a[1]} x2={c[0]} y2={c[1]} stroke="#bae6fd" strokeWidth={1} opacity={0.8} />
+                  <text x={center[0]} y={center[1] + 3} textAnchor="middle" fontSize={7} fontWeight="700" fill="#075985" style={{ pointerEvents: "none" }}>
+                    {thermalConfig.thermalElementType ? String(thermalConfig.thermalElementType).slice(0, 10) : "ХЭ"}
+                  </text>
+                </g>
+              );
+            })}
+          </g>
+        )}
 
         {/* Door vertical split line */}
         {(() => {
