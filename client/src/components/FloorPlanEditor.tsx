@@ -915,7 +915,7 @@ function SidePanel({
           Для точного места: выделите датчик и потяните оранжевую точку — появится стрелка-указатель.
         </div>
         <div className="space-y-1">
-          <Label className="text-[11px] text-muted-foreground">Ð Ð°Ð·Ð¼ÐµÑ€ Ñ‚ÐµÐºÑÑ‚Ð° Ð²Ñ‹Ð½Ð¾ÑÐºÐ¸</Label>
+          <Label className="text-[11px] text-muted-foreground">Размер текста выноски</Label>
           <div className="flex items-center gap-1">
             <Button
               type="button"
@@ -924,7 +924,7 @@ function SidePanel({
               className="h-7 w-7 p-0 text-xs"
               onClick={() => onUpdate({ calloutFontSize: clamp(calloutFontSize - 0.5, 5.4, 11) })}
             >
-              âˆ’
+              −
             </Button>
             <Input
               className="h-7 text-xs text-center"
