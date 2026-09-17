@@ -9,6 +9,7 @@ import {
   chamberPlacementIssues,
   type ChamberLogger,
   type ChamberMode,
+  type ChamberViewMode,
 } from "@shared/chamberMapping";
 
 export default function ChamberDiagram3D({
@@ -21,6 +22,8 @@ export default function ChamberDiagram3D({
   readOnly?: boolean;
 }) {
   const [mode, setMode] = useState<ChamberMode>("actual");
+  const [view, setView] = useState<ChamberViewMode>("iso");
+  const [zoom, setZoom] = useState(1);
   const [selected, setSelected] = useState<string | null>(null);
   const [error, setError] = useState("");
   const utils = trpc.useUtils();
@@ -65,7 +68,8 @@ export default function ChamberDiagram3D({
         ];
       })
     ),
-    chamberFeatures(baseObjects)
+    chamberFeatures(baseObjects),
+    view
   );
   const issues = chamberPlacementIssues(currentLoggers);
   const [config, setConfig] = useState<Record<string, string> | null>(null);
@@ -218,6 +222,34 @@ export default function ChamberDiagram3D({
           </button>
         ))}
       </div>
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-slate-50 p-2 text-sm">
+        <span className="font-medium text-slate-700">Вид:</span>
+        {([
+          ["iso", "Изометрия"],
+          ["top", "Сверху"],
+          ["front", "Спереди"],
+        ] as const).map(([id, label]) => (
+          <button
+            type="button"
+            key={id}
+            onClick={() => setView(id)}
+            className={`rounded border px-2 py-1 ${view === id ? "border-slate-900 bg-slate-900 text-white" : "bg-white"}`}
+          >
+            {label}
+          </button>
+        ))}
+        <span className="ml-2 font-medium text-slate-700">Масштаб:</span>
+        <input
+          aria-label="Масштаб схемы"
+          type="range"
+          min="0.8"
+          max="1.25"
+          step="0.05"
+          value={zoom}
+          onChange={e => setZoom(Number(e.target.value))}
+        />
+        <span className="w-10 text-right text-xs text-slate-600">{Math.round(zoom * 100)}%</span>
+      </div>
       <p className="text-sm text-muted-foreground">
         15 внутренних точек и 1 внешний регистратор. Нажмите на точку и
         назначьте логгер. C/W/V обозначают места в рабочем объёме, а линии
@@ -226,6 +258,7 @@ export default function ChamberDiagram3D({
       <svg
         viewBox={`0 0 ${CHAMBER_VIEW.width} ${CHAMBER_VIEW.height}`}
         className="w-full rounded-xl border bg-white"
+        style={{ transform: `scale(${zoom})`, transformOrigin: "center", margin: zoom > 1 ? `${(zoom - 1) * 2}rem 0` : undefined }}
         role="img"
         aria-label="Объёмная схема холодильной камеры"
       >

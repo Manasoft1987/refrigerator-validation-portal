@@ -166,10 +166,16 @@ export type ChamberPrimitive =
       bold?: boolean;
     };
 export const CHAMBER_VIEW = { width: 900, height: 930 };
+export type ChamberViewMode = "iso" | "top" | "front";
 export function chamberProject(x: number, y: number, z: number): Point {
   // Enlarged, elongated cutaway rather than a cube. Only the illustration's
   // projection changes: persisted positions and interpolation remain untouched.
   return [260 + 520 * x - 130 * y, 650 - 135 * x - 115 * y - 280 * z];
+}
+export function chamberProjectView(x: number, y: number, z: number, view: ChamberViewMode = "iso"): Point {
+  if (view === "top") return [180 + 540 * x, 150 + 500 * y - 24 * z];
+  if (view === "front") return [180 + 540 * x, 730 - 560 * z - 40 * y];
+  return chamberProject(x, y, z);
 }
 const palette = [
   [29, 78, 216],
@@ -227,9 +233,11 @@ export function buildChamberScene(
   hotLabel?: string | null,
   coldLabel?: string | null,
   heights?: Record<string, string>,
-  features: ChamberFeatures = {}
+  features: ChamberFeatures = {},
+  view: ChamberViewMode = "iso"
 ): ChamberPrimitive[] {
   const out: ChamberPrimitive[] = [];
+  const project = (x: number, y: number, z: number) => chamberProjectView(x, y, z, view);
   const text = (
     x: number,
     y: number,
@@ -246,7 +254,7 @@ export function buildChamberScene(
   ) =>
     out.push({
       kind: "poly",
-      points: coords.map(p => chamberProject(p[0], p[1], p[2])),
+      points: coords.map(p => project(p[0], p[1], p[2])),
       fill,
       opacity,
       stroke,
@@ -322,7 +330,7 @@ export function buildChamberScene(
         [1, 1, z],
         [0, 1, z],
         [0, 0, z],
-      ].map(p => chamberProject(p[0], p[1], p[2])),
+      ].map(p => project(p[0], p[1], p[2])),
       stroke: "#64748b",
       width: 1.5,
       dash: z === 0.5,
@@ -336,7 +344,7 @@ export function buildChamberScene(
   ])
     out.push({
       kind: "line",
-      points: [chamberProject(x, y, 0), chamberProject(x, y, 1)],
+      points: [project(x, y, 0), project(x, y, 1)],
       stroke: "#64748b",
       width: 1.5,
     });
@@ -356,7 +364,7 @@ export function buildChamberScene(
   (["door", "cooling", "cooling2"] as const).forEach((key, i) => {
     const face = faces[features[key] || ""];
     if (!face) return;
-    const pt = chamberProject(face[0], face[1], key === "door" ? 0.25 : 0.8),
+    const pt = project(face[0], face[1], key === "door" ? 0.25 : 0.8),
       cx = 200 + i * 250,
       cy = 62;
     out.push({
@@ -422,7 +430,7 @@ export function buildChamberScene(
             [x + 0.1, 0.88, zTop],
             [x - 0.1, 0.88, zTop],
             [x - 0.1, 0.12, zTop],
-          ].map(p => chamberProject(p[0], p[1], p[2])),
+          ].map(p => project(p[0], p[1], p[2])),
           stroke: "#475569",
           width: 1.2,
         });
@@ -435,7 +443,7 @@ export function buildChamberScene(
           points: [
             [x - 0.1, y, 0.05],
             [x - 0.1, y, 0.95],
-          ].map(p => chamberProject(p[0], p[1], p[2])),
+          ].map(p => project(p[0], p[1], p[2])),
           stroke: "#64748b",
           width: 1.4,
         });
@@ -473,7 +481,7 @@ export function buildChamberScene(
     const logger = loggers.find(
       l => l.role === "internal" && l.position === pos.id
     );
-    const [px, py] = chamberProject(pos.x, pos.y, pos.z),
+    const [px, py] = project(pos.x, pos.y, pos.z),
       [dx, dy] = offsets[pos.id];
     const x = px + dx,
       y = py + dy;
