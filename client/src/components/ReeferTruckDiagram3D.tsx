@@ -158,7 +158,53 @@ function defaultDoorPos(): DragPos {
 
 export default function ReeferTruckDiagram3D(props: Props) {
   if (props.objectType === "chamber") return <ChamberDiagram3D loggers={props.loggers} protocolId={props.protocolId} readOnly={props.readOnly} />;
+  if (props.objectType === "thermal-container") return <ThermalContainerDiagram {...props} />;
   return <LegacyReeferTruckDiagram3D {...props} />;
+}
+
+/** Purpose-built passive thermal-container view: a compact open isometric box
+ * with cooling elements shown as stacked blue bricks, rather than a reefer
+ * truck body. Logger markers retain the same C/W/V position ids used by the
+ * editor and PDF data model. */
+function ThermalContainerDiagram({ loggers, protocolId, readOnly = false }: Props) {
+  const utils = trpc.useUtils();
+  const generalInfo = trpc.generalInfo.get.useQuery({ protocolId });
+  const updateLogger = trpc.pv.updateLogger.useMutation({ onSuccess: () => utils.pv.get.invalidate({ protocolId }) });
+  const [assigningTo, setAssigningTo] = useState<string | null>(null);
+  const config = (generalInfo.data as any)?.thermalContainerConfig ?? {};
+  const count = Math.max(0, Math.min(24, Number(config.thermalElementCount) || 0));
+  const positionMap: Record<string, Logger> = {};
+  loggers.forEach(l => { if (l.position) positionMap[l.position] = l; });
+  const Wc = 3.4, Dc = 2.6, Hc = 2.2, S = 92, ox = 380, oy = 390;
+  const p = (x: number, y: number, z: number): [number, number] => [ox + (x - y) * 0.866 * S, oy - (x + y) * 0.5 * S - z * S];
+  const poly = (a: [number, number][]) => a.map(v => v.map(n => n.toFixed(1)).join(",")).join(" ");
+  const b0=p(0,0,0), b1=p(Wc,0,0), b2=p(Wc,Dc,0), b3=p(0,Dc,0), t0=p(0,0,Hc), t1=p(Wc,0,Hc), t2=p(Wc,Dc,Hc), t3=p(0,Dc,Hc);
+  const sensors = SENSOR_POSITIONS.map(s => ({ ...s, x: s.x / W * Wc, y: s.y / D * Dc, z: s.z / H * Hc }));
+  const assign = (posId: string, loggerId: number | null) => {
+    const existing = positionMap[posId];
+    if (loggerId === null && existing) updateLogger.mutate({ protocolId, loggerId: existing.id, position: null as any, posX: null, posY: null });
+    if (loggerId !== null) updateLogger.mutate({ protocolId, loggerId, position: posId as any, posX: null, posY: null });
+    setAssigningTo(null);
+  };
+  return <div className="w-full relative select-none">
+    <svg viewBox="0 0 760 560" className="w-full max-w-3xl mx-auto" onClick={() => setAssigningTo(null)}>
+      <defs><linearGradient id="tc-wall" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#eff6ff"/><stop offset="1" stopColor="#bfdbfe"/></linearGradient></defs>
+      <ellipse cx="380" cy="438" rx="250" ry="22" fill="#0f172a" opacity=".12" />
+      <polygon points={poly([b3,b2,t2,t3])} fill="#dbeafe" stroke="#315b7d" strokeWidth="2" />
+      <polygon points={poly([b0,b3,t3,t0])} fill="#e8f3fc" stroke="#315b7d" strokeWidth="2" />
+      <polygon points={poly([b1,b2,t2,t1])} fill="#cfe3f4" stroke="#315b7d" strokeWidth="2" />
+      <polygon points={poly([t0,t1,t2,t3])} fill="#f8fbff" stroke="#315b7d" strokeWidth="2" opacity=".9" />
+      <polygon points={poly([b0,b1,t1,t0])} fill="url(#tc-wall)" fillOpacity=".55" stroke="#315b7d" strokeWidth="2" />
+      {Array.from({length: count}, (_, i) => {
+        const row = Math.floor(i / 6), col = i % 6, x = 0.35 + (col % 3) * 0.95, y = 0.35 + Math.floor(col / 3) * 1.0, z = 0.18 + row * 0.48;
+        const q0=p(x,y,z), q1=p(x+.72,y,z), q2=p(x+.72,y+.42,z), q3=p(x,y+.42,z), q4=p(x,y,z+.3), q5=p(x+.72,y,z+.3), q6=p(x+.72,y+.42,z+.3), q7=p(x,y+.42,z+.3);
+        return <g key={i}><polygon points={poly([q0,q1,q2,q3])} fill="#38bdf8" stroke="#0369a1" strokeWidth="1.2"/><polygon points={poly([q3,q2,q6,q7])} fill="#0ea5e9" opacity=".8" stroke="#0369a1"/><polygon points={poly([q1,q2,q6,q5])} fill="#7dd3fc" opacity=".9" stroke="#0369a1"/><text x={p(x+.36,y+.2,z+.16)[0]} y={p(x+.36,y+.2,z+.16)[1]+3} textAnchor="middle" fontSize="8" fontWeight="700" fill="#075985">ХЭ</text></g>;
+      })}
+      {sensors.map((sp, i) => { const m=positionMap[sp.id]; const [x,y]=p(sp.x,sp.y,sp.z); const color=m ? loggerColor(i) : "#fff"; return <g key={sp.id} onClick={e=>{e.stopPropagation(); if(!readOnly)setAssigningTo(sp.id)}} style={{cursor:readOnly?"default":"pointer"}}><circle cx={x} cy={y} r={m?15:8} fill={color} stroke={m?"#fff":"#2563eb"} strokeWidth={m?3:2}/><text x={x} y={y+4} textAnchor="middle" fontSize={m?8:7} fontWeight="700" fill={m?"#fff":"#2563eb"}>{m ? shortSensorCode(m.label) : sp.id}</text></g>; })}
+      <text x="380" y="525" textAnchor="middle" fontSize="14" fontWeight="700" fill="#315b7d">Термоконтейнер · хладоэлементы: {count} шт.</text>
+    </svg>
+    {assigningTo && !readOnly && <div className="absolute left-1/2 bottom-2 -translate-x-1/2 bg-white border rounded-lg shadow-lg p-2 text-xs z-10 min-w-56"><div className="font-semibold mb-1">Назначить на {assigningTo}</div>{loggers.filter(l=>l.role!=="external").map(l=><button key={l.id} className="block w-full text-left px-2 py-1 hover:bg-slate-100" onClick={()=>assign(assigningTo,l.id)}>{l.label}</button>)}{positionMap[assigningTo]&&<button className="block w-full text-left px-2 py-1 text-red-600 hover:bg-red-50" onClick={()=>assign(assigningTo,null)}>Снять назначение</button>}</div>}
+  </div>;
 }
 
 function LegacyReeferTruckDiagram3D({

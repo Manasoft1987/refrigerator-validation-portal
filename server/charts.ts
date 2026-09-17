@@ -1987,7 +1987,7 @@ export function drawReeferTruckDiagram3D(
   title?: string,
   hotLabel?: string | null,
   coldLabel?: string | null,
-  objectType: "truck" | "chamber" = "truck",
+  objectType: "truck" | "chamber" | "thermal-container" = "truck",
   options: {
     showEmptyReferencePositions?: boolean;
     showReferenceLegend?: boolean;
@@ -1997,9 +1997,10 @@ export function drawReeferTruckDiagram3D(
   const showEmptyReferencePositions = options.showEmptyReferencePositions ?? true;
   const showReferenceLegend = options.showReferenceLegend ?? true;
   // Box world dimensions (arbitrary units, scaled to SVG-like coords via scale)
-  const BW = 1.6; // width  (X)
-  const BD = 3.2; // depth  (Y)
-  const BH = 1.4; // height (Z)
+  const isThermalContainer = objectType === "thermal-container";
+  const BW = isThermalContainer ? 3.4 : 1.6; // width (X)
+  const BD = isThermalContainer ? 2.6 : 3.2; // depth (Y)
+  const BH = isThermalContainer ? 2.2 : 1.4; // height (Z)
 
   // Scale and origin in PDF points
   // A4 usable width = 595 - 2*56 = 483pt
@@ -2125,18 +2126,18 @@ export function drawReeferTruckDiagram3D(
   doc.polygon(b0, b1, t1, t0).fill("#dbeafe").stroke();
   doc.polygon(b0, b1, t1, t0).lineWidth(0.8).strokeColor("#7a9ab5").stroke();
 
-  // Door split line
-  const dm0 = pt(BW / 2, 0, 0);
-  const dm1 = pt(BW / 2, 0, BH);
-  doc.moveTo(dm0[0], dm0[1]).lineTo(dm1[0], dm1[1])
-    .lineWidth(0.6).strokeColor("#93c5fd").dash(3, { space: 2 }).stroke();
-  doc.undash();
-
-  // Door handle
-  const dh0 = pt(BW * 0.54, 0.02, BH * 0.42);
-  const dh1 = pt(BW * 0.54, 0.02, BH * 0.58);
-  doc.moveTo(dh0[0], dh0[1]).lineTo(dh1[0], dh1[1])
-    .lineWidth(2).strokeColor("#64748b").stroke();
+  if (!isThermalContainer) {
+    // Door split line and handle are only relevant to reefer bodies.
+    const dm0 = pt(BW / 2, 0, 0);
+    const dm1 = pt(BW / 2, 0, BH);
+    doc.moveTo(dm0[0], dm0[1]).lineTo(dm1[0], dm1[1])
+      .lineWidth(0.6).strokeColor("#93c5fd").dash(3, { space: 2 }).stroke();
+    doc.undash();
+    const dh0 = pt(BW * 0.54, 0.02, BH * 0.42);
+    const dh1 = pt(BW * 0.54, 0.02, BH * 0.58);
+    doc.moveTo(dh0[0], dh0[1]).lineTo(dh1[0], dh1[1])
+      .lineWidth(2).strokeColor("#64748b").stroke();
+  }
 
   // Strong outline edges
   doc.lineWidth(1.2).strokeColor("#4a6a85");
@@ -2155,7 +2156,7 @@ export function drawReeferTruckDiagram3D(
     doc.moveTo(a[0], a[1]).lineTo(b[0], b[1]).stroke();
   });
 
-  // Refrigeration unit on top-front
+  // Refrigeration unit on top-front (not used by passive thermal containers)
   const ruH = 0.20, ruD = 0.16;
   const ru_bl  = pt(BW * 0.15, 0,    BH);
   const ru_br  = pt(BW * 0.85, 0,    BH);
@@ -2165,12 +2166,27 @@ export function drawReeferTruckDiagram3D(
   const ru_brb = pt(BW * 0.85, ruD,  BH);
   const ru_trb = pt(BW * 0.85, ruD,  BH + ruH);
   const ru_tlb = pt(BW * 0.15, ruD,  BH + ruH);
-  doc.polygon(ru_bl, ru_br, ru_tr, ru_tl).fill("#bfdbfe").stroke();
-  doc.polygon(ru_bl, ru_br, ru_tr, ru_tl).lineWidth(0.6).strokeColor("#93c5fd").stroke();
-  doc.polygon(ru_tl, ru_tr, ru_trb, ru_tlb).fill("#dbeafe").stroke();
-  doc.polygon(ru_tl, ru_tr, ru_trb, ru_tlb).lineWidth(0.6).strokeColor("#93c5fd").stroke();
-  doc.polygon(ru_blb, ru_brb, ru_trb, ru_tlb).fill("#eff6ff").stroke();
-  doc.polygon(ru_blb, ru_brb, ru_trb, ru_tlb).lineWidth(0.6).strokeColor("#93c5fd").stroke();
+  if (!isThermalContainer) doc.polygon(ru_bl, ru_br, ru_tr, ru_tl).fill("#bfdbfe").stroke();
+  if (!isThermalContainer) {
+    doc.polygon(ru_bl, ru_br, ru_tr, ru_tl).lineWidth(0.6).strokeColor("#93c5fd").stroke();
+    doc.polygon(ru_tl, ru_tr, ru_trb, ru_tlb).fill("#dbeafe").stroke();
+    doc.polygon(ru_tl, ru_tr, ru_trb, ru_tlb).lineWidth(0.6).strokeColor("#93c5fd").stroke();
+    doc.polygon(ru_blb, ru_brb, ru_trb, ru_tlb).fill("#eff6ff").stroke();
+    doc.polygon(ru_blb, ru_brb, ru_trb, ru_tlb).lineWidth(0.6).strokeColor("#93c5fd").stroke();
+  }
+
+  if (isThermalContainer) {
+    // Passive cold elements: compact blue bricks arranged in two staggered rows.
+    for (let i = 0; i < 8; i++) {
+      const row = Math.floor(i / 4), col = i % 4;
+      const x = 0.35 + col * 0.76, y = 0.32 + (row % 2) * 1.12, z = 0.18 + Math.floor(row / 2) * 0.62;
+      const q0=pt(x,y,z), q1=pt(x+.58,y,z), q2=pt(x+.58,y+.38,z), q3=pt(x,y+.38,z);
+      const q4=pt(x,y,z+.28), q5=pt(x+.58,y,z+.28), q6=pt(x+.58,y+.38,z+.28), q7=pt(x,y+.38,z+.28);
+      doc.polygon(q0,q1,q2,q3).fill("#38bdf8").strokeColor("#0369a1").lineWidth(0.7).stroke();
+      doc.polygon(q3,q2,q6,q7).fill("#0ea5e9").strokeColor("#0369a1").lineWidth(0.7).stroke();
+      doc.polygon(q1,q2,q6,q5).fill("#7dd3fc").strokeColor("#0369a1").lineWidth(0.7).stroke();
+    }
+  }
 
   doc.restore(); // close main box drawing save()
 

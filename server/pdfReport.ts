@@ -1923,7 +1923,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
       if (!useRiskOrientedReeferPlacement) {
         doc.addPage();
         if (isReeferLike(eqType)) {
-          drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, false, "Схема 2. Расстановка датчиков (с серийными номерами)", null, null, eqType === "chamber" || eqType === "thermal-container" ? "chamber" : "truck", { coolingUnitPositions: input.coolingUnitPositions });
+          drawReeferTruckDiagram3D(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, false, "Схема 2. Расстановка датчиков (с серийными номерами)", null, null, eqType === "thermal-container" ? "thermal-container" : eqType === "chamber" ? "chamber" : "truck", { coolingUnitPositions: input.coolingUnitPositions });
         } else {
           drawRefrigeratorDiagram(doc, input.pvLoggers as DiagramSensor[], PAGE_MARGIN, input.coolingUnitPos, input.doorPos, "Схема 2. Расстановка датчиков (серийные номера и позиции)", "serial-position", input.refrigeratorDrawerCount ?? 2, input.refrigeratorLevelCount ?? 7, null, null);
         }
@@ -4296,7 +4296,7 @@ function drawPVPlacementPlan(doc: PDFKit.PDFDocument, input: ReportInput) {
         : "Схема 1. Эталонные позиции размещения регистраторов в грузовом отсеке",
       null,
       null,
-      eqType === "chamber" || eqType === "thermal-container" ? "chamber" : "truck",
+      eqType === "thermal-container" ? "thermal-container" : eqType === "chamber" ? "chamber" : "truck",
     );
   } else {
     const shelfObjectName = eqType === "freezer" ? "морозильника" : "холодильника";
