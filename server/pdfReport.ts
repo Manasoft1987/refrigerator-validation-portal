@@ -6163,7 +6163,7 @@ function drawWarehousePlanDiagram(
       const calloutRows = sortedItems.map(item => {
         const sensorLabel = shortSensorId(item.sp.label) || String(item.sp.label || "D");
         const height = typeof item.sp.heightM === "number" && Number.isFinite(item.sp.heightM) && item.sp.heightM > 0
-          ? `${item.sp.heightM.toFixed(1)} м`
+          ? `${item.sp.heightM.toFixed(groupedNode.items.length > 1 ? 2 : 1)} м`
           : "—";
         const avg = averageBySensor.get(normalizeSensorNumber(item.sp.label)) ?? "—";
         if (showAverageLabels) return showSensorLabels ? `${sensorLabel} — ${avg}` : avg;
