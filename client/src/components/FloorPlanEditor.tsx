@@ -393,6 +393,7 @@ function SensorPointCallout({
   selected,
   onSelect,
   onCalloutPointerDown,
+  onAnchorPointerDown,
 }: {
   group: SensorPointCalloutGroup;
   planX: number;
@@ -402,6 +403,7 @@ function SensorPointCallout({
   selected: boolean;
   onSelect: (id: string) => void;
   onCalloutPointerDown: (group: SensorPointCalloutGroup, e: React.PointerEvent) => void;
+  onAnchorPointerDown: (group: SensorPointCalloutGroup, e: React.PointerEvent) => void;
 }) {
   const fontSize = clamp(group.calloutFontSize ?? 7.2, 5.4, 11);
   const rowGap = fontSize + 3.8;
@@ -492,8 +494,10 @@ function SensorPointCallout({
           </text>
         </g>
       ))}
-      <circle cx={group.anchorX} cy={group.anchorY} r={7.2} fill="#fbbf24" stroke="#92400e" strokeWidth={1.35} style={{ pointerEvents: "none" }} />
-      <circle cx={group.anchorX} cy={group.anchorY} r={4.2} fill="#facc15" stroke="white" strokeWidth={1} style={{ pointerEvents: "none" }} />
+      <circle cx={group.anchorX} cy={group.anchorY} r={9} fill="#fbbf24" stroke="#92400e" strokeWidth={1.35}
+        style={{ pointerEvents: "all", cursor: "move", touchAction: "none" }}
+        onPointerDown={event => { event.stopPropagation(); onAnchorPointerDown(group, event); }} />
+      <circle cx={group.anchorX} cy={group.anchorY} r={5.2} fill="#facc15" stroke="white" strokeWidth={1} style={{ pointerEvents: "none" }} />
       {selected && <circle cx={group.anchorX} cy={group.anchorY} r={10.5} fill="none" stroke="#f59e0b" strokeWidth={1.4} strokeDasharray="3 2" style={{ pointerEvents: "none" }} />}
     </g>
   );
@@ -1101,6 +1105,7 @@ type DragMode =
   | { kind: "move"; id: string }
   | { kind: "resize"; id: string; corner: ResizeCorner }
   | { kind: "leader"; id: string }
+  | { kind: "sensor-anchor"; ids: string[]; startPositions: Record<string, { xPct: number; yPct: number }> }
   | { kind: "callout"; ids: string[]; startCalloutXPct: number; startCalloutYPct: number };
 
 export interface FloorPlanEditorProps {
@@ -1317,6 +1322,29 @@ export function FloorPlanEditor({
     };
   }, [readOnly, clientToCanvasSvg, svgToRoomPct, objects]);
 
+  const handleAnchorPointerDown = useCallback((group: SensorPointCalloutGroup, e: React.PointerEvent) => {
+    if (readOnly) return;
+    e.preventDefault();
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    const ids = group.items.map(item => item.obj.id);
+    const first = group.items[0]?.obj;
+    if (!first) return;
+    setSelectedId(first.id);
+    setPanelOpen(false);
+    const { x, y } = clientToCanvasSvg(e.clientX, e.clientY);
+    const startPositions: Record<string, { xPct: number; yPct: number }> = {};
+    ids.forEach(id => {
+      const obj = objects.find(item => item.id === id);
+      if (obj) startPositions[id] = { xPct: obj.xPct, yPct: obj.yPct };
+    });
+    dragState.current = {
+      mode: { kind: "sensor-anchor", ids, startPositions },
+      startSvgX: x,
+      startSvgY: y,
+      snapshot: { ...first },
+    };
+  }, [readOnly, clientToCanvasSvg, objects]);
+
   // ── Global pointer move / up ───────────────────────────────────────────────
 
   useEffect(() => {
@@ -1354,6 +1382,19 @@ export function FloorPlanEditor({
         const newX = clamp(snapVal(point.x, stepX), 0, 100);
         const newY = clamp(snapVal(point.y, stepY), 0, 100);
         onChange(objects.map(o => o.id === mode.id ? { ...o, leaderEndXPct: newX, leaderEndYPct: newY } : o));
+      } else if (mode.kind === "sensor-anchor") {
+        const dx = snapVal(dxPct, stepX);
+        const dy = snapVal(dyPct, stepY);
+        const ids = new Set(mode.ids);
+        onChange(objects.map(o => {
+          const start = mode.startPositions[o.id];
+          if (!ids.has(o.id) || !start) return o;
+          return {
+            ...o,
+            xPct: clamp(start.xPct + dx, 0, Math.max(0, 100 - o.widthPct)),
+            yPct: clamp(start.yPct + dy, 0, Math.max(0, 100 - o.heightPct)),
+          };
+        }));
       } else if (mode.kind === "callout") {
         const newX = clamp(snapVal(mode.startCalloutXPct + dxPct, stepX), 0, 100);
         const newY = clamp(snapVal(mode.startCalloutYPct + dyPct, stepY), 0, 100);
@@ -1781,6 +1822,7 @@ export function FloorPlanEditor({
                 drawH={drawH}
                 selected={group.items.some(item => item.obj.id === selectedId)}
                 onCalloutPointerDown={handleCalloutPointerDown}
+                onAnchorPointerDown={handleAnchorPointerDown}
                 onSelect={(id) => {
                   if (readOnly) return;
                   setSelectedId(id);
