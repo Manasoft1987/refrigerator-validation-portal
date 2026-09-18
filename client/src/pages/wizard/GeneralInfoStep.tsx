@@ -658,6 +658,18 @@ export default function GeneralInfoStep({
                 </SelectContent>
               </Select>
             </Field>
+            <Field label="Язык итогового PDF">
+              <Select
+                value={form.reportLanguage || "ru"}
+                onValueChange={v => setForm({ ...form, reportLanguage: v })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ru">Русский</SelectItem>
+                  <SelectItem value="en">English</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
             {supportsCustomTempMode && form.tempMode === "custom" && (
               <div className="md:col-span-2 grid md:grid-cols-2 gap-4 rounded-lg border border-blue-200 bg-blue-50/40 p-4">
                 <Field label="Минимум произвольного режима, °C">
