@@ -1753,8 +1753,8 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   } else {
     // ── STANDARD PART I ──────────────────────────────────────────────────────
     doc.addPage();
-    recordToc("1. Общие сведения об оборудовании", 1);
-    drawSectionTitle(doc, "1. Общие сведения об оборудовании");
+    recordToc(isEnglishWarehouse(input) ? "1. General Equipment Information" : "1. Общие сведения об оборудовании", 1);
+    drawSectionTitle(doc, isEnglishWarehouse(input) ? "1. General Equipment Information" : "1. Общие сведения об оборудовании");
     drawGeneralInfoTable(doc, input);
     drawRevisionHistorySection(doc, input);
     
@@ -1763,8 +1763,8 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     const reportSensors = filterProtocolSensorsForReport(input);
     if (reportSensors && reportSensors.length > 0) {
         doc.addPage();
-        recordToc("1.1. Датчики, используемые для валидации", 1);
-        drawSectionTitle(doc, "1.1. Датчики, используемые для валидации");
+        recordToc(isEnglishWarehouse(input) ? "1.1. Data Loggers Used for Qualification" : "1.1. Датчики, используемые для валидации", 1);
+        drawSectionTitle(doc, isEnglishWarehouse(input) ? "1.1. Data Loggers Used for Qualification" : "1.1. Датчики, используемые для валидации");
       drawSensorTable(
         doc,
         reportSensors,
@@ -1795,9 +1795,9 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     drawPVPlan(doc, input.pv, input);
     drawPVPlacementPlan(doc, input);
     doc.addPage();
-    recordToc("5. Подписи к Протоколу", 1);
-    drawSectionTitle(doc, "5. Подписи к Протоколу");
-    drawSignaturesBlock(doc, getSignatoriesPart1(input), "Настоящий протокол квалификации рассмотрен и утверждён:", input);
+    recordToc(isEnglishWarehouse(input) ? "5. Protocol Signatures" : "5. Подписи к Протоколу", 1);
+    drawSectionTitle(doc, isEnglishWarehouse(input) ? "5. Protocol Signatures" : "5. Подписи к Протоколу");
+    drawSignaturesBlock(doc, getSignatoriesPart1(input), isEnglishWarehouse(input) ? "This qualification protocol has been reviewed and approved:" : "Настоящий протокол квалификации рассмотрен и утверждён:", input);
   }
 
   /* ============================================================ */
@@ -1924,7 +1924,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
             input.coolingUnitPos,
             input.doorPos,
             false,
-            "Схема 1. Риск-ориентированная фактическая расстановка датчиков (серийные номера)",
+            isEnglishWarehouse(input) ? "Diagram 1. Risk-based actual logger placement (serial numbers)" : "Схема 1. Риск-ориентированная фактическая расстановка датчиков (серийные номера)",
             null,
             null,
             "truck",
@@ -2218,7 +2218,7 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
     width: right - left,
     align: "center",
   }) + (isWarehouseDocument ? 14 : 12);
-  const equipmentTypeLabel = en && isWarehouseLike(eqType)
+  let equipmentTypeLabel = en && isWarehouseLike(eqType)
     ? (isPharmacyStorageType(eqType) ? "Pharmacy Storage Room / Area" : "Storage Room / Storage Area")
     : eqType === "chamber"
     ? "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430"
@@ -2233,6 +2233,12 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
     : isWarehouseLike(eqType)
         ? getEquipmentName(input)
         : "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u043e\u0435 \u043e\u0431\u043e\u0440\u0443\u0434\u043e\u0432\u0430\u043d\u0438\u0435";
+  if (en) {
+    if (isAutoRefrigeratorLike(eqType)) equipmentTypeLabel = "Refrigerated vehicle";
+    else if (eqType === "chamber") equipmentTypeLabel = "Refrigerated chamber";
+    else if (eqType === "thermal-container") equipmentTypeLabel = "Thermal container";
+    else if (eqType === "freezer") equipmentTypeLabel = "Freezer";
+  }
   if (!isWarehouseDocument && eqType !== "chamber") {
     doc
       .fillColor(ACCENT)
@@ -2538,23 +2544,23 @@ function drawGeneralInfoTable(doc: PDFKit.PDFDocument, input: ReportInput) {
     // Refrigerator / auto-refrigerator: show equipment-specific fields
     const units = getRefrigerationUnits(input);
     rows = [
-      ["Тип оборудования", isWarehouseLike(eqType) ? getEquipmentName(input) : EQUIPMENT_LABEL[eqType || ""] || "—"],
+      [en ? "Equipment type" : "Тип оборудования", isWarehouseLike(eqType) ? getEquipmentName(input) : (en ? getEquipmentName(input) : EQUIPMENT_LABEL[eqType || ""] || "—")],
       ...(isAutoRefrigeratorLike(eqType) && units.length > 1
-        ? units.map((unit, idx) => [`Холодильный агрегат ${idx + 1}`, formatRefrigerationUnit(unit)] as [string, string])
+        ? units.map((unit, idx) => [en ? `Refrigeration unit ${idx + 1}` : `Холодильный агрегат ${idx + 1}`, formatRefrigerationUnit(unit)] as [string, string])
         : [
-            ["Производитель", gi?.manufacturer || "—"],
-            ["Модель", gi?.model || "—"],
-            ["Серийный номер", gi?.serial || "—"],
+            [en ? "Manufacturer" : "Производитель", gi?.manufacturer || "—"],
+            [en ? "Model" : "Модель", gi?.model || "—"],
+            [en ? "Serial number" : "Серийный номер", gi?.serial || "—"],
           ] as Array<[string, string]>),
-      ["Температурный режим", temperatureModeLabel(gi?.tempMode, gi?.customMin, gi?.customMax)],
-      ["Место установки", gi?.location || "—"],
-      ["Назначение / хранимая продукция", gi?.purpose || "—"],
-      ["Организация", input.org.name],
-      ["БИН / ИНН", input.org.bin || "—"],
-      ["Адрес", input.org.addressFact || "—"],
-      ["Ответственное лицо", input.org.responsible || "—"],
-      ["Контакты", input.org.phone || "—"],
-      ["Процент загруженности объекта", loadPercentLabel],
+      [en ? "Temperature mode" : "Температурный режим", temperatureModeLabel(gi?.tempMode, gi?.customMin, gi?.customMax, input)],
+      [en ? "Place of installation / operation" : "Место установки", gi?.location || "—"],
+      [en ? "Purpose / stored products" : "Назначение / хранимая продукция", gi?.purpose || "—"],
+      [en ? "Organization" : "Организация", input.org.name],
+      [en ? "BIN / Tax ID" : "БИН / ИНН", input.org.bin || "—"],
+      [en ? "Address" : "Адрес", input.org.addressFact || "—"],
+      [en ? "Responsible person" : "Ответственное лицо", input.org.responsible || "—"],
+      [en ? "Contacts" : "Контакты", input.org.phone || "—"],
+      [en ? "Object load percentage" : "Процент загруженности объекта", loadPercentLabel],
     ];
   }
   if (eqType === "thermal-container") {
@@ -2734,7 +2740,7 @@ function drawRevisionHistorySection(doc: PDFKit.PDFDocument, input: ReportInput)
   ).map(item => [
     item.revision,
     fmtTraceDateWithFallback(item.date, defaultDate),
-    item.change,
+    en && hasCyrillic(item.change) ? "Initial issue of the qualification protocol and report." : item.change,
     item.author,
   ]);
 
@@ -3135,23 +3141,24 @@ function drawPVInfoBox(
 
 function drawPVPassportSummary(doc: PDFKit.PDFDocument, input: ReportInput) {
   if (!supportsExpertPvSummary(input)) return;
+  const en = isEnglishWarehouse(input);
   const pv = input.pv;
   const internal = pv.loggers.filter(logger => logger.role === "internal");
   const external = pv.loggers.filter(logger => logger.role === "external");
   const durationMs = pv.startAt && pv.endAt ? pv.endAt - pv.startAt : 0;
   const period = `${pv.startAt ? fmtDate(pv.startAt) : "—"} — ${pv.endAt ? fmtDate(pv.endAt) : "—"}`;
-  const samplingStep = pv.samplingStepMinutes ? `${pv.samplingStepMinutes} мин` : "—";
+  const samplingStep = pv.samplingStepMinutes ? `${pv.samplingStepMinutes} min` : "—";
   const accuracy = pv.sensorAccuracy !== undefined && pv.sensorAccuracy !== null ? `±${pv.sensorAccuracy.toFixed(1)} °C` : "—";
 
-  drawSubTitle(doc, "Паспорт испытания PQ/PV");
+  drawSubTitle(doc, en ? "PQ/PV Test Passport" : "Паспорт испытания PQ/PV");
   drawKVTable(doc, [
-    ["Объект испытания", getEquipmentName(input)],
-    ["Температурный режим / критерий", `${pvTemperatureModeLabel(pv, input)}; расчетный диапазон ${fmtTempRange(pv.rangeMin, pv.rangeMax)}`],
-    ["Период мониторинга", period],
-    ["Фактическая длительность", durationMs > 0 ? fmtDuration(durationMs) : "—"],
-    ["Логгеры в расчете", `${internal.length} внутренних; ${external.length} внешних`],
-    ["Шаг регистрации / погрешность", `${samplingStep}; ${accuracy}`],
-    ["Итог PQ/PV", verdictLabelLocal(pv.verdict, input)],
+    [en ? "Test object" : "Объект испытания", getEquipmentName(input)],
+    [en ? "Temperature mode / criterion" : "Температурный режим / критерий", `${pvTemperatureModeLabel(pv, input)}; ${en ? "calculated range" : "расчётный диапазон"} ${fmtTempRange(pv.rangeMin, pv.rangeMax)}`],
+    [en ? "Monitoring period" : "Период мониторинга", period],
+    [en ? "Actual duration" : "Фактическая длительность", durationMs > 0 ? fmtDuration(durationMs) : "—"],
+    [en ? "Loggers included in calculation" : "Логгеры в расчете", `${internal.length} ${en ? "internal" : "внутренних"}; ${external.length} ${en ? "external" : "внешних"}`],
+    [en ? "Sampling interval / accuracy" : "Шаг регистрации / погрешность", `${samplingStep}; ${accuracy}`],
+    [en ? "PQ/PV conclusion" : "Итог PQ/PV", verdictLabelLocal(pv.verdict, input)],
   ], 190);
 }
 
