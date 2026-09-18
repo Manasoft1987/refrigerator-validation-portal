@@ -482,6 +482,46 @@ function isEnglishWarehouse(input?: ReportInput): boolean {
   return input?.generalInfo?.reportLanguage === "en";
 }
 
+function translateEnglishSystemText(value: string): string {
+  const replacements: Array<[RegExp, string]> = [
+    [/Авторефрижератор Кыргызстана|Авторефрижератор/g, "Refrigerated vehicle"],
+    [/Транспортное средство/g, "Vehicle / registration number"],
+    [/Холодильная установка/g, "Refrigeration unit"],
+    [/Серийный номер установки/g, "Unit serial number"],
+    [/Кабина/g, "Cab"],
+    [/Агрегат/g, "Unit"],
+    [/Дверь/g, "Door"],
+    [/ВН/g, "EXT"],
+    [/Угол/g, "Corner"],
+    [/Центр стенки/g, "Wall center"],
+    [/Центр объёма/g, "Volume center"],
+    [/Фактические точки размещения/g, "Actual placement points"],
+    [/Минимальная длительность \(по умолчанию\)/g, "Required duration"],
+    [/Минимальная длительность/g, "Required duration"],
+    [/Фактическая длительность/g, "Actual duration"],
+    [/Испытания на температурное отклонение/g, "Temperature Excursion Study"],
+    [/Окно записи/g, "Recording window"],
+    [/Срок проведения относительно PQ\/PV/g, "Timing relative to PQ/PV"],
+    [/Проводимые тесты/g, "Tests performed"],
+    [/Погрешность датчиков, учитываемая в расчётах/g, "Sensor accuracy used in calculations"],
+    [/Расчётный диапазон аварийных испытаний/g, "Calculated excursion-test range"],
+    [/Включение оборудования \(выход на режим\)/g, "Equipment start-up (time to reach setpoint)"],
+    [/Открытие двери \(время до нарушения режима\)/g, "Door opening (time to excursion)"],
+    [/Отключение питания \(время до нарушения режима\)/g, "Power failure (time to excursion)"],
+    [/Все критерии приемлемости выполнены/g, "All acceptance criteria are met"],
+    [/Эксплуатационная квалификация \/ валидация \(PQ\/PV\) пройдена успешно/g, "Performance Qualification / Validation (PQ/PV) has been completed successfully"],
+    [/Тест пройден успешно/g, "Test passed successfully"],
+    [/Средства измерений \(датчики температуры\)/g, "Measuring instruments (temperature loggers)"],
+    [/Запрос свидетельств о поверке/g, "Request for verification certificates"],
+    [/Отсканируйте QR-код для просмотра актуальных сведений о поверке датчиков/g, "Scan the QR code to view current logger verification information"],
+  ];
+  let result = value;
+  for (const [pattern, replacement] of replacements) result = result.replace(pattern, replacement);
+  result = result.replace(/(\d+)\s*ч\s*(\d+)\s*мин/g, "$1 h $2 min");
+  result = result.replace(/(\d+)\s*мин/g, "$1 min");
+  return result;
+}
+
 function isPharmacyStorageType(type: string | null | undefined): boolean {
   return type === "warehouse" || type === WAREHOUSE_EXPERT_EQUIPMENT_TYPE;
 }
@@ -740,12 +780,14 @@ function reeferAreaAfterIn(type: string | null | undefined): string {
   return reeferAreaGenitive(type);
 }
 
-function reeferLocationLabel(type: string | null | undefined): string {
+function reeferLocationLabel(type: string | null | undefined, en = false): string {
+  if (en) return type === "chamber" ? "Refrigerated chamber / installation location" : "Vehicle / registration number";
   if (type === "thermal-container") return "Место подготовки и эксплуатации";
   return type === "chamber" ? "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u043a\u0430\u043c\u0435\u0440\u0430 / \u043c\u0435\u0441\u0442\u043e \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0438" : "\u0422\u0440\u0430\u043d\u0441\u043f\u043e\u0440\u0442\u043d\u043e\u0435 \u0441\u0440\u0435\u0434\u0441\u0442\u0432\u043e / \u0433\u043e\u0441. \u043d\u043e\u043c\u0435\u0440";
 }
 
-function reeferUnitLabel(type: string | null | undefined): string {
+function reeferUnitLabel(type: string | null | undefined, en = false): string {
+  if (en) return type === "chamber" ? "Refrigeration unit / equipment" : "Refrigeration unit";
   if (type === "thermal-container") return "Производитель / модель";
   return type === "chamber" ? "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430 / \u0430\u0433\u0440\u0435\u0433\u0430\u0442" : "\u0425\u043e\u043b\u043e\u0434\u0438\u043b\u044c\u043d\u0430\u044f \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0430";
 }
@@ -1708,6 +1750,14 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     },
   });
 
+  if (isEnglishWarehouse(input)) {
+    const originalText = (doc as any).text.bind(doc);
+    (doc as any).text = (value: unknown, ...args: unknown[]) => {
+      const translated = typeof value === "string" ? translateEnglishSystemText(value) : value;
+      return originalText(translated, ...args);
+    };
+  }
+
   doc.registerFont("body", fonts.regular);
   if (fonts.bold) doc.registerFont("bold", fonts.bold);
   else doc.registerFont("bold", fonts.regular);
@@ -2258,7 +2308,7 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
   const cardW = right - left - 48;
   const cardY = y;
   const gi = input.generalInfo;
-  const objectLabel = isWarehouseLike(eqType)
+  const objectLabel = en || isWarehouseLike(eqType)
     ? getEquipmentName(input)
     : EQUIPMENT_LABEL[eqType || ""] || "—";
   const refrigerationUnits = getRefrigerationUnits(input);
@@ -2284,12 +2334,12 @@ function drawPartCover(doc: PDFKit.PDFDocument, input: ReportInput, part: "part1
     ],
     ...(isReeferLike(eqType)
       ? [
-          [reeferLocationLabel(eqType), gi?.location || "\u2014"],
+          [reeferLocationLabel(eqType, en), gi?.location || "\u2014"],
           ...(isAutoRefrigeratorLike(eqType) && refrigerationUnits.length > 1
-            ? refrigerationUnits.map((unit, idx) => [`${reeferUnitLabel(eqType)} ${idx + 1}`, formatRefrigerationUnit(unit)] as [string, string])
+            ? refrigerationUnits.map((unit, idx) => [`${reeferUnitLabel(eqType, en)} ${idx + 1}`, formatRefrigerationUnit(unit)] as [string, string])
             : [
-                [reeferUnitLabel(eqType), refrigerationUnit],
-                ["\u0421\u0435\u0440\u0438\u0439\u043d\u044b\u0439 \u043d\u043e\u043c\u0435\u0440 \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0438", gi?.serial || "\u2014"],
+                [reeferUnitLabel(eqType, en), refrigerationUnit],
+                [en ? "Unit serial number" : "\u0421\u0435\u0440\u0438\u0439\u043d\u044b\u0439 \u043d\u043e\u043c\u0435\u0440 \u0443\u0441\u0442\u0430\u043d\u043e\u0432\u043a\u0438", gi?.serial || "\u2014"],
               ] as Array<[string, string]>),
         ] as Array<[string, string]>
       : [
@@ -2991,6 +3041,7 @@ function drawStageVerdict(
 function pvDurationRequirementLabel(pv: ReportInput["pv"], input?: ReportInput, nonWarehousePrefix = false): string {
   const en = isEnglishWarehouse(input);
   const eqType = getReportEquipmentType(input);
+  if (en && eqType === "chamber") return `not less than ${CHAMBER_MIN_DURATION_HOURS} h`;
   if (eqType === "chamber") return `не менее ${CHAMBER_MIN_DURATION_HOURS} часов`;
   if (isWarehouseEaeu(eqType)) {
     const whStudyType = (input?.generalInfo as any)?.whStudyType;
@@ -3034,6 +3085,11 @@ function drawPVParams(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Re
     [en ? "Internal loggers" : "Внутренних датчиков", String(pv.loggers.filter(l => l.role === "internal").length)],
     [en ? "External loggers" : "Внешних датчиков", String(pv.loggers.filter(l => l.role === "external").length)],
   ];
+  if (en) {
+    rows.forEach(row => {
+      if (/минимальн|требуем/i.test(row[0])) row[0] = "Required duration";
+    });
+  }
   drawKVTable(doc, rows);
 }
 
@@ -3869,6 +3925,7 @@ function drawStagePVVerdict(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], inpu
         "Все критерии приемлемости выполнены. Эксплуатационная квалификация / валидация (PQ/PV) пройдена успешно. " +
         "Оборудование признано пригодным для хранения лекарственных средств в указанном режиме.";
     }
+    if (en) text = "All acceptance criteria are met. Performance Qualification / Validation (PQ/PV) has been completed successfully. The equipment is suitable for medicinal product storage within the specified temperature range.";
   } else if (pv.verdict === "fail") {
     bg = "#fef2f2";
     bd = "#fecaca";
@@ -3876,6 +3933,9 @@ function drawStagePVVerdict(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], inpu
     text =
       (en ? "Performance Qualification / Validation (PQ/PV) failed. Non-conformities were recorded:\n" : "Эксплуатационная квалификация / валидация (PQ/PV) не пройдена. Зафиксированы несоответствия:\n") +
       pv.failureReasons.map((r, i) => `${i + 1}. ${r}`).join("\n");
+  }
+  if (en && pv.verdict === "pass" && !isWarehouseLike(getReportEquipmentType(input))) {
+    text = "All acceptance criteria are met. Performance Qualification / Validation (PQ/PV) has been completed successfully. The equipment is suitable for medicinal product storage within the specified temperature range.";
   }
 
   const padding = 14;
@@ -4410,6 +4470,11 @@ function drawPVPlan(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
               : "\u0414\u0430\u0442\u0447\u0438\u043a\u0438 \u0440\u0430\u0441\u043f\u043e\u043b\u0430\u0433\u0430\u044e\u0442\u0441\u044f \u0432 \u0445\u0430\u0440\u0430\u043a\u0442\u0435\u0440\u043d\u044b\u0445 \u0442\u043e\u0447\u043a\u0430\u0445 \u043e\u0431\u044a\u0451\u043c\u0430 " + reeferAreaGenitive(getReportEquipmentType(input)) + ", \u043e\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u043d\u044b\u0445 \u043f\u043e \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u0430\u043c \u0430\u043d\u0430\u043b\u0438\u0437\u0430 \u0440\u0438\u0441\u043a\u043e\u0432.")),
     ],
   ];
+  if (en) {
+    rows.forEach(row => {
+      if (/минимальн|требуем/i.test(row[0])) row[0] = "Required duration";
+    });
+  }
   drawKVTable(doc, rows);
 }
 
