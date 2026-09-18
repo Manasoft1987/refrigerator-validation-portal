@@ -1779,18 +1779,18 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
     }
     
     doc.addPage();
-    recordToc("2. План IQ — Квалификация монтажа", 1);
-    drawSectionTitle(doc, "2. План IQ — Квалификация монтажа");
+    recordToc(isEnglishWarehouse(input) ? "2. IQ Plan — Installation Qualification" : "2. План IQ — Квалификация монтажа", 1);
+    drawSectionTitle(doc, isEnglishWarehouse(input) ? "2. IQ Plan — Installation Qualification" : "2. План IQ — Квалификация монтажа");
     drawStageBlocks(doc, input.iq, input);
     drawChecklistPlan(doc, checklistItemsForReport(input, "iq"), input);
     doc.addPage();
-    recordToc("3. План OQ — Квалификация функционирования", 1);
-    drawSectionTitle(doc, "3. План OQ — Квалификация функционирования");
+    recordToc(isEnglishWarehouse(input) ? "3. OQ Plan — Operational Qualification" : "3. План OQ — Квалификация функционирования", 1);
+    drawSectionTitle(doc, isEnglishWarehouse(input) ? "3. OQ Plan — Operational Qualification" : "3. План OQ — Квалификация функционирования");
     drawStageBlocks(doc, input.oq, input);
     drawChecklistPlan(doc, checklistItemsForReport(input, "oq"), input);
     doc.addPage();
-    recordToc("4. План PQ/PV — Эксплуатационная квалификация / валидация", 1);
-    drawSectionTitle(doc, "4. План PQ/PV — Эксплуатационная квалификация / валидация");
+    recordToc(isEnglishWarehouse(input) ? "4. PQ/PV Plan — Performance Qualification / Validation" : "4. План PQ/PV — Эксплуатационная квалификация / валидация", 1);
+    drawSectionTitle(doc, isEnglishWarehouse(input) ? "4. PQ/PV Plan — Performance Qualification / Validation" : "4. План PQ/PV — Эксплуатационная квалификация / валидация");
     drawStageBlocks(doc, input.pv, input);
     drawPVPlan(doc, input.pv, input);
     drawPVPlacementPlan(doc, input);
@@ -2999,7 +2999,9 @@ function pvDurationRequirementLabel(pv: ReportInput["pv"], input?: ReportInput, 
       ? `not less than 7 consecutive days (168 h); selected ${pv.minDurationHours} h`
       : `не менее 7 суток подряд (168 ч); выбрано ${pv.minDurationHours} ч`;
   }
-  return nonWarehousePrefix ? `не менее ${pv.minDurationHours} ч` : `${pv.minDurationHours} ч`;
+  return en
+    ? (nonWarehousePrefix ? `not less than ${pv.minDurationHours} h` : `${pv.minDurationHours} h`)
+    : (nonWarehousePrefix ? `не менее ${pv.minDurationHours} ч` : `${pv.minDurationHours} ч`);
 }
 
 function drawPVParams(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: ReportInput) {
@@ -3313,6 +3315,7 @@ function criticalSelectionEvidence(input: ReportInput, logger: LoggerSummary, ki
 }
 
 function drawPVCriticalPointsSummary(doc: PDFKit.PDFDocument, input: ReportInput) {
+  if (isEnglishWarehouse(input)) return drawPVCriticalPointsSummaryEnglish(doc, input);
   const pv = input.pv;
   const internal = pv.loggers.filter(logger => logger.role === "internal" && finiteNumberOrNull(logger.avg) !== null);
   drawSubTitle(doc, "Критические точки PQ/PV");
@@ -3362,7 +3365,30 @@ function drawPVCriticalPointsSummary(doc: PDFKit.PDFDocument, input: ReportInput
   );
 }
 
+function drawPVCriticalPointsSummaryEnglish(doc: PDFKit.PDFDocument, input: ReportInput) {
+  const internal = input.pv.loggers.filter(logger => logger.role === "internal" && finiteNumberOrNull(logger.avg) !== null);
+  drawSubTitle(doc, "PQ/PV Critical Points");
+  if (internal.length < 2) {
+    drawPVInfoBox(doc, "Separate hot and cold points require at least two internal loggers with calculated results. With fewer points, the result is assessed using the overall PQ/PV statistics.", { bg: "#fff7ed", border: "#fed7aa", color: "#9a3412" });
+    return;
+  }
+  const critical = calculateCriticalLoggerIndices(input.pv.loggers);
+  const rows: string[][] = [];
+  ([ ["Hot point", critical.hotIdx], ["Cold point", critical.coldIdx] ] as Array<[string, number | null]>).forEach(([kind, index]) => {
+    if (index === null) return;
+    const logger = input.pv.loggers[index];
+    if (!logger) return;
+    rows.push([kind, shortLoggerDisplay(logger), `${fmtTempMetric(logger.min)} / ${fmtTempMetric(logger.avg)} / ${fmtTempMetric(logger.max)}`, fmtTempMetric(logger.mkt)]);
+  });
+  if (rows.length === 0) {
+    drawPVInfoBox(doc, "Critical points were not determined because sufficient comparable internal logger data are not available.");
+    return;
+  }
+  drawSimpleTable(doc, ["Point", "Logger", "Min / Avg / Max", "MKT"], rows, [0.22, 0.22, 0.35, 0.21]);
+}
+
 function drawPVResultInterpretation(doc: PDFKit.PDFDocument, input: ReportInput) {
+  if (isEnglishWarehouse(input)) return drawPVResultInterpretationEnglish(doc, input);
   const pv = input.pv;
   const internal = pv.loggers
     .filter(logger => logger.role === "internal")
@@ -3419,6 +3445,25 @@ function drawPVResultInterpretation(doc: PDFKit.PDFDocument, input: ReportInput)
         ? { bg: "#fef2f2", border: "#fecaca", color: "#991b1b" }
         : { bg: "#f8fafc", border: BORDER, color: ACCENT };
   drawPVInfoBox(doc, text, boxStyle);
+}
+
+function drawPVResultInterpretationEnglish(doc: PDFKit.PDFDocument, input: ReportInput) {
+  const internal = input.pv.loggers.filter(logger => logger.role === "internal" && finiteNumberOrNull(logger.avg) !== null).map(logger => ({ logger, avg: finiteNumberOrNull(logger.avg) as number }));
+  drawSubTitle(doc, "PQ/PV Result Interpretation");
+  if (!internal.length) {
+    drawPVInfoBox(doc, "Interpretation is not available because calculated internal logger data are missing.");
+    return;
+  }
+  const sorted = [...internal].sort((a, b) => a.avg - b.avg);
+  const cold = sorted[0], hot = sorted[sorted.length - 1];
+  const spread = hot.avg - cold.avg;
+  const critical = calculateCriticalLoggerIndices(input.pv.loggers);
+  const hotLogger = critical.hotIdx === null ? null : input.pv.loggers[critical.hotIdx];
+  const coldLogger = critical.coldIdx === null ? null : input.pv.loggers[critical.coldIdx];
+  const deviations = internal.reduce((sum, item) => sum + (item.logger.deviations?.length ?? 0), 0);
+  const verdict = input.pv.verdict === "pass" ? "PQ/PV has passed based on the completed monitoring." : input.pv.verdict === "fail" ? "PQ/PV has failed; investigation and corrective actions are required." : "PQ/PV conclusion has not been finalized.";
+  const text = `The average temperature range of internal loggers was ${fmtTempMetric(cold.avg)}...${fmtTempMetric(hot.avg)} °C; the spread between the lowest and highest average temperature was ${fmtTempMetric(spread)} °C. The coldest average zone was ${shortLoggerDisplay(cold.logger)}, and the warmest average zone was ${shortLoggerDisplay(hot.logger)}. ${hotLogger && coldLogger ? `Risk-based critical points: hot — ${shortLoggerDisplay(hotLogger)}, cold — ${shortLoggerDisplay(coldLogger)}.` : "Risk-based critical points were not determined."} ${deviations === 0 ? "No internal logger deviations outside the specified temperature range were recorded." : `${deviations} internal logger deviation event(s) were recorded; see the deviation section for details.`} ${verdict}`;
+  drawPVInfoBox(doc, text, input.pv.verdict === "pass" ? { bg: "#ecfdf5", border: "#a7f3d0", color: "#065f46" } : { bg: "#f8fafc", border: BORDER, color: ACCENT });
 }
 
 function drawWarehouseOperationalEventsSection(doc: PDFKit.PDFDocument, input: ReportInput) {
@@ -4342,12 +4387,16 @@ function drawPVPlan(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: Repo
     [en ? "Minimum internal loggers (configured)" : "Минимум внутренних датчиков (настройка)", String(pv.minSensorCount)],
     [
       en ? "Logger placement points" : "Места установки датчиков",
-      pv.sensorPlacement
-        || (isWarehouseLike(getReportEquipmentType(input))
+      (en ? "Data loggers are positioned at representative points throughout the refrigerated cargo body, based on the documented risk assessment." : pv.sensorPlacement)
+        || (en
+          ? (isWarehouseLike(getReportEquipmentType(input))
+              ? "Data loggers shall be arranged as a representative grid covering the storage area across its length, width and height. The external logger is installed outdoors to monitor ambient temperature."
+              : "Data loggers are positioned at representative points throughout the refrigerated cargo body, based on the documented risk assessment.")
+          : (isWarehouseLike(getReportEquipmentType(input))
           ? (en
               ? "Data loggers shall be arranged as a representative grid covering the storage area across its length, width and height. Where possible, loggers are positioned at comparable intervals. The external logger is installed outdoors to monitor ambient temperature."
               : "Регистраторы данных следует располагать в форме сетки и таким образом, чтобы они покрывали зону хранения по всей ее длине и ширине, а также высоте. Регистраторы данных размещаются по возможности с равными интервалами. Внешний датчик установлен на улице для мониторинга температуры окружающей среды.")
-              : "\u0414\u0430\u0442\u0447\u0438\u043a\u0438 \u0440\u0430\u0441\u043f\u043e\u043b\u0430\u0433\u0430\u044e\u0442\u0441\u044f \u0432 \u0445\u0430\u0440\u0430\u043a\u0442\u0435\u0440\u043d\u044b\u0445 \u0442\u043e\u0447\u043a\u0430\u0445 \u043e\u0431\u044a\u0451\u043c\u0430 " + reeferAreaGenitive(getReportEquipmentType(input)) + ", \u043e\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u043d\u044b\u0445 \u043f\u043e \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u0430\u043c \u0430\u043d\u0430\u043b\u0438\u0437\u0430 \u0440\u0438\u0441\u043a\u043e\u0432."),
+              : "\u0414\u0430\u0442\u0447\u0438\u043a\u0438 \u0440\u0430\u0441\u043f\u043e\u043b\u0430\u0433\u0430\u044e\u0442\u0441\u044f \u0432 \u0445\u0430\u0440\u0430\u043a\u0442\u0435\u0440\u043d\u044b\u0445 \u0442\u043e\u0447\u043a\u0430\u0445 \u043e\u0431\u044a\u0451\u043c\u0430 " + reeferAreaGenitive(getReportEquipmentType(input)) + ", \u043e\u043f\u0440\u0435\u0434\u0435\u043b\u0435\u043d\u043d\u044b\u0445 \u043f\u043e \u0440\u0435\u0437\u0443\u043b\u044c\u0442\u0430\u0442\u0430\u043c \u0430\u043d\u0430\u043b\u0438\u0437\u0430 \u0440\u0438\u0441\u043a\u043e\u0432.")),
     ],
   ];
   drawKVTable(doc, rows);
