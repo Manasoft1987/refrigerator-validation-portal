@@ -1973,6 +1973,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
       doc.addPage();
       drawTemperatureMapSummary(doc, temperatureMapLoggers as DiagramSensor[], PAGE_MARGIN, {
         title: `Схема ${temperatureMapSchemaNumber}. Температурная карта по средним значениям PQ/PV`,
+        language: isEnglishWarehouse(input) ? "en" : "ru",
         objectType: isAutoRefrigeratorLike(eqType) ? "truck" : eqType === "freezer" ? "freezer" : "refrigerator",
         rangeMin: input.pv.rangeMin,
         rangeMax: input.pv.rangeMax,
