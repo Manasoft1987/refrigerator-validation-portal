@@ -19,6 +19,7 @@ import {
   drawHeatmapChart,
   drawHotChart,
   drawOverviewChart,
+  setChartLanguage,
   drawRefrigeratorDiagram,
   drawReeferTruckDiagram3D,
   drawStatsBarChart,
@@ -1682,6 +1683,7 @@ function findFontPath(): { regular?: string; bold?: string } {
 }
 
 export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
+  setChartLanguage(isEnglishWarehouse(input) ? "en" : "ru");
   const fonts = findFontPath();
   if (!fonts.regular) {
     throw new Error("DejaVu Sans font not found — required for Cyrillic PDF rendering");
@@ -3576,6 +3578,7 @@ function drawStatsTable(
 
 function drawCharts(doc: PDFKit.PDFDocument, pv: ReportInput["pv"], input?: ReportInput) {
   const en = isEnglishWarehouse(input);
+  setChartLanguage(en ? "en" : "ru");
   const eqName = input ? getEquipmentName(input) : "оборудования";
   const eqGen = eqName.toLowerCase(); // genitive approximation for use in sentences
   const internal = pv.loggers

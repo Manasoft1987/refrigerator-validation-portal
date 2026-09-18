@@ -33,6 +33,25 @@ const HOT_COLOR = "#dc2626";
 const COLD_COLOR = "#2563eb";
 const BAND_FILL = "#ecfdf5";
 const BAND_LINE = "#10b981";
+
+let chartLanguage: "ru" | "en" = "ru";
+
+export function setChartLanguage(language: "ru" | "en"): void {
+  chartLanguage = language;
+}
+
+function localizedChartTitle(title: string): string {
+  if (chartLanguage !== "en") return title;
+  if (title.includes("Температура внутренних")) return "Internal logger temperature";
+  if (title.includes("Внешний датчик")) return "External logger temperature";
+  if (title.includes("горячий")) return "Critical hot-point logger";
+  if (title.includes("холодный")) return "Critical cold-point logger";
+  if (title.includes("Min / Avg / Max / MKT")) return "Min / Avg / Max / MKT by logger";
+  if (title.includes("Тепловая карта")) return "Heat map: average temperature by logger";
+  if (title.includes("отклонени")) return "Logger temperature during excursion testing";
+  if (title.includes("Регистратор")) return title.replace("Регистратор", "Logger");
+  return title;
+}
 const AXIS_LINE = "#cbd5e1";
 const GRID_LINE = "#eef2f7";
 const LABEL_COLOR = "#475569";
@@ -122,7 +141,7 @@ function drawLineChart(
   const startY = doc.y;
 
   // Title
-  doc.font("bold").fontSize(11).fillColor(TITLE_COLOR).text(title, x0, startY, {
+  doc.font("bold").fontSize(11).fillColor(TITLE_COLOR).text(localizedChartTitle(title), x0, startY, {
     width: pageWidth,
     align: "left",
   });
@@ -352,7 +371,7 @@ function drawHorizontalBarChart(
   ensureSpace(doc, height + 20);
   const startY = doc.y;
 
-  doc.font("bold").fontSize(11).fillColor(TITLE_COLOR).text(title, x0, startY, {
+  doc.font("bold").fontSize(11).fillColor(TITLE_COLOR).text(localizedChartTitle(title), x0, startY, {
     width: pageWidth,
     align: "left",
   });
@@ -435,7 +454,7 @@ function drawGroupedBarChart(
   ensureSpace(doc, height + 20);
   const startY = doc.y;
 
-  doc.font("bold").fontSize(11).fillColor(TITLE_COLOR).text(title, x0, startY, {
+  doc.font("bold").fontSize(11).fillColor(TITLE_COLOR).text(localizedChartTitle(title), x0, startY, {
     width: pageWidth,
     align: "left",
   });
@@ -1362,6 +1381,7 @@ export function drawRefrigeratorDiagram(
   hotLabel?: string | null,
   coldLabel?: string | null,
 ): void {
+  if (chartLanguage === "en" && title) title = "Logger placement diagram";
   const internals = sensors.filter(s => s.role === "internal");
   const externals = sensors.filter(s => s.role === "external");
   const shelfCount = normalizeFridgeLevelCount(levelCount ?? fridgeShelfCount(sensors));
@@ -2013,6 +2033,7 @@ export function drawReeferTruckDiagram3D(
     coolingUnitPositions?: Array<{ x: number; y: number }> | null;
   } = {},
 ): void {
+  if (chartLanguage === "en" && title) title = "Logger placement diagram";
   const showEmptyReferencePositions = options.showEmptyReferencePositions ?? true;
   const showReferenceLegend = options.showReferenceLegend ?? true;
   // Box world dimensions (arbitrary units, scaled to SVG-like coords via scale)
