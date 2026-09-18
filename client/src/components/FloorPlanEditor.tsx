@@ -494,7 +494,7 @@ function SensorPointCallout({
           </text>
         </g>
       ))}
-      <circle cx={group.anchorX} cy={group.anchorY} r={9} fill="#fbbf24" stroke="#92400e" strokeWidth={1.35}
+      <circle cx={group.anchorX} cy={group.anchorY} r={14} fill="#fbbf24" fillOpacity={0.98} stroke="#92400e" strokeWidth={1.35}
         style={{ pointerEvents: "all", cursor: "move", touchAction: "none" }}
         onPointerDown={event => { event.stopPropagation(); onAnchorPointerDown(group, event); }} />
       <circle cx={group.anchorX} cy={group.anchorY} r={5.2} fill="#facc15" stroke="white" strokeWidth={1} style={{ pointerEvents: "none" }} />
