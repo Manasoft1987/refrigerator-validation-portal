@@ -554,6 +554,48 @@ const WAREHOUSE_STAGE_TEMPLATES_EN = {
   },
 } as const;
 
+const AUTO_REFRIGERATOR_STAGE_TEMPLATES_EN = {
+  iq: {
+    purpose: "To confirm that the refrigerated vehicle and its refrigeration equipment are identified, installed and suitable for the intended qualification and transport use.",
+    description: "During Installation Qualification (IQ), vehicle and refrigeration-unit identification, supporting documents, equipment completeness, power connections, insulation, doors, seals and control components are verified.",
+    criteria: "All IQ checklist items shall be answered Yes or N/A. Any No answer shall be recorded as a deviation and resolved before proceeding to OQ.",
+  },
+  oq: {
+    purpose: "To confirm that the refrigeration equipment operates within the specified operating parameters and temperature range.",
+    description: "During Operational Qualification (OQ), start-up, control unit operation, indication, setpoint response, air circulation and alarm functions are checked.",
+    criteria: "All OQ checklist items shall be answered Yes or N/A. Any No answer shall be recorded and assessed before PQ/PV.",
+  },
+  pv: {
+    purpose: "To confirm that the refrigerated cargo body maintains the specified temperature range throughout the qualified working volume during the study period.",
+    description: "During Performance Qualification / Validation (PQ/PV), temperature mapping is performed with verified data loggers distributed throughout the cargo body under the documented operating and loading conditions.",
+    criteria: "Internal loggers shall remain within the specified temperature range. Minimum, maximum, average temperature and MKT shall be calculated for each logger and reported with the mapping results.",
+  },
+} as const;
+
+const DEFAULT_IQ_QUESTIONS_AUTO_REFRIGERATOR_EN = [
+  "Is the refrigeration equipment identified by a nameplate and serial number?",
+  "Is the refrigeration equipment operating manual available?",
+  "Does the vehicle model correspond to the supporting documentation?",
+  "Does the vehicle VIN correspond to the supporting documentation?",
+  "Does the registration number correspond to the vehicle documentation?",
+  "Is the refrigeration-unit operating manual available?",
+  "Does the system voltage comply with the specified requirements (12/24 V)?",
+  "Is the vehicle registration certificate available?",
+  "Is a valid insurance policy available?",
+  "Is a valid driver licence available for the driver?",
+  "Are there no visible defects or damage to the refrigeration equipment?",
+  "Is the refrigeration equipment connected to the power supply?",
+  "Are there no visible defects to the cargo body or its doors?",
+];
+
+const DEFAULT_OQ_QUESTIONS_AUTO_REFRIGERATOR_EN = [
+  "Does the refrigeration unit start correctly?",
+  "Does the control unit operate without errors?",
+  "Does the system respond to temperature setpoint changes?",
+  "Are abnormal noises or vibrations absent during operation?",
+  "Does the display indicate temperature and operating modes correctly?",
+];
+
 function englishWarehouseChecklistItems<T extends { questionText: string }>(
   items: T[],
   stage: "iq" | "oq",
@@ -565,6 +607,12 @@ function englishWarehouseChecklistItems<T extends { questionText: string }>(
     ...item,
     questionText: defaults[index] || item.questionText,
   }));
+}
+
+function englishAutoRefrigeratorChecklistItems<T extends { questionText: string }>(items: T[], stage: "iq" | "oq", useEnglish: boolean): T[] {
+  if (!useEnglish) return items;
+  const defaults = stage === "iq" ? DEFAULT_IQ_QUESTIONS_AUTO_REFRIGERATOR_EN : DEFAULT_OQ_QUESTIONS_AUTO_REFRIGERATOR_EN;
+  return items.map((item, index) => ({ ...item, questionText: defaults[index] || item.questionText }));
 }
 
 function maxAccuracyForUsedInternalSensors(
@@ -2267,7 +2315,7 @@ export const appRouter = router({
         const hasPVData = preparedLoggers.some(l => l.series.temp.length > 0);
         const effectiveEquipmentType = (gi?.equipmentType as string | null | undefined) || protocol.equipmentType;
         const isWarehouseProtocol = isWarehouseLike(effectiveEquipmentType);
-        const isEnglishWarehouseReport = isWarehouseProtocol && gi?.reportLanguage === "en";
+        const isEnglishWarehouseReport = gi?.reportLanguage === "en";
         const isChamberProtocol =
           protocol.customEquipmentName === CHAMBER_PROTOCOL_MARKER || gi?.equipmentType === "chamber";
         const warehouseMinDurationHours = isWarehouseEaeu(effectiveEquipmentType)
@@ -2282,7 +2330,9 @@ export const appRouter = router({
         const isKyrgyzstanAutoRefrigeratorProtocol = isKyrgyzstanAutoRefrigerator(effectiveEquipmentType);
         const isThermalContainerProtocol =
           effectiveEquipmentType === "thermal-container";
-        const reportStageTemplates = isWarehouseProtocol
+        const reportStageTemplates = isEnglishWarehouseReport && isAutoRefrigeratorProtocol
+          ? AUTO_REFRIGERATOR_STAGE_TEMPLATES_EN
+          : isWarehouseProtocol
           ? (isEnglishWarehouseReport
               ? WAREHOUSE_STAGE_TEMPLATES_EN
               : effectiveEquipmentType === KYRGYZSTAN_WAREHOUSE_EQUIPMENT_TYPE
@@ -2301,14 +2351,18 @@ export const appRouter = router({
         const oqQuestionSource = isWarehouseProtocol && !isEnglishWarehouseReport
           ? await templateQuestionSourceForReport("oq", effectiveEquipmentType)
           : null;
-        const iqItems = iqQuestionSource
+        const iqItems = isEnglishWarehouseReport && isAutoRefrigeratorProtocol
+          ? englishAutoRefrigeratorChecklistItems(rawIqItems, "iq", true)
+          : iqQuestionSource
           ? activeWarehouseChecklistForReport(
               rawIqItems,
               iqQuestionSource.questions,
               { activeQuestionsAreTemplate: iqQuestionSource.fromDbTemplate },
             )
           : rawIqItems;
-        const oqItems = oqQuestionSource
+        const oqItems = isEnglishWarehouseReport && isAutoRefrigeratorProtocol
+          ? englishAutoRefrigeratorChecklistItems(rawOqItems, "oq", true)
+          : oqQuestionSource
           ? activeWarehouseChecklistForReport(
               rawOqItems,
               oqQuestionSource.questions,

@@ -478,7 +478,7 @@ function getReportEquipmentType(input?: ReportInput): string | null {
 }
 
 function isEnglishWarehouse(input?: ReportInput): boolean {
-  return isWarehouseLike(getReportEquipmentType(input)) && input?.generalInfo?.reportLanguage === "en";
+  return input?.generalInfo?.reportLanguage === "en";
 }
 
 function isPharmacyStorageType(type: string | null | undefined): boolean {
@@ -629,6 +629,17 @@ function getEquipmentName(input: ReportInput): string {
     if (isKyrgyzstanWarehouse(type)) return "помещение (зона) хранения Кыргызстана";
     return isPharmacyStorageType(type) ? "помещение (зона) хранения аптеки" : "помещение (зона) хранения";
   }
+  if (isEnglishWarehouse(input)) {
+    const englishLabels: Record<string, string> = {
+      "auto-refrigerator": "refrigerated vehicle",
+      "auto-refrigerator-kg": "refrigerated vehicle",
+      chamber: "refrigerated chamber",
+      "thermal-container": "thermal container",
+      refrigerator: "refrigerator",
+      freezer: "freezer",
+    };
+    if (englishLabels[type || ""]) return englishLabels[type || ""];
+  }
   return EQUIPMENT_LABEL[type || ""] || "Оборудование";
 }
 
@@ -637,6 +648,9 @@ function getEquipmentNameWithCase(input: ReportInput, gramCase: "nominative" | "
   const type = getReportEquipmentType(input);
   if (type === "other" && input.protocol?.customEquipmentName) {
     return input.protocol.customEquipmentName;
+  }
+  if (isEnglishWarehouse(input) && (isAutoRefrigeratorLike(type) || type === "chamber" || type === "thermal-container")) {
+    return type === "thermal-container" ? "thermal container" : type === "chamber" ? "refrigerated chamber" : "refrigerated vehicle";
   }
   if (isKyrgyzstanAutoRefrigerator(type)) {
     switch (gramCase) {
