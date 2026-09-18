@@ -275,7 +275,7 @@ export default function GeneralInfoStep({
       tempMode: form.tempMode ?? null,
       customMin: form.tempMode === "custom" && form.customMin !== "" && form.customMin != null ? Number(String(form.customMin).replace(",", ".")) : null,
       customMax: form.tempMode === "custom" && form.customMax !== "" && form.customMax != null ? Number(String(form.customMax).replace(",", ".")) : null,
-      reportLanguage: isWarehouse ? (form.reportLanguage || "ru") : null,
+      reportLanguage: form.reportLanguage || "ru",
       refrigerationUnits: isAutoRefrigerator ? refrigerationUnits : null,
       thermalContainerConfig: isThermalContainer ? form.thermalContainerConfig : null,
       location: form.location ?? null,
