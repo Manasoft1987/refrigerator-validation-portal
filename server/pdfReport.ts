@@ -522,6 +522,36 @@ function translateEnglishSystemText(value: string): string {
     [/Режим сохранён/g, "Temperature range maintained"],
     [/в течение всего периода открытой двери/g, "throughout the door-open period"],
     [/Схема/g, "Figure"],
+    [/Поз\./g, "Position"],
+    [/Описание/g, "Description"],
+    [/Серийный номер/g, "Serial number"],
+    [/Роль/g, "Role"],
+    [/Табличные данные температуры/g, "Tabular temperature data"],
+    [/Период/g, "Period"],
+    [/Точек/g, "Data points"],
+    [/Датчиков/g, "Loggers"],
+    [/Дата \/ Время/g, "Date / Time"],
+    [/Завершены/g, "Completed"],
+    [/Частично завершены/g, "Partially completed"],
+    [/Время входа в режим не определено\./g, "Time to reach setpoint was not determined."],
+    [/Время открытия двери не определено\./g, "Door-open time was not determined."],
+    [/Время сохранения режима не определено\./g, "Temperature retention time was not determined."],
+    [/Дверь можно открывать на время до/g, "The door may be opened for up to"],
+    [/без нарушения температурного режима\./g, "without exceeding the temperature range."],
+    [/При выключении холодильного агрегата/g, "After the refrigeration unit is switched off"],
+    [/способен сохранять требуемый режим в течение/g, "the equipment can maintain the required range for"],
+    [/входит в требуемый температурный режим за/g, "reaches the required temperature range in"],
+    [/Передняя часть/g, "Front section"],
+    [/Задняя часть/g, "Rear section"],
+    [/левый нижний угол/g, "left lower corner"],
+    [/правый нижний угол/g, "right lower corner"],
+    [/левый верхний угол/g, "left upper corner"],
+    [/правый верхний угол/g, "right upper corner"],
+    [/Центр передней стенки/g, "Front wall center"],
+    [/Центр задней стенки/g, "Rear wall center"],
+    [/Центр правой стенки/g, "Right wall center"],
+    [/нижний уровень/g, "lower level"],
+    [/средний уровень/g, "middle level"],
     [/Открытие двери/g, "Door opening"],
     [/Закрытие двери/g, "Door closing"],
     [/Момент нарушения режима \(первый датчик\)/g, "First excursion time"],
@@ -2217,7 +2247,7 @@ export async function generateProtocolPdf(input: ReportInput): Promise<Buffer> {
   doc.addPage();
   const metrologySectionNumber = nextSectionNumber;
   recordToc(isEnglishWarehouse(input) ? `${metrologySectionNumber}. Metrological Verification of Measuring Instruments` : `${metrologySectionNumber}. Поверка средств измерений`, 1);
-  drawCalibrationPage(doc, isEnglishWarehouse(input) ? `${metrologySectionNumber}. Metrological Verification of Measuring Instruments` : `${metrologySectionNumber}. Поверка средств измерений`);
+  drawCalibrationPage(doc, isEnglishWarehouse(input) ? `${metrologySectionNumber}. Metrological Verification of Measuring Instruments` : `${metrologySectionNumber}. Поверка средств измерений`, isEnglishWarehouse(input));
   nextSectionNumber += 1;
 
   if (input.attachments?.some(item => item.includeInPdf !== false && item.includeInPdf !== 0)) {
@@ -5520,7 +5550,7 @@ function drawChartExplanation(doc: PDFKit.PDFDocument, text: string) {
 /* -------------------------------------------------------------------------- */
 /* Metrological Verification Page                                             */
 /* -------------------------------------------------------------------------- */
-function drawCalibrationPage(doc: PDFKit.PDFDocument, title = "16. Поверка средств измерений") {
+function drawCalibrationPage(doc: PDFKit.PDFDocument, title = "16. Поверка средств измерений", en = false) {
   const left = PAGE_MARGIN;
   const right = doc.page.width - PAGE_MARGIN;
   const contentW = right - left;
@@ -5536,10 +5566,12 @@ function drawCalibrationPage(doc: PDFKit.PDFDocument, title = "16. Поверк�
     .fontSize(10)
     .fillColor(ACCENT)
     .text(
-      "Средства измерений (датчики температуры), применённые при проведении квалификации, " +
-      "прошли метрологическую поверку в аккредитованной лаборатории. " +
-      "Сведения о текущей поверке и дате следующей поверки доступны по QR-коду, " +
-      "размещённому ниже.",
+      en
+        ? "The measuring instruments (temperature loggers) used during qualification were verified by an accredited laboratory. Current verification status and the next verification date are available via the QR code below."
+        : "Средства измерений (датчики температуры), применённые при проведении квалификации, " +
+          "прошли метрологическую поверку в аккредитованной лаборатории. " +
+          "Сведения о текущей поверке и дате следующей поверки доступны по QR-коду, " +
+          "размещённому ниже.",
       left,
       y0,
       { width: contentW, align: "justify" },
@@ -5591,7 +5623,7 @@ function drawCalibrationPage(doc: PDFKit.PDFDocument, title = "16. Поверк�
     .fontSize(8)
     .fillColor(MUTED)
     .text(
-      "Отсканируйте QR-код для просмотра актуальных сведений о поверке датчиков",
+      en ? "Scan the QR code to view current logger verification information" : "Отсканируйте QR-код для просмотра актуальных сведений о поверке датчиков",
       left,
       afterQr,
       { width: contentW, align: "center" },
@@ -5617,7 +5649,7 @@ function drawCalibrationPage(doc: PDFKit.PDFDocument, title = "16. Поверк�
     .font("bold")
     .fontSize(9)
     .fillColor(ACCENT)
-    .text("Запрос свидетельств о поверке", left + boxPad, boxY + boxPad, {
+    .text(en ? "Request for verification certificates" : "Запрос свидетельств о поверке", left + boxPad, boxY + boxPad, {
       width: contentW - boxPad * 2,
     });
   doc.moveDown(0.4);
@@ -5626,8 +5658,10 @@ function drawCalibrationPage(doc: PDFKit.PDFDocument, title = "16. Поверк�
     .fontSize(9)
     .fillColor(ACCENT)
     .text(
-      "Для получения оригиналов свидетельств о поверке средств измерений " +
-      "необходимо направить официальный запрос по телефону:",
+      en
+        ? "To obtain original verification certificates for the measuring instruments, please submit an official request by telephone:"
+        : "Для получения оригиналов свидетельств о поверке средств измерений " +
+          "необходимо направить официальный запрос по телефону:",
       left + boxPad,
       doc.y,
       { width: contentW - boxPad * 2 },
